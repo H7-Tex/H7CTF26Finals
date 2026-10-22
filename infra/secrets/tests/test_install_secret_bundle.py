@@ -30,7 +30,7 @@ class SecretBundleTests(unittest.TestCase):
                 "gateway-wireguard",
                 files,
                 Path(directory),
-                ownership=lambda _: (1000, 1000),
+                ownership=lambda _: (os.getuid(), os.getgid()),
             )
             target = Path(directory) / "etc/wireguard/private.key"
             self.assertEqual(target.read_bytes(), key)
