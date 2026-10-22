@@ -255,10 +255,22 @@ class BuilderMetadataTests(unittest.TestCase):
         ingress = (ROOT / "terraform/modules/oci-ingress/main.tf").read_text(encoding="utf-8")
         platform = (ROOT / "terraform/modules/oci-platform/main.tf").read_text(encoding="utf-8")
         variables = (ROOT / "terraform/modules/oci-platform/variables.tf").read_text(encoding="utf-8")
+        router_cloud_init = (ROOT / "images/router/cloud-init.yaml").read_text(encoding="utf-8")
         forced = 'restrict,command=\\"/usr/local/sbin/finals-secret-relay-receive\\"'
         self.assertIn(forced, ingress)
         self.assertIn(forced, platform)
         self.assertIn('["platform", "control", "repository"]', platform)
+        self.assertIn('__OPERATIONS_RELAY_AUTHORIZED_KEY__', router_cloud_init)
+        self.assertIn('AuthorizedKeysFile .ssh/authorized_keys /etc/ssh/operations_relay_authorized_keys_%u', router_cloud_init)
+        self.assertIn('contains(local.operations_relay_roles, role)', platform)
+        ingress_metadata = ingress[ingress.index("metadata = {"):ingress.index("instance_options")]
+        platform_metadata = platform[platform.index("metadata = {"):platform.index("instance_options")]
+        self.assertIn("ssh_authorized_keys = trimspace(var.organizer_ssh_authorized_keys)", ingress_metadata)
+        self.assertIn("ssh_authorized_keys = trimspace(var.organizer_ssh_authorized_keys)", platform_metadata)
+        self.assertNotIn('ssh_authorized_keys = join(', ingress_metadata)
+        self.assertNotIn('ssh_authorized_keys = join(', platform_metadata)
+        self.assertIn("local.operations_relay_authorized_key", ingress_metadata)
+        self.assertIn("local.cloud_init_by_role[each.key]", platform_metadata)
         self.assertIn('operations_relay_ssh_public_key', variables)
         self.assertIn('[A-Za-z0-9+/]{68}', variables)
         generated_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE5+zFPUdhav0YumdESFR9fVhwTeCI43Rn43xyDp5J2a"

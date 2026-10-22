@@ -46,11 +46,13 @@ variable "cloud_init" {
   validation {
     condition = (
       length(regexall("__ROUTER_STATE__", var.cloud_init)) == 2 &&
+      length(regexall("__OPERATIONS_RELAY_AUTHORIZED_KEY__", var.cloud_init)) == 1 &&
       length(regexall("ssh_deletekeys: true", var.cloud_init)) == 1 &&
+      length(regexall("AuthorizedKeysFile", var.cloud_init)) == 1 &&
       length(regexall("finals-host-recipient", var.cloud_init)) == 1 &&
       length(regexall("event-router-initialize", var.cloud_init)) == 1
     )
-    error_message = "cloud_init must contain two gateway-role placeholders, regenerate the host key and invoke the reviewed router initializer."
+    error_message = "cloud_init must contain the reviewed gateway role, relay authorization, host-key regeneration and router initialization contract."
   }
 }
 

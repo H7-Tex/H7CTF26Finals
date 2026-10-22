@@ -80,6 +80,7 @@ locals {
   }
 
   operations_relay_authorized_key = "restrict,command=\"/usr/local/sbin/finals-secret-relay-receive\" ${var.operations_relay_ssh_public_key}"
+  operations_relay_roles          = toset(["platform", "control", "repository"])
 
   cloud_init_by_role = {
     for role in keys(local.hosts) : role => <<-YAML
@@ -87,7 +88,19 @@ locals {
       ssh_deletekeys: true
       ssh_genkeytypes:
         - ed25519
+      write_files:
+        - path: /etc/ssh/sshd_config.d/91-operations-relay.conf
+          owner: root:root
+          permissions: '0644'
+          content: |
+            AuthorizedKeysFile .ssh/authorized_keys /etc/ssh/operations_relay_authorized_keys_%u
+        - path: /etc/ssh/operations_relay_authorized_keys_ubuntu
+          owner: root:root
+          permissions: '0600'
+          content: |
+            ${contains(local.operations_relay_roles, role) ? local.operations_relay_authorized_key : ""}
       runcmd:
+        - ["/usr/sbin/sshd", "-t"]
         - ["systemctl", "restart", "ssh.service"]
         - ["/usr/local/sbin/finals-host-recipient"]
         - ["/usr/local/sbin/finals-platform-activate", "${role}"]
@@ -125,11 +138,8 @@ resource "oci_core_instance" "host" {
   }
 
   metadata = {
-    ssh_authorized_keys = join("\n", compact([
-      trimspace(var.organizer_ssh_authorized_keys),
-      contains(["platform", "control", "repository"], each.key) ? local.operations_relay_authorized_key : "",
-    ]))
-    user_data = base64encode(local.cloud_init_by_role[each.key])
+    ssh_authorized_keys = trimspace(var.organizer_ssh_authorized_keys)
+    user_data           = base64encode(local.cloud_init_by_role[each.key])
   }
 
   instance_options {

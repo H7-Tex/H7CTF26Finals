@@ -8,7 +8,18 @@ write_files:
     permissions: '0644'
     content: |
       __ROUTER_STATE__
+  - path: /etc/ssh/sshd_config.d/91-operations-relay.conf
+    owner: root:root
+    permissions: '0644'
+    content: |
+      AuthorizedKeysFile .ssh/authorized_keys /etc/ssh/operations_relay_authorized_keys_%u
+  - path: /etc/ssh/operations_relay_authorized_keys_ubuntu
+    owner: root:root
+    permissions: '0600'
+    content: |
+      __OPERATIONS_RELAY_AUTHORIZED_KEY__
 runcmd:
+  - ["/usr/sbin/sshd", "-t"]
   - ["systemctl", "restart", "ssh.service"]
   - ["/usr/local/sbin/finals-host-recipient"]
   - ["/usr/local/sbin/event-router-initialize", "__ROUTER_STATE__"]

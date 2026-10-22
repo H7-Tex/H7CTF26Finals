@@ -70,14 +70,15 @@ resource "oci_core_instance" "router" {
   }
 
   metadata = {
-    ssh_authorized_keys = join("\n", [
-      trimspace(var.organizer_ssh_authorized_keys),
-      local.operations_relay_authorized_key,
-    ])
+    ssh_authorized_keys = trimspace(var.organizer_ssh_authorized_keys)
     user_data = base64encode(replace(
-      var.cloud_init,
-      "__ROUTER_STATE__",
-      each.key == var.active_router ? "active" : "standby"
+      replace(
+        var.cloud_init,
+        "__ROUTER_STATE__",
+        each.key == var.active_router ? "active" : "standby"
+      ),
+      "__OPERATIONS_RELAY_AUTHORIZED_KEY__",
+      local.operations_relay_authorized_key
     ))
   }
 
