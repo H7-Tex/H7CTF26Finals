@@ -255,10 +255,12 @@ resource "oci_core_network_security_group_security_rule" "game_egress" {
 }
 
 resource "oci_core_network_security_group_security_rule" "infra_ingress" {
+  for_each = toset(var.vcn_cidrs)
+
   network_security_group_id = oci_core_network_security_group.infra.id
   direction                 = "INGRESS"
   protocol                  = "all"
-  source                    = var.vcn_cidr
+  source                    = each.value
   source_type               = "CIDR_BLOCK"
   stateless                 = true
   description               = "Finals VCN infrastructure ingress"
