@@ -47,8 +47,8 @@ resource "oci_budget_alert_rule" "actual" {
 
   budget_id      = oci_budget_budget.finals.id
   display_name   = "finals-${each.key}"
-  description    = "Actual finals spend reached USD ${each.value}"
-  message        = "H7CTF'26 Finals actual spend reached USD ${each.value}."
+  description    = "Actual finals spend reached SGD ${each.value}"
+  message        = "H7CTF'26 Finals actual spend reached SGD ${each.value}."
   recipients     = var.budget_alert_recipients
   threshold      = each.value
   threshold_type = "ABSOLUTE"
