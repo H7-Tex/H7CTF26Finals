@@ -14,6 +14,56 @@ resource "oci_identity_compartment" "finals" {
   }
 }
 
+locals {
+  budget_alert_thresholds = {
+    advisory = 175
+    warning  = 250
+    critical = 300
+    ceiling  = 315
+  }
+}
+
+resource "oci_budget_budget" "finals" {
+  compartment_id = var.tenancy_ocid
+  amount         = 325
+  reset_period   = "MONTHLY"
+  display_name   = "finals-2026"
+  description    = "H7CTF'26 Finals compartment budget"
+  target_type    = "COMPARTMENT"
+  targets        = [oci_identity_compartment.finals.id]
+
+  freeform_tags = {
+    event      = "finals-2026"
+    managed_by = "terraform"
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "oci_budget_alert_rule" "actual" {
+  for_each = local.budget_alert_thresholds
+
+  budget_id      = oci_budget_budget.finals.id
+  display_name   = "finals-${each.key}"
+  description    = "Actual finals spend reached USD ${each.value}"
+  message        = "H7CTF'26 Finals actual spend reached USD ${each.value}."
+  recipients     = var.budget_alert_recipients
+  threshold      = each.value
+  threshold_type = "ABSOLUTE"
+  type           = "ACTUAL"
+
+  freeform_tags = {
+    event      = "finals-2026"
+    managed_by = "terraform"
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
 module "network" {
   source = "../../../modules/oci-network"
 

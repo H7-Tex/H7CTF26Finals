@@ -7,6 +7,11 @@ workbench_image_id    = "ocid1.image.oc1.ap-hyderabad-1.replace-me"
 
 organizer_ssh_authorized_keys = "ssh-ed25519 replace-me organizer"
 
+# Start with the NOP host only. Add team 01 as [1, 16] and [1], then expand
+# these sets monotonically in reviewed batches. Never remove an applied number.
+production_numbers = [16]
+workbench_numbers  = []
+
 production_subnet_ids = {
   p01 = "ocid1.subnet.oc1.ap-hyderabad-1.replace-me"
   p02 = "ocid1.subnet.oc1.ap-hyderabad-1.replace-me"

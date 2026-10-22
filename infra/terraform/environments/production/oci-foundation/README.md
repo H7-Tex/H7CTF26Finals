@@ -1,6 +1,6 @@
 # OCI foundation stack
 
-This root creates only the dedicated finals compartment, two-block VCN, gateways, base route tables, NSGs, and 36 subnets. It runs in OCI Resource Manager and therefore has no backend block or committed OCI credentials.
+This root creates the dedicated finals compartment, its US$325 monthly budget with US$175/250/300/315 actual-spend alerts, the two-block VCN, gateways, base route tables, NSGs, and 36 subnets. It runs in OCI Resource Manager and therefore has no backend block or committed OCI credentials. Supply `budget_alert_recipients` only as an untracked Resource Manager variable.
 
 The first apply leaves `routing_private_ip_id` null. After ingress exists, set it to the ingress stack's `routing_private_ip_id` output and review a second foundation plan. That plan adds static routes for both native VCN blocks to the service, mirror and isolated route tables. OCI prioritizes these matching static routes over its implicit local routes, forcing inter-subnet traffic through the floating gateway private IP without coupling the initial foundation and ingress applies.
 

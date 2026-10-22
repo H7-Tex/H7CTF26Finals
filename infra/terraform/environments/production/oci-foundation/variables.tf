@@ -19,6 +19,18 @@ variable "compartment_name" {
   default = "finals"
 }
 
+variable "budget_alert_recipients" {
+  description = "Comma-separated recipients for finals spend alerts. Supply only through untracked Resource Manager variables."
+  type        = string
+  sensitive   = true
+  nullable    = false
+
+  validation {
+    condition     = trimspace(var.budget_alert_recipients) != ""
+    error_message = "budget_alert_recipients must contain at least one reviewed recipient."
+  }
+}
+
 variable "enable_mirror_warmup_egress" {
   description = "Temporary mirror-only NAT egress. Keep false for rehearsal and event."
   type        = bool

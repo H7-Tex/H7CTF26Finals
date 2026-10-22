@@ -33,21 +33,43 @@ variable "workbench_image_id" {
   type        = string
 }
 
+variable "production_numbers" {
+  description = "Production host numbers enabled in this rollout."
+  type        = set(number)
+  nullable    = false
+
+  validation {
+    condition     = alltrue([for number in var.production_numbers : number >= 1 && number <= 16 && number == floor(number)])
+    error_message = "production_numbers may contain only integers from 1 through 16."
+  }
+}
+
+variable "workbench_numbers" {
+  description = "Workbench numbers enabled in this rollout."
+  type        = set(number)
+  nullable    = false
+
+  validation {
+    condition     = alltrue([for number in var.workbench_numbers : number >= 1 && number <= 15 && number == floor(number)])
+    error_message = "workbench_numbers may contain only integers from 1 through 15."
+  }
+}
+
 variable "organizer_ssh_authorized_keys" {
   description = "Organizer break-glass SSH public keys installed on production and workbench hosts."
   type        = string
 }
 
 variable "team_workbench_ssh_authorized_keys" {
-  description = "Team public SSH keys keyed team-01 through team-15."
+  description = "Team public SSH keys keyed by every enabled workbench."
   type        = map(string)
 
   validation {
     condition = alltrue([
-      for team in range(1, 16) :
-      contains(keys(var.team_workbench_ssh_authorized_keys), format("team-%02d", team))
+      for team, keys in var.team_workbench_ssh_authorized_keys :
+      can(regex("^team-(0[1-9]|1[0-5])$", team)) && trimspace(keys) != ""
     ])
-    error_message = "A workbench SSH public-key set is required for every competing team."
+    error_message = "Workbench SSH keys must be non-empty and keyed team-01 through team-15."
   }
 }
 

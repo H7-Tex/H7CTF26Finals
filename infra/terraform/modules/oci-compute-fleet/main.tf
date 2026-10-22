@@ -1,6 +1,6 @@
 locals {
   production = {
-    for team in range(1, 17) : format("production-%02d", team) => {
+    for team in var.production_numbers : format("production-%02d", team) => {
       private_ip = format("10.60.%d.2", team)
       staging_ip = format("10.60.%d.3", team)
       subnet     = format("p%02d", team)
@@ -9,7 +9,7 @@ locals {
   }
 
   workbenches = {
-    for team in range(1, 16) : format("workbench-%02d", team) => {
+    for team in var.workbench_numbers : format("workbench-%02d", team) => {
       private_ip = format("10.61.%d.2", team)
       subnet     = format("w%02d", team)
       team       = team
@@ -152,7 +152,7 @@ resource "oci_core_instance" "workbench" {
   metadata = {
     ssh_authorized_keys = join("\n", compact([
       var.organizer_ssh_authorized_keys,
-      var.team_workbench_ssh_authorized_keys[format("team-%02d", each.value.team)]
+      lookup(var.team_workbench_ssh_authorized_keys, format("team-%02d", each.value.team), "")
     ]))
     user_data = base64encode(var.workbench_cloud_init)
   }
@@ -163,5 +163,10 @@ resource "oci_core_instance" "workbench" {
 
   lifecycle {
     prevent_destroy = true
+
+    precondition {
+      condition     = trimspace(lookup(var.team_workbench_ssh_authorized_keys, format("team-%02d", each.value.team), "")) != ""
+      error_message = "Every enabled workbench requires a non-empty team SSH public-key set."
+    }
   }
 }

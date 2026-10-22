@@ -1,6 +1,7 @@
 tenancy_ocid     = "ocid1.tenancy.oc1..replace-me"
 region           = "ap-hyderabad-1"
 compartment_name = "finals"
+budget_alert_recipients = "replace-with-reviewed-alert-recipient"
 
 # Set true only for the reviewed cache-population window, then plan/apply false
 # and verify the 0.0.0.0/0 mirror route is gone before rehearsal.

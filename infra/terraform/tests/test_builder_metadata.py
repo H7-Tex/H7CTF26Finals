@@ -133,6 +133,47 @@ class BuilderMetadataTests(unittest.TestCase):
             source = (ROOT / f"terraform/environments/production/{root}/main.tf").read_text(encoding="utf-8")
             self.assertRegex(source, r"content\s+= sensitive\(local\.build_payload")
 
+    def test_finals_budget_is_guarded_and_alerts_on_absolute_spend(self):
+        root = ROOT / "terraform/environments/production/oci-foundation"
+        source = (root / "main.tf").read_text(encoding="utf-8")
+        variables = (root / "variables.tf").read_text(encoding="utf-8")
+        budget = source[source.index('resource "oci_budget_budget" "finals"'):source.index('resource "oci_budget_alert_rule" "actual"')]
+        self.assertIn("amount         = 325", budget)
+        self.assertIn('target_type    = "COMPARTMENT"', budget)
+        self.assertIn("prevent_destroy = true", budget)
+        for threshold in (175, 250, 300, 315):
+            self.assertRegex(source, rf"\w+\s+= {threshold}\n")
+        self.assertIn('threshold_type = "ABSOLUTE"', source)
+        self.assertIn('type           = "ACTUAL"', source)
+        self.assertGreaterEqual(source.count("prevent_destroy = true"), 2)
+        self.assertIn('variable "budget_alert_recipients"', variables)
+        self.assertIn("sensitive   = true", variables)
+
+    def test_fleet_can_expand_without_targeting_resources(self):
+        module = ROOT / "terraform/modules/oci-compute-fleet"
+        source = (module / "main.tf").read_text(encoding="utf-8")
+        variables = (module / "variables.tf").read_text(encoding="utf-8")
+        root = (ROOT / "terraform/environments/production/oci-fleet/main.tf").read_text(encoding="utf-8")
+        self.assertIn("for team in var.production_numbers", source)
+        self.assertIn("for team in var.workbench_numbers", source)
+        self.assertIn('variable "production_numbers"', variables)
+        self.assertIn('variable "workbench_numbers"', variables)
+        self.assertIn("number >= 1 && number <= 16", variables)
+        self.assertIn("number >= 1 && number <= 15", variables)
+        self.assertIn("Every enabled workbench requires", source)
+        self.assertIn("production_numbers                 = var.production_numbers", root)
+        self.assertIn("workbench_numbers                  = var.workbench_numbers", root)
+
+    def test_obsolete_gateway_image_and_plan_are_prohibited(self):
+        docs = "\n".join(
+            (ROOT / f"terraform/environments/production/{root}/README.md").read_text(encoding="utf-8")
+            for root in ("oci-gateway-builder", "oci-gateway-image")
+        )
+        self.assertIn("gateway-5095652d3d90", docs)
+        self.assertIn("11bdcffc06c9d4d0b6f08a58b0cf34e6f1aa0d1f", docs)
+        self.assertGreaterEqual(docs.count("prohibited"), 2)
+        self.assertGreaterEqual(docs.count("router-image"), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

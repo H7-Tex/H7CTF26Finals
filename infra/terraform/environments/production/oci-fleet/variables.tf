@@ -44,6 +44,30 @@ variable "workbench_image_id" {
   type        = string
 }
 
+variable "production_numbers" {
+  description = "Production host numbers to create; expand monotonically from the NOP canary to 1 through 16."
+  type        = set(number)
+  default     = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+  nullable    = false
+
+  validation {
+    condition     = alltrue([for number in var.production_numbers : number >= 1 && number <= 16 && number == floor(number)])
+    error_message = "production_numbers may contain only integers from 1 through 16."
+  }
+}
+
+variable "workbench_numbers" {
+  description = "Workbench numbers to create; expand monotonically from the canary to 1 through 15."
+  type        = set(number)
+  default     = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+  nullable    = false
+
+  validation {
+    condition     = alltrue([for number in var.workbench_numbers : number >= 1 && number <= 15 && number == floor(number)])
+    error_message = "workbench_numbers may contain only integers from 1 through 15."
+  }
+}
+
 variable "organizer_ssh_authorized_keys" {
   description = "Organizer break-glass SSH public keys."
   type        = string
