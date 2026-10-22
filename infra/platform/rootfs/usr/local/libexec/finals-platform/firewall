@@ -1,0 +1,186 @@
+#!/usr/bin/env python3
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+
+ROLES = {"platform", "operations", "control", "repository", "mirror", "hill-01", "hill-02", "hill-03"}
+HILL_PORTS = {"hill-01": 7101, "hill-02": 7102, "hill-03": 7103}
+
+
+COMMON_INPUT = """
+    ct state invalid drop
+    ct state established,related accept
+    iifname "lo" accept
+    udp sport 67 udp dport 68 accept
+    ip saddr 10.60.0.0/16 icmp type { destination-unreachable, time-exceeded, parameter-problem } accept
+"""
+COMMON_OUTPUT = """
+    ct state invalid drop
+    ct state established,related accept
+    oifname "lo" accept
+    udp sport 68 udp dport 67 accept
+    ip daddr 169.254.169.254 udp dport { 53, 123 } accept
+    ip daddr 169.254.169.254 tcp dport 53 accept
+    ip daddr { 169.254.0.2, 169.254.2.0/24 } tcp dport 3260 accept
+    ip daddr 10.60.0.0/16 icmp type echo-request accept
+"""
+
+
+def role_rules(role, mirror_warmup=False):
+    if role == "platform":
+        return (
+            "ip saddr 10.60.0.0/16 tcp dport 443 accept\n"
+            "    ip saddr 10.60.250.121-10.60.250.135 tcp dport 4141 accept\n"
+            "    ip saddr 10.60.200.5 tcp dport 22 accept",
+            "ip saddr 10.60.0.0/16 ct status dnat ct original proto-dst { 443, 4141 } accept\n"
+            "    iifname \"br-*\" ip daddr 10.60.0.0/16 accept",
+            "ip daddr 10.60.0.0/16 accept",
+        )
+    if role == "operations":
+        return (
+            "ip saddr { 10.60.250.10, 10.60.250.11, 10.60.201.20 } tcp dport 22 accept",
+            "counter drop",
+            "ip daddr 10.60.0.0/16 tcp dport { 22, 2222, 443 } accept\n"
+            "    ip daddr 10.60.0.0/16 icmp type echo-request accept\n"
+            "    tcp dport 443 accept",
+        )
+    if role == "control":
+        return (
+            "ip saddr 10.60.200.5 tcp dport 22 accept",
+            "iifname \"br-*\" ip daddr 10.60.0.0/16 accept",
+            "ip daddr 10.60.0.0/16 accept",
+        )
+    if role == "repository":
+        return (
+            "ip saddr 10.60.200.5 tcp dport 2222 accept",
+            "ip saddr 10.60.0.0/16 ct status dnat ct original proto-dst { 22, 443 } accept\n"
+            "    iifname \"br-*\" ip daddr 10.60.0.0/16 tcp dport 9300 accept",
+            "ip daddr 10.60.0.0/16 accept",
+        )
+    if role == "mirror":
+        public_egress = "\n    tcp dport { 80, 443 } accept" if mirror_warmup else ""
+        return (
+            "ip saddr 10.60.0.0/16 tcp dport 3142 accept\n"
+            "    ip saddr 10.60.200.5 tcp dport 22 accept",
+            "ip saddr 10.60.0.0/16 ct status dnat ct original proto-dst { 3141, 4873, 5000 } accept",
+            f"ip daddr 10.60.0.0/16 accept{public_egress}",
+        )
+    port = HILL_PORTS[role]
+    return (
+        f"ip saddr 10.60.210.0/24 counter drop\n"
+        f"    ip saddr 10.60.250.121-10.60.250.135 tcp dport {port} accept\n"
+        f"    ip saddr 10.60.201.20 tcp dport {port} accept\n"
+        "    ip saddr 10.60.200.5 tcp dport 22 accept",
+        f"ip daddr 10.60.210.0/24 counter drop\n"
+        f"    ip saddr 10.60.250.121-10.60.250.135 ct status dnat ct original proto-dst {port} accept\n"
+        f"    ip saddr 10.60.201.20 ct status dnat ct original proto-dst {port} accept\n"
+        "    iifname \"br-*\" ip daddr 10.60.210.0/24 counter drop\n"
+        "    iifname \"br-*\" ip daddr { 10.60.200.10, 10.60.201.20 } accept",
+        "ip daddr 10.60.210.0/24 counter drop\n"
+        "    ip daddr { 10.60.200.10, 10.60.201.20 } accept",
+    )
+
+
+def render(role, mirror_warmup=False):
+    input_rules, forward_rules, output_rules = role_rules(role, mirror_warmup)
+    return f"""table inet finals_host {{
+  chain input {{
+    type filter hook input priority -10; policy drop;
+{COMMON_INPUT.rstrip()}
+    {input_rules}
+  }}
+  chain forward {{
+    type filter hook forward priority -10; policy drop;
+    ct state invalid drop
+    ct state established,related accept
+    {forward_rules}
+  }}
+  chain output {{
+    type filter hook output priority -10; policy drop;
+{COMMON_OUTPUT.rstrip()}
+    {output_rules}
+  }}
+}}
+"""
+
+
+def configured_role():
+    try:
+        document = json.loads(Path("/etc/finals-platform/role").read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise SystemExit(f"host firewall: cannot read fixed role: {error}")
+    if not isinstance(document, dict) or set(document) != {"role"} or document["role"] not in ROLES:
+        raise SystemExit("host firewall: fixed role is invalid")
+    return document["role"]
+
+
+def mirror_warmup_enabled():
+    path = Path("/etc/finals-platform/mirror/egress-mode")
+    if not path.exists():
+        return False
+    try:
+        value = path.read_text(encoding="ascii")
+    except (OSError, UnicodeDecodeError) as error:
+        raise SystemExit(f"host firewall: cannot read mirror egress mode: {error}")
+    if value not in {"warmup\n", "offline\n"}:
+        raise SystemExit("host firewall: mirror egress mode is invalid")
+    return value == "warmup\n"
+
+
+def public_web_egress_loaded():
+    try:
+        output = subprocess.run(
+            ["nft", "--json", "list", "chain", "inet", "finals_host", "output"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+        document = json.loads(output)
+    except (OSError, subprocess.SubprocessError, json.JSONDecodeError) as error:
+        raise SystemExit(f"host firewall: cannot verify loaded rules: {error}")
+    for item in document.get("nftables", []):
+        rule = item.get("rule") if isinstance(item, dict) else None
+        if not isinstance(rule, dict):
+            continue
+        expressions = rule.get("expr", [])
+        has_accept = any(isinstance(expression, dict) and "accept" in expression for expression in expressions)
+        web_match = False
+        for expression in expressions:
+            match = expression.get("match") if isinstance(expression, dict) else None
+            if not isinstance(match, dict):
+                continue
+            left = match.get("left", {}).get("payload", {})
+            right = match.get("right", {})
+            if left.get("protocol") == "tcp" and left.get("field") == "dport" and sorted(right.get("set", [])) == [80, 443]:
+                web_match = True
+        if has_accept and web_match:
+            return True
+    return False
+
+
+def main():
+    if len(sys.argv) in {3, 4} and sys.argv[1] == "--render" and sys.argv[2] in ROLES:
+        warmup = len(sys.argv) == 4 and sys.argv[3] == "warmup" and sys.argv[2] == "mirror"
+        if len(sys.argv) == 4 and not warmup:
+            raise SystemExit("host firewall: warmup rendering is valid only for the mirror")
+        print(render(sys.argv[2], warmup), end="")
+        return
+    if len(sys.argv) != 1 or subprocess.run(["id", "-u"], check=True, capture_output=True, text=True).stdout.strip() != "0":
+        raise SystemExit("host firewall: must run as root")
+    role = configured_role()
+    warmup = role == "mirror" and mirror_warmup_enabled()
+    exists = subprocess.run(
+        ["nft", "list", "table", "inet", "finals_host"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    ).returncode == 0
+    batch = ("delete table inet finals_host\n" if exists else "") + render(role, warmup)
+    subprocess.run(["nft", "-f", "-"], input=batch, text=True, check=True)
+    if role == "mirror" and public_web_egress_loaded() != warmup:
+        raise SystemExit("host firewall: loaded mirror egress state does not match the fixed mode")
+
+
+if __name__ == "__main__":
+    main()

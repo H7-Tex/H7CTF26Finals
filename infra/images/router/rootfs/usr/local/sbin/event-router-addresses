@@ -13,6 +13,10 @@ for team in $(seq 1 15); do
   addresses+=("10.60.250.$((120 + team))")
 done
 
+if [[ $state == standby ]]; then
+  nft flush map inet event_router forwarding_gate
+fi
+
 for address in "${addresses[@]}"; do
   if [[ $state == active ]]; then
     ip address replace "$address/24" dev "$interface"
@@ -20,3 +24,10 @@ for address in "${addresses[@]}"; do
     ip address delete "$address/24" dev "$interface"
   fi
 done
+
+if [[ $state == active ]]; then
+  nft -f - <<'EOF'
+flush map inet event_router forwarding_gate
+add element inet event_router forwarding_gate { 0 : jump forward_enabled }
+EOF
+fi

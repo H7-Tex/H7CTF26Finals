@@ -15,6 +15,7 @@ apt-get update
 apt-get dist-upgrade --yes
 apt-get install --yes --no-install-recommends \
   auditd \
+  age \
   ca-certificates \
   chrony \
   curl \
@@ -26,7 +27,12 @@ apt-get install --yes --no-install-recommends \
   openssh-server \
   python3 \
   rsync \
+  sudo \
   unzip
+
+if [[ $role == platform-x86 || $role == platform-arm ]]; then
+  apt-get install --yes --no-install-recommends certbot openssl
+fi
 
 if [[ $role == workbench ]]; then
   apt-get install --yes --no-install-recommends \
@@ -59,4 +65,10 @@ if [[ $role == workbench ]]; then
   usermod --append --groups docker ubuntu
 else
   gpasswd --delete ubuntu docker >/dev/null 2>&1 || true
+fi
+
+if [[ $role == production ]]; then
+  systemd-sysusers /usr/lib/sysusers.d/deployment-orchestrator.conf
+  install -d -o root -g deploy-orchestrator -m 0700 /etc/deployment-orchestrator
+  install -d -o deploy-orchestrator -g deploy-orchestrator -m 0700 /var/lib/deployment-orchestrator
 fi

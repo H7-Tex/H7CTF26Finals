@@ -1,0 +1,14 @@
+[Unit]
+Description=Expose active router addresses only after capture is ready
+Requires=event-router-restore.service event-router-flow-log.service
+After=event-router-restore.service event-router-flow-log.service
+Before=event-router-inventory.path
+
+[Service]
+Type=oneshot
+ExecCondition=/bin/grep -Fxq active /etc/event-router/role
+ExecStart=/usr/local/sbin/event-router-activate
+RemainAfterExit=yes
+
+[Install]
+WantedBy=event-router.target

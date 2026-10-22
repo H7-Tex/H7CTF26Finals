@@ -5,10 +5,31 @@ set -euo pipefail
 source_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 install -D -m 0644 "$source_dir/image-manifest.json" /etc/runtime-image.json
+package_manifest=/etc/runtime-image-packages.tsv
+dpkg-query -W -f='${binary:Package}\t${Version}\t${Architecture}\t${db:Status-Abbrev}\n' | LC_ALL=C sort > "$package_manifest"
+package_sha=$(sha256sum "$package_manifest" | awk '{print $1}')
+printf '%s\n' "$package_sha" > /etc/runtime-image-packages.sha256
+python3 - "$package_sha" <<'PY'
+import json
+import os
+import sys
+from pathlib import Path
+
+path = Path("/etc/runtime-image.json")
+document = json.loads(path.read_text(encoding="utf-8"))
+document["package_manifest"] = "/etc/runtime-image-packages.tsv"
+document["package_manifest_sha256"] = sys.argv[1]
+temporary = path.with_name(".runtime-image.json.tmp")
+temporary.write_text(json.dumps(document, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
+os.chmod(temporary, 0o644)
+os.replace(temporary, path)
+PY
+logger --tag runtime-image-seal -- "package_manifest_sha256=$package_sha"
 apt-get clean
 find /var/lib/apt/lists -mindepth 1 -delete
 journalctl --rotate
 journalctl --vacuum-time=1s
+rm -f /etc/ssh/ssh_host_*
 unlink /etc/systemd/system/runtime-image-seal.service
 find "$source_dir" -mindepth 1 -delete
 cloud-init clean --logs --machine-id

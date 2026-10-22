@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+restore_state() {
+  local role_file=$1 private_key=$2 active_inventory=$3 address_tool=$4 apply_tool=$5 role
+  role=$(cat "$role_file" 2>/dev/null || true)
+  [[ $role == active || $role == standby ]] || { echo "router restore: fixed role is missing or invalid" >&2; return 1; }
+
+  "$address_tool" standby
+  if [[ -f $private_key && -f $active_inventory ]]; then
+    "$apply_tool" "$active_inventory"
+  elif [[ -e $private_key || -e $active_inventory ]]; then
+    echo "router restore: peer state is incomplete; WireGuard remains closed" >&2
+  else
+    echo "router restore: no commissioned peer state; WireGuard remains closed"
+  fi
+}
+
+main() {
+  [[ $EUID -eq 0 ]] || { echo "must run as root" >&2; return 1; }
+  [[ $# -eq 0 ]] || { echo "event-router-restore takes no arguments" >&2; return 2; }
+  restore_state \
+    /etc/event-router/role \
+    /etc/wireguard/private.key \
+    /var/lib/event-router/active-peers.json \
+    /usr/local/sbin/event-router-addresses \
+    /usr/local/sbin/event-router-apply-inventory
+}
+
+if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
+  main "$@"
+fi

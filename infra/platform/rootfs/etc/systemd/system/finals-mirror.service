@@ -1,0 +1,23 @@
+[Unit]
+Description=Offline finals dependency mirror
+Requires=docker.service apt-cacher-ng.service finals-host-firewall.service
+After=docker.service apt-cacher-ng.service finals-host-firewall.service network-online.target
+Wants=network-online.target
+RequiresMountsFor=/srv/cache
+ConditionPathIsMountPoint=/srv/cache
+ConditionPathExists=/etc/finals-platform/mirror/mode.env
+ConditionPathExists=/etc/finals-platform/mirror/preseed-manifest.json
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStartPre=/usr/local/libexec/finals-platform/mirror-preflight offline
+ExecStart=/usr/bin/docker compose --project-name finals-mirror --env-file /etc/finals-platform/images.env --env-file /etc/finals-platform/mirror/mode.env --file /etc/finals-platform/mirror/compose.yaml up -d --remove-orphans --wait
+ExecStartPost=/usr/local/libexec/finals-platform/mirror-runtime-verify
+ExecReload=/usr/bin/docker compose --project-name finals-mirror --env-file /etc/finals-platform/images.env --env-file /etc/finals-platform/mirror/mode.env --file /etc/finals-platform/mirror/compose.yaml up -d --remove-orphans --wait
+ExecStop=/usr/bin/docker compose --project-name finals-mirror --env-file /etc/finals-platform/images.env --env-file /etc/finals-platform/mirror/mode.env --file /etc/finals-platform/mirror/compose.yaml stop --timeout 30
+TimeoutStartSec=5min
+TimeoutStopSec=1min
+
+[Install]
+WantedBy=finals-platform.target

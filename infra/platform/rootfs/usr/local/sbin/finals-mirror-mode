@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+[[ $EUID -eq 0 ]] || { echo "must run as root" >&2; exit 1; }
+mode=${1:-}
+case "$mode" in
+  warmup) offline=0 ;;
+  offline) offline=1 ;;
+  *) echo "usage: finals-mirror-mode {warmup|offline}" >&2; exit 2 ;;
+esac
+mountpoint -q /srv/cache || { echo "/srv/cache is not mounted" >&2; exit 1; }
+
+install -d -m 0755 /etc/finals-platform/mirror
+egress_temporary=$(mktemp /etc/finals-platform/mirror/.egress-mode.XXXXXX)
+temporary=$(mktemp /etc/finals-platform/mirror/.mode.XXXXXX)
+trap 'rm -f -- "$egress_temporary" "$temporary"' EXIT
+printf '%s\n' "$mode" > "$egress_temporary"
+chmod 0644 "$egress_temporary"
+mv "$egress_temporary" /etc/finals-platform/mirror/egress-mode
+printf 'REGISTRY_MODE=%s\n' "$mode" > "$temporary"
+chmod 0644 "$temporary"
+mv "$temporary" /etc/finals-platform/mirror/mode.env
+trap - EXIT
+
+systemctl restart finals-host-firewall.service
+
+install -d -o apt-cacher-ng -g apt-cacher-ng -m 0750 /srv/cache/apt
+cat > /etc/apt-cacher-ng/acng.conf <<EOF
+CacheDir: /srv/cache/apt
+LogDir: /var/log/apt-cacher-ng
+Port: 3142
+BindAddress: 10.60.202.10
+Offlinemode: $offline
+ExThreshold: 4
+EOF
+
+if [[ $mode == offline ]]; then
+  /usr/local/libexec/finals-platform/mirror-preflight offline
+fi
+systemctl restart apt-cacher-ng.service
+if [[ $mode == warmup ]]; then
+  docker compose --project-name finals-mirror --env-file /etc/finals-platform/images.env --env-file /etc/finals-platform/mirror/mode.env --file /etc/finals-platform/mirror/compose.yaml up -d --remove-orphans --wait
+else
+  systemctl enable finals-mirror.service
+  systemctl restart finals-mirror.service
+fi

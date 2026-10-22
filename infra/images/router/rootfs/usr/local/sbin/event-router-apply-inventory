@@ -38,7 +38,17 @@ ip address replace 10.80.255.1/16 dev wg0
 wg syncconf wg0 "$workdir/wg0.conf"
 ip link set mtu 1280 up dev wg0
 nft -f "$workdir/peers.nft"
-install -D -m 0600 "$inventory" "$active_inventory"
+if [[ ! $inventory -ef $active_inventory ]]; then
+  install -D -m 0600 "$inventory" "$active_inventory"
+fi
+if mountpoint -q /srv/captures; then
+  /usr/local/sbin/event-router-capture inventory "$active_inventory"
+else
+  logger --tag event-router-inventory -- '{"event":"capture_gap","reason":"capture_volume_unavailable"}'
+fi
 
 read -r generation peer_count < <(python3 -c 'import json,sys; value=json.load(open(sys.argv[1], encoding="utf-8")); print(value["generation"], len(value["peers"]))' "$inventory")
 logger --tag event-router-inventory -- "{\"event\":\"inventory_applied\",\"generation\":$generation,\"peer_count\":$peer_count}"
+if [[ $(cat /etc/event-router/role 2>/dev/null || true) == active ]]; then
+  systemctl --no-block restart event-router-activate.service
+fi

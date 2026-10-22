@@ -1,0 +1,22 @@
+storage: /verdaccio/storage
+auth:
+  htpasswd:
+    file: /tmp/htpasswd
+    max_users: -1
+uplinks: {}
+packages:
+  '@*/*':
+    access: $all
+    publish: $authenticated
+    unpublish: $authenticated
+  '**':
+    access: $all
+    publish: $authenticated
+    unpublish: $authenticated
+web:
+  enable: false
+log:
+  type: stdout
+  format: json
+  level: http
+listen: 0.0.0.0:4873

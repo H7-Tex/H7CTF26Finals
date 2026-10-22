@@ -10,6 +10,7 @@ esac
 for command in auditctl chronyc curl docker git jq nft python3 rsync sshd; do
   command -v "$command" >/dev/null
 done
+command -v age >/dev/null
 docker compose version >/dev/null
 sshd -t
 python3 -m json.tool /etc/docker/daemon.json >/dev/null
@@ -27,4 +28,17 @@ if [[ $role == workbench ]]; then
   id -nG ubuntu | tr ' ' '\n' | grep -Fxq docker
 else
   ! id -nG ubuntu | tr ' ' '\n' | grep -Fxq docker
+fi
+
+if [[ $role == platform-x86 || $role == platform-arm ]]; then
+  command -v certbot >/dev/null
+  command -v finals-install-secret-bundle >/dev/null
+  command -v finals-initialize-volume >/dev/null
+  test -x /usr/local/sbin/finals-platform-activate
+fi
+
+if [[ $role == production ]]; then
+  getent passwd deploy-orchestrator | grep -Fq '/usr/sbin/nologin'
+  [[ $(stat -c '%U:%G:%a' /etc/deployment-orchestrator) == root:deploy-orchestrator:700 ]]
+  [[ $(stat -c '%U:%G:%a' /var/lib/deployment-orchestrator) == deploy-orchestrator:deploy-orchestrator:700 ]]
 fi

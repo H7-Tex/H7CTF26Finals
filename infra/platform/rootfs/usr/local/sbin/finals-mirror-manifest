@@ -1,0 +1,57 @@
+#!/usr/bin/env python3
+import hashlib
+import json
+import os
+import sys
+from pathlib import Path
+
+
+ROOT = Path("/srv/cache")
+CLASSES = ("apt", "pypi", "verdaccio", "registry")
+
+
+def fail(message):
+    print(f"mirror manifest: {message}", file=sys.stderr)
+    raise SystemExit(1)
+
+
+def digest_file(path):
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def build(root=ROOT):
+    artifacts = []
+    for cache_class in CLASSES:
+        directory = root / cache_class
+        if not directory.is_dir():
+            fail(f"cache class is absent: {cache_class}")
+        class_files = []
+        for path in sorted(directory.rglob("*")):
+            if path.is_symlink():
+                fail(f"symbolic links are forbidden: {path.relative_to(root)}")
+            if path.is_file():
+                relative = path.relative_to(root).as_posix()
+                class_files.append({
+                    "path": relative,
+                    "sha256": digest_file(path),
+                    "size": path.stat().st_size,
+                })
+        if not class_files:
+            fail(f"cache class is empty: {cache_class}")
+        artifacts.extend(class_files)
+    return {"version": 1, "files": artifacts}
+
+
+def main():
+    if os.geteuid() != 0:
+        fail("must run as root")
+    json.dump(build(), sys.stdout, sort_keys=True, separators=(",", ":"))
+    sys.stdout.write("\n")
+
+
+if __name__ == "__main__":
+    main()

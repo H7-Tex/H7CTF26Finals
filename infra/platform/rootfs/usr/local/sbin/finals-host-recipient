@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+key=/etc/ssh/ssh_host_ed25519_key.pub
+[[ -s $key ]] || { echo "post-launch Ed25519 host key is missing" >&2; exit 1; }
+read -r key_type key_data _ < "$key"
+[[ $key_type == ssh-ed25519 && -n $key_data ]] || { echo "post-launch host key is invalid" >&2; exit 1; }
+fingerprint=$(ssh-keygen -l -E sha256 -f "$key" | awk '{print $2}')
+printf 'FINALS_HOST_RECIPIENT %s %s %s\n' "$key_type" "$key_data" "$fingerprint"

@@ -78,6 +78,21 @@ locals {
     event      = "finals-2026"
     managed_by = "terraform"
   }
+
+  operations_relay_authorized_key = "restrict,command=\"/usr/local/sbin/finals-secret-relay-receive\" ${var.operations_relay_ssh_public_key}"
+
+  cloud_init_by_role = {
+    for role in keys(local.hosts) : role => <<-YAML
+      #cloud-config
+      ssh_deletekeys: true
+      ssh_genkeytypes:
+        - ed25519
+      runcmd:
+        - ["systemctl", "restart", "ssh.service"]
+        - ["/usr/local/sbin/finals-host-recipient"]
+        - ["/usr/local/sbin/finals-platform-activate", "${role}"]
+    YAML
+  }
 }
 
 resource "oci_core_instance" "host" {
@@ -110,12 +125,11 @@ resource "oci_core_instance" "host" {
   }
 
   metadata = {
-    ssh_authorized_keys = var.ssh_authorized_keys
-    user_data = base64encode(lookup(
-      var.cloud_init_by_role,
-      each.key,
-      "#cloud-config\n{}\n"
-    ))
+    ssh_authorized_keys = join("\n", compact([
+      trimspace(var.organizer_ssh_authorized_keys),
+      contains(["platform", "control", "repository"], each.key) ? local.operations_relay_authorized_key : "",
+    ]))
+    user_data = base64encode(local.cloud_init_by_role[each.key])
   }
 
   instance_options {

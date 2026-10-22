@@ -1,0 +1,328 @@
+#!/usr/bin/env python3
+import fcntl
+import ipaddress
+import json
+import os
+import re
+import selectors
+import signal
+import subprocess
+import sys
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+
+
+CAPTURE_ROOT = Path("/srv/captures")
+EVENTS = CAPTURE_ROOT / "events.jsonl"
+STATE = CAPTURE_ROOT / "collector-state.json"
+ACTIVE_INVENTORY = Path("/var/lib/event-router/active-peers.json")
+MAX_LOG_BYTES = 1024 * 1024 * 1024
+RETAINED_LOGS = 300
+MAX_CONNTRACK_LINE = 16 * 1024
+MAX_EVENT_BYTES = 512 * 1024
+MAX_BUFFER_BYTES = 1024 * 1024
+FLUSH_INTERVAL_SECONDS = 2
+HEARTBEAT_INTERVAL_SECONDS = 10
+ADDRESS = re.compile(r"(?:^|\s)(?:src|dst)=([0-9.]+)(?=\s|$)")
+
+
+class CaptureError(Exception):
+    pass
+
+
+def timestamp():
+    return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def atomic_json(path, value):
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    temporary.write_text(json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
+    os.chmod(temporary, 0o600)
+    os.replace(temporary, path)
+
+
+class EventWriter:
+    def __init__(self, path, maximum=MAX_LOG_BYTES, retained=RETAINED_LOGS, buffer_limit=MAX_BUFFER_BYTES):
+        self.path = path
+        self.maximum = maximum
+        self.retained = retained
+        self.buffer_limit = buffer_limit
+        self.buffer = bytearray()
+        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+
+    @staticmethod
+    def encode(event):
+        encoded = (json.dumps(event, sort_keys=True, separators=(",", ":")) + "\n").encode()
+        if len(encoded) > MAX_EVENT_BYTES:
+            raise CaptureError("capture event is too large")
+        return encoded
+
+    def append(self, event):
+        self.buffer.extend(self.encode(event))
+        if len(self.buffer) >= self.buffer_limit:
+            self.flush()
+
+    def flush(self):
+        if not self.buffer:
+            return
+        payload = bytes(self.buffer)
+        lock_path = self.path.with_suffix(self.path.suffix + ".lock")
+        with lock_path.open("a", encoding="ascii") as lock:
+            os.chmod(lock_path, 0o600)
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            size = self.path.stat().st_size if self.path.exists() else 0
+            if size + len(payload) > self.maximum:
+                oldest = self.path.with_name(f"{self.path.name}.{self.retained}")
+                dropped = oldest.stat().st_size if oldest.exists() else None
+                oldest.unlink(missing_ok=True)
+                for index in range(self.retained - 1, 0, -1):
+                    source = self.path.with_name(f"{self.path.name}.{index}")
+                    if source.exists():
+                        os.replace(source, self.path.with_name(f"{self.path.name}.{index + 1}"))
+                if self.path.exists():
+                    os.replace(self.path, self.path.with_name(f"{self.path.name}.1"))
+                markers = [self.encode({
+                    "event": "log_rollover",
+                    "recorded_at": timestamp(),
+                    "retained_files": self.retained,
+                })]
+                if dropped is not None:
+                    markers.append(self.encode({
+                        "bytes_dropped": dropped,
+                        "event": "retention_drop",
+                        "recorded_at": timestamp(),
+                    }))
+                payload = b"".join(markers) + payload
+            descriptor = os.open(self.path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+            try:
+                remaining = memoryview(payload)
+                while remaining:
+                    remaining = remaining[os.write(descriptor, remaining):]
+                os.fsync(descriptor)
+            finally:
+                os.close(descriptor)
+        self.buffer.clear()
+
+
+def append_event(path, event, maximum=MAX_LOG_BYTES, retained=RETAINED_LOGS):
+    writer = EventWriter(path, maximum=maximum, retained=retained)
+    writer.append(event)
+    writer.flush()
+
+
+def load_inventory(path=ACTIVE_INVENTORY):
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise CaptureError("active peer inventory is unreadable") from error
+    if not isinstance(document, dict) or set(document) != {"version", "generation", "peers"}:
+        raise CaptureError("active peer inventory schema is invalid")
+    if document["version"] != 1 or type(document["generation"]) is not int or not isinstance(document["peers"], list):
+        raise CaptureError("active peer inventory metadata is invalid")
+    mapping = {}
+    records = []
+    for peer in document["peers"]:
+        if not isinstance(peer, dict):
+            raise CaptureError("active peer entry is invalid")
+        try:
+            address = str(ipaddress.ip_interface(peer["address"]).ip)
+            record = {
+                "address": address,
+                "peer_id": peer["peer_id"],
+                "team_id": peer["team_id"],
+                "team_number": peer["team_number"],
+            }
+        except (KeyError, TypeError, ValueError) as error:
+            raise CaptureError("active peer entry is invalid") from error
+        mapping[address] = record
+        records.append(record)
+    return document["generation"], mapping, sorted(records, key=lambda item: item["address"])
+
+
+class InventoryCache:
+    def __init__(self, path=ACTIVE_INVENTORY):
+        self.path = path
+        self.stamp = None
+        self.generation = None
+        self.mapping = {}
+
+    def refresh(self):
+        try:
+            stat = self.path.stat()
+            stamp = (stat.st_mtime_ns, stat.st_size)
+            if stamp != self.stamp:
+                self.generation, self.mapping, _ = load_inventory(self.path)
+                self.stamp = stamp
+        except (OSError, CaptureError):
+            self.stamp = None
+            self.generation = None
+            self.mapping = {}
+
+    def correlate(self, raw):
+        self.refresh()
+        matched = []
+        seen = set()
+        for address in ADDRESS.findall(raw):
+            if address in self.mapping and address not in seen:
+                matched.append(self.mapping[address])
+                seen.add(address)
+        return self.generation, matched
+
+
+def correlations(raw, inventory_path=ACTIVE_INVENTORY):
+    return InventoryCache(inventory_path).correlate(raw)
+
+
+def gap_event(previous, now_epoch):
+    heartbeat = previous.get("heartbeat_epoch") if isinstance(previous, dict) else None
+    return {
+        "event": "collection_gap",
+        "recorded_at": timestamp(),
+        "previous_clean_shutdown": bool(isinstance(previous, dict) and previous.get("clean_shutdown") is True),
+        "previous_heartbeat_epoch": heartbeat if isinstance(heartbeat, (int, float)) else None,
+        "gap_seconds": max(0, round(now_epoch - heartbeat, 3)) if isinstance(heartbeat, (int, float)) else None,
+    }
+
+
+def ensure_capture_root():
+    if subprocess.run(["mountpoint", "-q", str(CAPTURE_ROOT)]).returncode:
+        raise CaptureError("capture volume is not mounted")
+    result = subprocess.run(
+        ["findmnt", "-n", "-o", "LABEL,FSTYPE,TARGET", "-T", str(CAPTURE_ROOT)],
+        check=True, capture_output=True, text=True,
+    )
+    if result.stdout.split() != ["captures-data", "ext4", str(CAPTURE_ROOT)]:
+        raise CaptureError("capture volume identity is invalid")
+
+
+def record_inventory(path):
+    ensure_capture_root()
+    generation, _, records = load_inventory(path)
+    writer = EventWriter(EVENTS)
+    writer.append({
+        "event": "inventory_applied",
+        "generation": generation,
+        "peers": records,
+        "recorded_at": timestamp(),
+    })
+    writer.flush()
+
+
+def read_state():
+    try:
+        value = json.loads(STATE.read_text(encoding="utf-8"))
+        return value if isinstance(value, dict) else {}
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return {}
+
+
+def ready(now_epoch=None):
+    ensure_capture_root()
+    state = read_state()
+    heartbeat = state.get("heartbeat_epoch")
+    now_epoch = time.time() if now_epoch is None else now_epoch
+    if state.get("clean_shutdown") is not False or not isinstance(heartbeat, (int, float)):
+        raise CaptureError("collector heartbeat is absent")
+    age = now_epoch - heartbeat
+    if age < 0 or age > HEARTBEAT_INTERVAL_SECONDS + FLUSH_INTERVAL_SECONDS + 3:
+        raise CaptureError("collector heartbeat is stale")
+    for name in ("collector_pid", "conntrack_pid"):
+        pid = state.get(name)
+        if type(pid) is not int or pid < 2 or not Path(f"/proc/{pid}").exists():
+            raise CaptureError(f"{name} is not running")
+    try:
+        child_state = Path(f"/proc/{state['conntrack_pid']}/stat").read_text(encoding="ascii").split()[2]
+    except (OSError, IndexError, UnicodeDecodeError) as error:
+        raise CaptureError("conntrack process state is unavailable") from error
+    if child_state == "Z":
+        raise CaptureError("conntrack process is not live")
+
+
+def stream():
+    ensure_capture_root()
+    previous = read_state()
+    writer = EventWriter(EVENTS)
+    writer.append(gap_event(previous, time.time()))
+    writer.flush()
+    inventory = InventoryCache()
+    heartbeat_at = time.monotonic()
+    flush_at = time.monotonic()
+    process = subprocess.Popen(
+        ["/usr/sbin/conntrack", "--event", "--event-mask", "NEW,DESTROY", "--output", "timestamp,extended,id"],
+        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, text=True, bufsize=1,
+    )
+    if process.poll() is not None:
+        raise CaptureError("conntrack collector did not remain running")
+    live_state = {
+        "clean_shutdown": False,
+        "collector_pid": os.getpid(),
+        "conntrack_pid": process.pid,
+        "heartbeat_epoch": time.time(),
+    }
+    atomic_json(STATE, live_state)
+
+    def stop(signum, frame):
+        del signum, frame
+        process.terminate()
+
+    signal.signal(signal.SIGTERM, stop)
+    signal.signal(signal.SIGINT, stop)
+    assert process.stdout is not None
+    selector = selectors.DefaultSelector()
+    selector.register(process.stdout, selectors.EVENT_READ)
+    while process.poll() is None:
+        ready = selector.select(timeout=0.5)
+        for key, _ in ready:
+            line = key.fileobj.readline()
+            if not line:
+                continue
+            raw = line.rstrip("\n")
+            if not raw or len(raw.encode()) > MAX_CONNTRACK_LINE:
+                continue
+            generation, peers = inventory.correlate(raw)
+            writer.append({
+                "event": "conntrack",
+                "inventory_generation": generation,
+                "peers": peers,
+                "raw": raw,
+                "recorded_at": timestamp(),
+            })
+        now = time.monotonic()
+        if now - flush_at >= FLUSH_INTERVAL_SECONDS:
+            writer.flush()
+            flush_at = now
+        if now - heartbeat_at >= HEARTBEAT_INTERVAL_SECONDS:
+            live_state["heartbeat_epoch"] = time.time()
+            atomic_json(STATE, live_state)
+            heartbeat_at = now
+    selector.close()
+    status = process.wait()
+    clean = status in {-signal.SIGINT, -signal.SIGTERM, 0}
+    atomic_json(STATE, {"clean_shutdown": clean, "heartbeat_epoch": time.time()})
+    writer.append({"event": "collector_stopped", "clean": clean, "status": status, "recorded_at": timestamp()})
+    writer.flush()
+    return 0 if clean else 1
+
+
+def main():
+    if os.geteuid() != 0:
+        raise SystemExit("must run as root")
+    try:
+        if sys.argv[1:] == ["stream"]:
+            return stream()
+        if sys.argv[1:] == ["ready"]:
+            ready()
+            return 0
+        if len(sys.argv) == 3 and sys.argv[1] == "inventory" and sys.argv[2] == str(ACTIVE_INVENTORY):
+            record_inventory(ACTIVE_INVENTORY)
+            return 0
+    except (CaptureError, OSError, subprocess.SubprocessError) as error:
+        print(f"event capture failed: {error}", file=sys.stderr)
+        return 1
+    print(f"usage: {Path(sys.argv[0]).name} stream|ready|inventory {ACTIVE_INVENTORY}", file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

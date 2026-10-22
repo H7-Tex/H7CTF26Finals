@@ -1,0 +1,14 @@
+[Unit]
+Description=Apply the fixed finals host firewall
+DefaultDependencies=no
+Before=network-pre.target docker.service
+Wants=network-pre.target
+ConditionPathExists=/etc/finals-platform/role
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/finals-platform/firewall
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

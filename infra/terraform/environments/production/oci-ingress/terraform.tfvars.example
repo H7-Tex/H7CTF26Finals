@@ -4,5 +4,8 @@ availability_domain     = "replace-with-hyderabad-ad-name"
 edge_subnet_id          = "ocid1.subnet.oc1.ap-hyderabad-1.replace-me"
 router_nsg_id           = "ocid1.networksecuritygroup.oc1.ap-hyderabad-1.replace-me"
 router_image_id         = "ocid1.image.oc1.ap-hyderabad-1.replace-with-reviewed-image"
-ssh_authorized_keys     = "ssh-ed25519 replace-with-organizer-public-key"
+organizer_ssh_authorized_keys = <<-KEYS
+ssh-ed25519 replace-with-organizer-break-glass-public-key organizer
+KEYS
+operations_relay_ssh_public_key = "ssh-ed25519 replace-with-raw-event-relay-public-key"
 active_router           = "primary"

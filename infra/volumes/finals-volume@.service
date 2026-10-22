@@ -1,0 +1,15 @@
+[Unit]
+Description=Initialize the fixed %i data volume
+After=local-fs-pre.target
+Before=finals-platform.target
+StartLimitIntervalSec=300
+StartLimitBurst=20
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/finals-initialize-volume %i
+Restart=on-failure
+RestartSec=15s
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+fail() { echo "repository preflight: $*" >&2; exit 1; }
+mountpoint -q /srv/gitea || fail "/srv/gitea is not mounted"
+[[ $(findmnt -n -o LABEL -T /srv/gitea) == gitea-data ]] || fail "wrong data volume label"
+[[ -s /srv/gitea/config/app.ini ]] || fail "Gitea configuration is missing"
+[[ $(stat -c '%a' /srv/gitea/config/app.ini) == 600 ]] || fail "Gitea configuration is exposed"
+grep -Fxq 'INSTALL_LOCK = true' /srv/gitea/config/app.ini || fail "Gitea installation is not locked"
+grep -Fxq 'OFFLINE_MODE = true' /srv/gitea/config/app.ini || fail "Gitea offline mode is not enabled"
+[[ -s /srv/gitea/data/ssh/gitea_ed25519 && $(stat -c '%a' /srv/gitea/data/ssh/gitea_ed25519) == 600 ]] || fail "durable Gitea SSH host key is missing or exposed"
+ssh-keygen -l -E sha256 -f /srv/gitea/data/ssh/gitea_ed25519.pub | grep -Fq ' (ED25519)' || fail "durable Gitea SSH host key is invalid"
+
+cert=/etc/finals-platform/repository/tls/fullchain.pem
+key=/etc/finals-platform/repository/tls/privkey.pem
+[[ -r $cert && -r $key ]] || fail "TLS files are missing"
+(( (8#$(stat -c '%a' "$key") & 077) == 0 )) || fail "TLS private key is exposed"
+openssl x509 -in "$cert" -noout -checkend 604800 >/dev/null 2>&1 || fail "TLS certificate expires within seven days"
+openssl x509 -in "$cert" -noout -checkhost git.h7tex.com >/dev/null 2>&1 || fail "TLS certificate does not cover git.h7tex.com"
+[[ $(openssl x509 -in "$cert" -pubkey -noout | openssl sha256) == $(openssl pkey -in "$key" -pubout 2>/dev/null | openssl sha256) ]] || fail "TLS key does not match"
+
+# shellcheck disable=SC1091
+source /etc/finals-platform/images.env
+for image in "$GITEA_IMAGE" "$NGINX_IMAGE"; do
+  docker image inspect "$image" >/dev/null 2>&1 || fail "pinned image is absent: $image"
+done
+docker compose --project-name finals-repository --env-file /etc/finals-platform/images.env --file /etc/finals-platform/repository/compose.yaml config --quiet
+echo "repository preflight: ok"

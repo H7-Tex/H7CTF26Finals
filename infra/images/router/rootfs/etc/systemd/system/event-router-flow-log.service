@@ -1,15 +1,22 @@
 [Unit]
 Description=Record router conntrack lifecycle metadata
-After=nftables.service
+After=nftables.service finals-volume@captures.service
 Requires=nftables.service
+RequiresMountsFor=/srv/captures
 ConditionPathExists=/usr/sbin/conntrack
+ConditionPathIsMountPoint=/srv/captures
+StartLimitIntervalSec=300
+StartLimitBurst=10
 
 [Service]
 Type=simple
-ExecStart=/usr/sbin/conntrack --event --event-mask NEW,DESTROY --output timestamp,extended,id
+ExecCondition=/bin/grep -Fxq active /etc/event-router/role
+ExecStart=/usr/local/sbin/event-router-capture stream
+ExecStartPost=/bin/systemctl --no-block restart event-router-activate.service
+ExecStopPost=/usr/local/sbin/event-router-addresses standby
 Restart=always
 RestartSec=2
-StandardOutput=journal
+StandardOutput=null
 StandardError=journal
 SyslogIdentifier=event-router-flow
 NoNewPrivileges=true
@@ -17,9 +24,10 @@ CapabilityBoundingSet=CAP_NET_ADMIN
 AmbientCapabilities=CAP_NET_ADMIN
 ProtectHome=true
 ProtectSystem=strict
+ReadWritePaths=/srv/captures
 ProtectKernelTunables=true
 PrivateTmp=true
-RestrictAddressFamilies=AF_NETLINK
+RestrictAddressFamilies=AF_NETLINK AF_UNIX
 
 [Install]
 WantedBy=event-router.target

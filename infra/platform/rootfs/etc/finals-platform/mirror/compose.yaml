@@ -1,0 +1,76 @@
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  pypi:
+    image: ${NGINX_IMAGE:?NGINX_IMAGE is required}
+    ports:
+      - "10.60.202.10:3141:8080"
+    volumes:
+      - /etc/finals-platform/mirror/pypi-nginx.conf:/etc/nginx/nginx.conf:ro
+      - /srv/cache/pypi:/srv/pypi:ro
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+    logging: *logging
+    restart: "on-failure:5"
+
+  npm:
+    image: ${VERDACCIO_IMAGE:?VERDACCIO_IMAGE is required}
+    ports:
+      - "10.60.202.10:4873:4873"
+    volumes:
+      - /etc/finals-platform/mirror/verdaccio.yaml:/verdaccio/conf/config.yaml:ro
+      - /srv/cache/verdaccio:/verdaccio/storage
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4873/-/ping"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+    logging: *logging
+    restart: "on-failure:5"
+
+  registry:
+    image: ${REGISTRY_IMAGE:?REGISTRY_IMAGE is required}
+    environment:
+      FINALS_REGISTRY_MODE: ${REGISTRY_MODE:?REGISTRY_MODE is required}
+    ports:
+      - "10.60.202.10:5000:5000"
+    volumes:
+      - /etc/finals-platform/mirror/registry-${REGISTRY_MODE}.yaml:/etc/distribution/config.yml:ro
+      - /srv/cache/registry:/var/lib/registry
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:5000/v2/"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+    logging: *logging
+    restart: "on-failure:5"

@@ -1,0 +1,12 @@
+[Unit]
+Description=Validate reviewed finals checker artifacts
+ConditionPathExists=/etc/finals-platform/checkers/artifact-manifest.json
+ConditionPathIsDirectory=/opt/finals-checkers
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/finals-platform/checker-preflight
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

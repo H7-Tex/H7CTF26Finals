@@ -4,6 +4,10 @@ on:
   pull_request:
     paths:
       - "infra/images/runtime/**"
+      - "infra/platform/**"
+      - "infra/reconciler/**"
+      - "infra/secrets/**"
+      - "infra/volumes/**"
       - "infra/terraform/environments/production/oci-runtime-builders/**"
       - "infra/terraform/environments/production/oci-runtime-images/**"
       - ".github/workflows/runtime-image.yml"
@@ -12,6 +16,10 @@ on:
       - main
     paths:
       - "infra/images/runtime/**"
+      - "infra/platform/**"
+      - "infra/reconciler/**"
+      - "infra/secrets/**"
+      - "infra/volumes/**"
       - "infra/terraform/environments/production/oci-runtime-builders/**"
       - "infra/terraform/environments/production/oci-runtime-images/**"
       - ".github/workflows/runtime-image.yml"
@@ -23,5 +31,9 @@ jobs:
   static:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - run: infra/images/runtime/tests/static.sh
+      - run: infra/secrets/tests/run.sh
+      - run: infra/volumes/tests/run.sh
+      - run: infra/platform/tests/run.sh
+      - run: python3 -m unittest discover -s infra/terraform/tests -p 'test_*.py'

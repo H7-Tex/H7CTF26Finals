@@ -1,0 +1,63 @@
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  gitea:
+    image: ${GITEA_IMAGE:?GITEA_IMAGE is required}
+    user: "1001:1001"
+    environment:
+      USER: git
+      GITEA_WORK_DIR: /var/lib/gitea
+      GITEA_CUSTOM: /var/lib/gitea/custom
+    volumes:
+      - /srv/gitea/data:/var/lib/gitea
+      - /srv/gitea/config:/etc/gitea:ro
+    ports:
+      - "10.60.201.30:22:2222"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/gitea", "--config", "/etc/gitea/app.ini", "doctor", "check", "--all"]
+      interval: 30s
+      timeout: 10s
+      retries: 6
+    logging: *logging
+    restart: "on-failure:5"
+
+  ingress:
+    image: ${NGINX_IMAGE:?NGINX_IMAGE is required}
+    depends_on:
+      gitea:
+        condition: service_healthy
+    ports:
+      - "10.60.201.30:443:8443"
+    volumes:
+      - /etc/finals-platform/repository/nginx.conf:/etc/nginx/nginx.conf:ro
+      - /etc/finals-platform/repository/tls/fullchain.pem:/run/tls/fullchain.pem:ro
+      - /etc/finals-platform/repository/tls/privkey.pem:/run/tls/privkey.pem:ro
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8081/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+    logging: *logging
+    restart: "on-failure:5"

@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+[[ $EUID -eq 0 ]] || { echo "must run as root" >&2; exit 1; }
+env_file=/etc/finals-platform/repository/repository.env
+[[ -f $env_file ]] || { echo "repository secret environment is missing" >&2; exit 1; }
+mode=$(stat -c '%a' "$env_file")
+(( (8#$mode & 077) == 0 )) || { echo "repository secret environment is exposed" >&2; exit 1; }
+# shellcheck disable=SC1090
+source "$env_file"
+[[ ${GITEA_SECRET_KEY:-} =~ ^[A-Za-z0-9_+./:@,-]{32,}$ ]] || { echo "Gitea secret key is invalid" >&2; exit 1; }
+[[ ${GITEA_INTERNAL_TOKEN:-} =~ ^[A-Za-z0-9_+./:@,-]{32,}$ ]] || { echo "Gitea internal token is invalid" >&2; exit 1; }
+[[ $GITEA_SECRET_KEY != "$GITEA_INTERNAL_TOKEN" ]] || { echo "Gitea secrets must be independent" >&2; exit 1; }
+mountpoint -q /srv/gitea || { echo "/srv/gitea is not a mount point" >&2; exit 1; }
+
+install -d -o 1001 -g 1001 -m 0700 /srv/gitea/data /srv/gitea/config
+install -d -o 1001 -g 1001 -m 0700 /srv/gitea/data/ssh
+if [[ ! -e /srv/gitea/data/ssh/gitea_ed25519 ]]; then
+  ssh-keygen -q -t ed25519 -N '' -C git.h7tex.com -f /srv/gitea/data/ssh/gitea_ed25519
+  chown 1001:1001 /srv/gitea/data/ssh/gitea_ed25519 /srv/gitea/data/ssh/gitea_ed25519.pub
+  chmod 0600 /srv/gitea/data/ssh/gitea_ed25519
+  chmod 0644 /srv/gitea/data/ssh/gitea_ed25519.pub
+fi
+config=/srv/gitea/config/app.ini
+[[ ! -e $config ]] || { echo "repository is already commissioned" >&2; exit 1; }
+temporary=$(mktemp /srv/gitea/config/.app.ini.XXXXXX)
+trap 'rm -f -- "$temporary"' EXIT
+cat > "$temporary" <<EOF
+APP_NAME = H7CTF Finals Repository
+RUN_MODE = prod
+
+[server]
+DOMAIN = git.h7tex.com
+ROOT_URL = https://git.h7tex.com/
+HTTP_ADDR = 0.0.0.0
+HTTP_PORT = 3000
+PROTOCOL = http
+START_SSH_SERVER = true
+SSH_LISTEN_HOST = 0.0.0.0
+SSH_LISTEN_PORT = 2222
+SSH_DOMAIN = git.h7tex.com
+SSH_PORT = 22
+SSH_SERVER_HOST_KEYS = /var/lib/gitea/ssh/gitea_ed25519
+OFFLINE_MODE = true
+LFS_START_SERVER = false
+
+[database]
+DB_TYPE = sqlite3
+PATH = /var/lib/gitea/data/gitea.db
+SQLITE_JOURNAL_MODE = WAL
+
+[service]
+DISABLE_REGISTRATION = true
+REQUIRE_SIGNIN_VIEW = true
+ENABLE_CAPTCHA = false
+
+[repository]
+DEFAULT_PRIVATE = private
+DISABLE_MIGRATIONS = true
+ENABLE_PUSH_CREATE_USER = false
+
+[actions]
+ENABLED = false
+
+[packages]
+ENABLED = false
+
+[mirror]
+ENABLED = false
+
+[webhook]
+ALLOWED_HOST_LIST = 10.60.0.0/16
+
+[security]
+INSTALL_LOCK = true
+SECRET_KEY = $GITEA_SECRET_KEY
+INTERNAL_TOKEN = $GITEA_INTERNAL_TOKEN
+PASSWORD_HASH_ALGO = argon2
+
+[log]
+MODE = console
+LEVEL = Info
+EOF
+chmod 0600 "$temporary"
+chown 1001:1001 "$temporary"
+mv "$temporary" "$config"
+trap - EXIT
+
+/usr/local/libexec/finals-platform/repository-preflight
+systemctl enable --now finals-repository.service

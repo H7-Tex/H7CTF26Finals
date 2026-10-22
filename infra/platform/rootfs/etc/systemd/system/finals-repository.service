@@ -1,0 +1,23 @@
+[Unit]
+Description=Private finals source repository
+Requires=docker.service finals-host-firewall.service
+After=docker.service finals-host-firewall.service network-online.target
+Wants=network-online.target
+RequiresMountsFor=/srv/gitea
+ConditionPathIsMountPoint=/srv/gitea
+ConditionPathExists=/srv/gitea/config/app.ini
+ConditionPathExists=/etc/finals-platform/repository/repository.env
+ConditionPathExists=/etc/finals-platform/repository/tls/privkey.pem
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStartPre=/usr/local/libexec/finals-platform/repository-preflight
+ExecStart=/usr/bin/docker compose --project-name finals-repository --env-file /etc/finals-platform/images.env --file /etc/finals-platform/repository/compose.yaml up -d --remove-orphans --wait
+ExecReload=/usr/bin/docker compose --project-name finals-repository --env-file /etc/finals-platform/images.env --file /etc/finals-platform/repository/compose.yaml up -d --remove-orphans --wait
+ExecStop=/usr/bin/docker compose --project-name finals-repository --env-file /etc/finals-platform/images.env --file /etc/finals-platform/repository/compose.yaml stop --timeout 30
+TimeoutStartSec=5min
+TimeoutStopSec=1min
+
+[Install]
+WantedBy=finals-platform.target

@@ -14,6 +14,17 @@ variable "vpn_ipv4" {
   type        = string
 }
 
+variable "repository_ipv4" {
+  description = "Fixed private address of the VPN-only finals repository."
+  type        = string
+  default     = "10.60.201.30"
+
+  validation {
+    condition     = var.repository_ipv4 == "10.60.201.30"
+    error_message = "repository_ipv4 must remain the fixed private address 10.60.201.30."
+  }
+}
+
 variable "ttl" {
   description = "DNS TTL during commissioning."
   type        = number

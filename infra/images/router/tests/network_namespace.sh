@@ -136,17 +136,17 @@ nsenter --target "$PRODUCTION_TWO_PID" --net ip route add default via 10.60.2.1
 nsenter --target "$CORE_PID" --net ip route add default via 10.60.201.1
 nsenter --target "$MIRROR_PID" --net ip route add default via 10.60.202.1
 
-EVENT_ROUTER_INTERFACE=wan-r "$ADDRESS_TOOL" active
 ip address add 10.60.250.10/24 dev wan-r
 nsenter --target "$WAN_PID" --net ip address add 10.60.250.11/24 dev wan-c
+sysctl -q -w net.ipv4.ip_forward=1
+sysctl -q -w net.ipv4.conf.all.rp_filter=0
+nft -f "$RULESET"
+EVENT_ROUTER_INTERFACE=wan-r "$ADDRESS_TOOL" active
 ip address show dev wan-r | grep -Fq '10.60.250.100/24'
 ip address show dev wan-r | grep -Fq '10.60.250.101/24'
 ip address show dev wan-r | grep -Fq '10.60.250.121/24'
 ip address show dev wan-r | grep -Fq '10.60.250.135/24'
 
-sysctl -q -w net.ipv4.ip_forward=1
-sysctl -q -w net.ipv4.conf.all.rp_filter=0
-nft -f "$RULESET"
 nft add element inet event_router peer_addresses '{ 10.80.1.200 }'
 nft add element inet event_router peer_snat '{ 10.80.1.200 : 10.60.250.121 }'
 nft add element inet event_router peer_workbench_access '{ 10.80.1.200 . 10.61.1.2 }'
@@ -246,6 +246,9 @@ start_tcp_server self 10.60.250.10 22
 [[ $(tcp_client "$CORE_PID" 10.60.250.10 22 10.60.201.20) == 10.60.201.20 ]]
 
 start_tcp_server self 10.60.250.10 22
+[[ $(tcp_client "$LAN_PID" 10.60.250.10 22 10.60.200.5) == 10.60.200.5 ]]
+
+start_tcp_server self 10.60.250.10 22
 if tcp_client "$CORE_PID" 10.60.250.10 22 10.60.201.30 >/dev/null 2>&1; then
   echo "a non-control core host reached gateway SSH" >&2
   exit 1
@@ -253,6 +256,18 @@ fi
 
 start_tcp_server "$WAN_PID" 10.60.250.11 22
 [[ $(tcp_client "$CORE_PID" 10.60.250.11 22 10.60.201.20) == 10.60.201.20 ]]
+
+start_tcp_server "$WAN_PID" 10.60.250.11 22
+[[ $(tcp_client "$LAN_PID" 10.60.250.11 22 10.60.200.5) == 10.60.200.5 ]]
+
+start_tcp_server "$CORE_PID" 10.60.201.30 2222
+[[ $(tcp_client "$LAN_PID" 10.60.201.30 2222 10.60.200.5) == 10.60.200.5 ]]
+
+start_tcp_server "$CORE_PID" 10.60.201.30 2222
+if tcp_client "$WORKBENCH_PID" 10.60.201.30 2222 >/dev/null 2>&1; then
+  echo "a workbench reached repository management SSH" >&2
+  exit 1
+fi
 
 start_tcp_server "$PRODUCTION_PID" 10.60.1.3 7004
 [[ $(tcp_client "$CORE_PID" 10.60.1.3 7004 10.60.201.20) == 10.60.201.20 ]]
@@ -303,6 +318,12 @@ fi
 EVENT_ROUTER_INTERFACE=wan-r "$ADDRESS_TOOL" standby
 if ip address show dev wan-r | grep -Fq '10.60.250.100/24'; then
   echo "standby retained ingress addresses" >&2
+  exit 1
+fi
+
+start_tcp_server "$PRODUCTION_PID" 10.60.1.2 7006
+if tcp_client "$WORKBENCH_PID" 10.60.1.2 7006 >/dev/null 2>&1; then
+  echo "standby forwarded a fresh workbench flow" >&2
   exit 1
 fi
 

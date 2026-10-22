@@ -13,4 +13,7 @@ subnet_ids = {
 x86_image_id               = "ocid1.image.oc1.ap-hyderabad-1.replace-me"
 arm_image_id               = "ocid1.image.oc1.ap-hyderabad-1.replace-me"
 gateway_primary_instance_id = "ocid1.instance.oc1.ap-hyderabad-1.replace-me"
-ssh_authorized_keys        = "ssh-ed25519 replace-me organizer"
+organizer_ssh_authorized_keys = <<-KEYS
+ssh-ed25519 replace-with-organizer-break-glass-public-key organizer
+KEYS
+operations_relay_ssh_public_key = "ssh-ed25519 replace-with-raw-event-relay-public-key"

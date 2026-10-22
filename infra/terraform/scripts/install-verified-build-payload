@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+expected_size=${1:-}
+expected_sha256=${2:-}
+destination=${3:-}
+url_file=/run/finals-builder-source.url
+
+[[ $EUID -eq 0 ]] || { echo "verified build installer must run as root" >&2; exit 1; }
+[[ $expected_size =~ ^[1-9][0-9]{0,8}$ ]] || { echo "source size is invalid" >&2; exit 2; }
+[[ $expected_sha256 =~ ^[0-9a-f]{64}$ ]] || { echo "source digest is invalid" >&2; exit 2; }
+[[ $destination == /run/finals-builder-payload ]] || { echo "source destination is not fixed" >&2; exit 2; }
+[[ -f $url_file && $(stat -c '%a' "$url_file") == 600 ]] || { echo "private source URL is missing or exposed" >&2; exit 1; }
+url=$(<"$url_file")
+[[ $url =~ ^https://objectstorage\.ap-hyderabad-1\.oraclecloud\.com/p/[A-Za-z0-9._~%/-]+$ ]] || { echo "private source URL is invalid" >&2; exit 1; }
+
+umask 077
+temporary=$(mktemp /run/.finals-builder-payload.XXXXXX)
+trap 'rm -f -- "$temporary" "$destination" "$url_file"' EXIT
+(
+  ulimit -f "$(( (expected_size + 511) / 512 ))"
+  printf 'url = "%s"\n' "$url" | curl \
+    --config - \
+    --proto '=https' \
+    --tlsv1.2 \
+    --fail \
+    --silent \
+    --show-error \
+    --retry 3 \
+    --retry-all-errors \
+    --max-filesize "$expected_size" \
+    --output "$temporary"
+)
+[[ $(stat -c '%s' "$temporary") == "$expected_size" ]] || { echo "source size mismatch" >&2; exit 1; }
+printf '%s  %s\n' "$expected_sha256" "$temporary" | sha256sum --check --status || { echo "source digest mismatch" >&2; exit 1; }
+chmod 0500 "$temporary"
+mv "$temporary" "$destination"
+"$destination"
+rm -f -- "$destination" "$url_file"
+trap - EXIT

@@ -6,6 +6,8 @@
 *.key
 *.p12
 secrets/
+!infra/secrets/
+!infra/secrets/**
 
 # Terraform runtime data (the dependency lock file is intentionally committed)
 **/.terraform/

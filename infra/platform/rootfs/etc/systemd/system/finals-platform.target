@@ -1,0 +1,7 @@
+[Unit]
+Description=H7CTF Finals fixed host role
+After=network-online.target finals-host-firewall.service
+Wants=network-online.target finals-host-firewall.service
+
+[Install]
+WantedBy=multi-user.target

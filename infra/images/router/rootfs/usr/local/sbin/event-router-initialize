@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+[[ $EUID -eq 0 ]] || { echo "must run as root" >&2; exit 1; }
+role=${1:-}
+case "$role" in active | standby) ;; *) echo "usage: event-router-initialize {active|standby}" >&2; exit 2 ;; esac
+
+install -D -m 0644 /dev/null /etc/event-router/role
+printf '%s\n' "$role" > /etc/event-router/role
+
+sudoers=$(mktemp /etc/sudoers.d/.finals-secret-relay.XXXXXX)
+trap 'rm -f -- "$sudoers"' EXIT
+cat > "$sudoers" <<'EOF'
+ubuntu ALL=(root) NOPASSWD: /usr/local/sbin/finals-install-secret-bundle gateway-wireguard
+ubuntu ALL=(root) NOPASSWD: /usr/local/sbin/finals-install-secret-bundle gateway-reconciler
+EOF
+chmod 0440 "$sudoers"
+visudo -cf "$sudoers" >/dev/null
+mv "$sudoers" /etc/sudoers.d/finals-secret-relay
+trap - EXIT
+
+/usr/local/sbin/event-router-addresses standby
+if [[ $role == active ]]; then
+  systemctl enable finals-volume@captures.service
+  systemctl start finals-volume@captures.service || true
+else
+  systemctl stop event-router-flow-log.service >/dev/null 2>&1 || true
+fi
+systemctl enable --now event-router.target
+systemctl restart event-router-restore.service
+if [[ $role == active ]]; then
+  systemctl restart event-router-flow-log.service
+  if ! systemctl restart event-router-activate.service; then
+    /usr/local/sbin/event-router-addresses standby
+    logger --tag event-router-activate -- 'gateway is uncommissioned; floating addresses remain absent'
+  fi
+else
+  systemctl stop event-router-activate.service >/dev/null 2>&1 || true
+fi

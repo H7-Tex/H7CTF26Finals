@@ -3,9 +3,21 @@ set -euo pipefail
 
 [[ $EUID -eq 0 ]] || { echo "must run as root" >&2; exit 1; }
 role=${1:-}
+anvil_revision=${2:-}
 source_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 "$source_dir/install.sh" "$role"
+if [[ $role == platform-x86 || $role == platform-arm ]]; then
+  install -D -m 0755 "$source_dir/secret-bootstrap/install-secret-bundle.py" /usr/local/sbin/finals-install-secret-bundle
+  install -D -m 0755 "$source_dir/secret-bootstrap/finals-secret-relay-receive" /usr/local/sbin/finals-secret-relay-receive
+  install -D -m 0755 "$source_dir/volumes/initialize-volume.py" /usr/local/sbin/finals-initialize-volume
+  install -D -m 0644 "$source_dir/volumes/finals-volume@.service" /etc/systemd/system/finals-volume@.service
+  "$source_dir/reconciler/install.sh"
+  "$source_dir/platform/install.sh" "$role" "$anvil_revision"
+  "$source_dir/secret-bootstrap/tests/run.sh"
+  "$source_dir/volumes/tests/run.sh"
+  "$source_dir/platform/tests/run.sh"
+fi
 "$source_dir/tests/run.sh" "$role"
 install -D -m 0644 "$source_dir/runtime-image-seal.service" /etc/systemd/system/runtime-image-seal.service
 touch /run/runtime-image-ready

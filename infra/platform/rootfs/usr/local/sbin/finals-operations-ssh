@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+[[ $EUID -eq 0 ]] || { echo "operations SSH wrapper must run as root" >&2; exit 1; }
+[[ $(cat /etc/finals-platform/role 2>/dev/null) == '{"role":"operations"}' ]] || { echo "operations SSH wrapper is restricted to the operations host" >&2; exit 1; }
+target=${1:-}
+bundle=${2:-}
+[[ $# -eq 2 ]] || { echo "usage: finals-operations-ssh TARGET BUNDLE_TYPE < bundle.age" >&2; exit 2; }
+case "$target:$bundle" in
+  gateway-primary:gateway-wireguard | gateway-primary:gateway-reconciler)
+    address=10.60.250.10; port=22 ;;
+  gateway-standby:gateway-wireguard | gateway-standby:gateway-reconciler)
+    address=10.60.250.11; port=22 ;;
+  platform:anvil)
+    address=10.60.200.10; port=22 ;;
+  control:control-reconciler)
+    address=10.60.201.20; port=22 ;;
+  repository:repository)
+    address=10.60.201.30; port=2222 ;;
+  *) echo "bundle type is not authorized for the fixed target" >&2; exit 2 ;;
+esac
+
+exec /usr/bin/ssh \
+  -F /dev/null \
+  -i /etc/finals-platform/operations/id_ed25519 \
+  -o BatchMode=yes \
+  -o ConnectTimeout=10 \
+  -o IdentitiesOnly=yes \
+  -o PasswordAuthentication=no \
+  -o StrictHostKeyChecking=yes \
+  -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts \
+  -p "$port" \
+  -- "ubuntu@$address" "install $bundle"

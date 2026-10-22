@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+compose=(
+  /usr/bin/docker compose
+  --project-name finals-mirror
+  --env-file /etc/finals-platform/images.env
+  --env-file /etc/finals-platform/mirror/mode.env
+  --file /etc/finals-platform/mirror/compose.yaml
+)
+registry_id=$("${compose[@]}" ps --quiet registry)
+[[ -n $registry_id && $registry_id != *$'\n'* ]] || { echo "mirror runtime: registry container is not singular" >&2; exit 1; }
+docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$registry_id" |
+  grep -Fxq 'FINALS_REGISTRY_MODE=offline' || {
+    echo "mirror runtime: registry container is not configured read-only" >&2
+    exit 1
+  }
+[[ $(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 5 http://10.60.202.10:5000/v2/) == 200 ]] || {
+  echo "mirror runtime: registry read probe failed" >&2
+  exit 1
+}
+write_status=$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 5 --request POST http://10.60.202.10:5000/v2/finals-read-only-probe/blobs/uploads/)
+[[ $write_status == 405 || $write_status == 503 ]] || {
+  echo "mirror runtime: registry accepted or unexpectedly handled a write probe ($write_status)" >&2
+  exit 1
+}
+echo "mirror runtime: registry is read-only"

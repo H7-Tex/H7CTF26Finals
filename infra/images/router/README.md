@@ -12,7 +12,7 @@ This image artifact supplies the minimum host policy required before the OCI ing
 | `10.80.255.1/16` | Router-side WireGuard address |
 | `10.80.T.200-239/32` | Non-reused individual peer addresses for team `T` |
 
-There are exactly two reserved public IPs. The 15 team identities are secondary private IPs only. On failover, all 17 secondary private IP objects move to the standby VNIC, the operating-system address role is changed, and the Terraform `active_router` input is reconciled after the probes pass.
+There are exactly two reserved public IPs. The 15 team identities are secondary private IPs only. The active host initially removes all 17 floating operating-system addresses, restores WireGuard and the last peer inventory, verifies the `captures-data` volume, starts the durable collector and waits for a fresh ready heartbeat before adding them. Any failed prerequisite leaves the gateway addressless. On failover, the capture disk is moved first under the reviewed break-glass procedure, then all 17 secondary private IP objects move to the standby VNIC and the Terraform `active_router` input is reconciled after the probes pass.
 
 ## Runtime policy
 
@@ -26,9 +26,9 @@ There are exactly two reserved public IPs. The 15 team identities are secondary 
 - denies unmapped WireGuard sources and VPN internet forwarding;
 - SNATs every accepted individual peer and team workbench to the stable team identity;
 - records rate-limited pre-NAT allow/drop metadata in the kernel journal;
-- records conntrack `NEW` and `DESTROY` events with timestamps, original/reply tuples, counters and connection identifiers.
+- records conntrack `NEW` and `DESTROY` events with timestamps, original/reply tuples, counters and connection identifiers on the protected capture volume.
 
-The router journal contains network metadata, not packet payloads. The operations log shipper must add router identity and forward these records to the restricted sink. That sink joins the pre-NAT `/32`, active inventory generation, team egress address, destination inventory and game tick. It retains identifiable records for 30 days and marks collection gaps rather than reconstructing them.
+The capture contains network metadata, not packet payloads. Each record includes the active inventory generation and any peer `/32` correlation with its opaque peer ID and team. Inventory changes are recorded alongside flows. The collector caches the inventory until it changes and fsyncs batches within two seconds or 1 MiB. One-GiB files rotate through a 300-file ring; rollover and retention drops are explicit records. Collector starts always record the durable heartbeat gap. Preserve the completed event volume and a verified backup for 30 days; do not reuse the ring during that period.
 
 ## Peer inventory boundary
 
@@ -72,5 +72,6 @@ The harness runs inventory validation and an unprivileged Linux network-namespac
 4. A mapped peer and its team workbench appear as `10.60.250.121` at the target.
 5. An unmapped peer source and VPN internet forwarding fail.
 6. Standby role removes every secondary address.
+7. Active activation refuses every floating address until capture mount, collector process and fresh heartbeat checks succeed.
 
-Before creating either router, the image build still needs the reviewed OCI base-image OCID, image compartment, build subnet, builder authentication method and immutable output image OCID. Runtime commissioning still needs the server key, first signed peer snapshot, internal journal destination, clock-skew alert, game route-table change and rehearsed failover procedure.
+Before creating either router, the image build still needs the reviewed OCI base-image OCID, image compartment, build subnet, builder authentication method and immutable output image OCID. Runtime commissioning still needs the server key, first signed peer snapshot, initialized capture volume, clock-skew alert, game route-table change and rehearsed failover procedure.

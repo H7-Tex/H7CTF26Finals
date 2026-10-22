@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+umask 022
+install -d -o root -g root -m 0755 /opt/runtime-image
+%{ for file in files ~}
+install -D -o root -g root -m '${file.permissions}' /dev/null '/opt/runtime-image/${file.path}'
+base64 --decode > '/opt/runtime-image/${file.path}' <<'__FINALS_B64__'
+${file.content_base64}
+__FINALS_B64__
+%{ endfor ~}
+/opt/runtime-image/build-image '${role}' '${anvil_revision}'

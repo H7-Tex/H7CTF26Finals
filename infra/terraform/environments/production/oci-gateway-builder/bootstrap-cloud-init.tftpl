@@ -1,0 +1,27 @@
+#cloud-config
+package_update: true
+packages:
+  - age
+  - ca-certificates
+  - conntrack
+  - curl
+  - iproute2
+  - nftables
+  - openssh-client
+  - openssh-server
+  - python3
+  - sudo
+  - systemd-timesyncd
+  - wireguard-tools
+write_files:
+  - path: /usr/local/sbin/install-verified-build-payload
+    owner: root:root
+    permissions: '0755'
+    encoding: b64
+    content: ${installer_base64}
+  - path: /run/finals-builder-source.url
+    owner: root:root
+    permissions: '0600'
+    content: ${source_url_json}
+runcmd:
+  - ["/usr/local/sbin/install-verified-build-payload", "${source_size}", "${source_sha256}", "/run/finals-builder-payload"]

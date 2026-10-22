@@ -5,8 +5,29 @@ set -euo pipefail
 source_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 install -D -m 0644 "$source_dir/image-manifest.json" /etc/event-router/image-manifest.json
+package_manifest=/etc/event-router/image-packages.tsv
+dpkg-query -W -f='${binary:Package}\t${Version}\t${Architecture}\t${db:Status-Abbrev}\n' | LC_ALL=C sort > "$package_manifest"
+package_sha=$(sha256sum "$package_manifest" | awk '{print $1}')
+printf '%s\n' "$package_sha" > /etc/event-router/image-packages.sha256
+python3 - "$package_sha" <<'PY'
+import json
+import os
+import sys
+from pathlib import Path
+
+path = Path("/etc/event-router/image-manifest.json")
+document = json.loads(path.read_text(encoding="utf-8"))
+document["package_manifest"] = "/etc/event-router/image-packages.tsv"
+document["package_manifest_sha256"] = sys.argv[1]
+temporary = path.with_name(".image-manifest.json.tmp")
+temporary.write_text(json.dumps(document, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
+os.chmod(temporary, 0o644)
+os.replace(temporary, path)
+PY
+logger --tag gateway-image-seal -- "package_manifest_sha256=$package_sha"
 apt-get clean
 find /var/lib/apt/lists -mindepth 1 -delete
+rm -f /etc/ssh/ssh_host_*
 unlink /etc/systemd/system/gateway-image-seal.service
 find "$source_dir" -mindepth 1 -delete
 cloud-init clean --logs --machine-id

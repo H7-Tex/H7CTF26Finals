@@ -1,4 +1,7 @@
 #cloud-config
+ssh_deletekeys: true
+ssh_genkeytypes:
+  - ed25519
 write_files:
   - path: /etc/event-router/role
     owner: root:root
@@ -6,5 +9,6 @@ write_files:
     content: |
       __ROUTER_STATE__
 runcmd:
-  - ["/usr/local/sbin/event-router-addresses", "__ROUTER_STATE__"]
-  - ["systemctl", "enable", "--now", "event-router.target"]
+  - ["systemctl", "restart", "ssh.service"]
+  - ["/usr/local/sbin/finals-host-recipient"]
+  - ["/usr/local/sbin/event-router-initialize", "__ROUTER_STATE__"]

@@ -25,6 +25,12 @@ variable "enable_mirror_warmup_egress" {
   default     = false
 }
 
+variable "enable_service_warmup_egress" {
+  description = "Temporary shared-service NAT egress for operations commissioning. Keep false for rehearsal and event."
+  type        = bool
+  default     = false
+}
+
 variable "routing_private_ip_id" {
   description = "Floating gateway private-IP OCID from the applied ingress stack."
   type        = string

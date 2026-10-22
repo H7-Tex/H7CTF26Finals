@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+activate_if_ready() {
+  local role_file=$1 private_key=$2 active_inventory=$3 ready_tool=$4 address_tool=$5 ip_tool=$6 validator=$7
+  local runtime_root=${8:-/run} role workdir
+  role=$(cat "$role_file" 2>/dev/null || true)
+  [[ $role == active ]] || { echo "router activation: host is not active" >&2; return 1; }
+  "$address_tool" standby || return 1
+  [[ -s $private_key && -s $active_inventory ]] || { echo "router activation: WireGuard is not commissioned" >&2; return 1; }
+  (( (8#$(stat -c '%a' "$private_key") & 077) == 0 )) || { echo "router activation: WireGuard key is exposed" >&2; return 1; }
+  (( (8#$(stat -c '%a' "$active_inventory") & 077) == 0 )) || { echo "router activation: peer inventory is exposed" >&2; return 1; }
+  "$ip_tool" link show wg0 >/dev/null || return 1
+  workdir=$(mktemp -d "$runtime_root/event-router-activation.XXXXXX")
+  if ! "$validator" \
+      "$active_inventory" \
+      --active-inventory "$active_inventory" \
+      --wireguard-output "$workdir/peers.conf" \
+      --nft-output "$workdir/peers.nft"; then
+    rm -rf -- "$workdir"
+    return 1
+  fi
+  rm -rf -- "$workdir"
+  "$ready_tool" ready || return 1
+  "$address_tool" active || return 1
+}
+
+main() {
+  [[ $EUID -eq 0 ]] || { echo "must run as root" >&2; return 1; }
+  [[ $# -eq 0 ]] || { echo "event-router-activate takes no arguments" >&2; return 2; }
+  for _ in $(seq 1 30); do
+    if systemctl is-active --quiet event-router-flow-log.service && \
+      activate_if_ready \
+        /etc/event-router/role \
+        /etc/wireguard/private.key \
+        /var/lib/event-router/active-peers.json \
+        /usr/local/sbin/event-router-capture \
+        /usr/local/sbin/event-router-addresses \
+        /usr/sbin/ip \
+        /usr/local/libexec/event-router/render_inventory.py; then
+      return 0
+    fi
+    sleep 0.5
+  done
+  echo "router activation: capture collector did not become ready" >&2
+  return 1
+}
+
+if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
+  main "$@"
+fi

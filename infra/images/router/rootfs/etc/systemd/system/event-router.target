@@ -1,6 +1,6 @@
 [Unit]
 Description=Competition ingress router
-Wants=network-online.target nftables.service systemd-timesyncd.service event-router-flow-log.service event-router-inventory.path
+Wants=network-online.target nftables.service systemd-timesyncd.service event-router-restore.service event-router-flow-log.service event-router-activate.service event-router-inventory.path
 After=network-online.target nftables.service
 
 [Install]

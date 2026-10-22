@@ -7,7 +7,6 @@ variable "region" {
     error_message = "The finals live data plane is locked to ap-hyderabad-1."
   }
 }
-
 variable "compartment_id" {
   type = string
 }
@@ -50,5 +49,29 @@ variable "source_revision" {
   validation {
     condition     = can(regex("^[0-9a-f]{40}$", var.source_revision))
     error_message = "source_revision must be a full lowercase Git commit SHA."
+  }
+}
+
+variable "anvil_revision" {
+  description = "Exact reviewed Anvil commit embedded and prebuilt in the platform x86 image."
+  type        = string
+
+  validation {
+    condition     = var.anvil_revision == "3aabb7f10714bf378ef9a1922242641a8b532252"
+    error_message = "anvil_revision must be the reviewed Anvil v0.353.0 commit 3aabb7f10714bf378ef9a1922242641a8b532252."
+  }
+}
+
+variable "source_bundle_expires_at" {
+  description = "Reviewed RFC3339 expiry for transient object-read PARs; must be within 24 hours of planning."
+  type        = string
+
+  validation {
+    condition = (
+      can(formatdate("YYYY-MM-DD'T'hh:mm:ssZ", var.source_bundle_expires_at)) &&
+      timecmp(var.source_bundle_expires_at, timestamp()) > 0 &&
+      timecmp(var.source_bundle_expires_at, timeadd(timestamp(), "24h")) <= 0
+    )
+    error_message = "source_bundle_expires_at must be a future RFC3339 timestamp no more than 24 hours away."
   }
 }

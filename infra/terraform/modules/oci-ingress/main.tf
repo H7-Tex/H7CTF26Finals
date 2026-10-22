@@ -34,6 +34,9 @@ locals {
     event      = "finals-2026"
     managed_by = "terraform"
   }
+
+
+  operations_relay_authorized_key = "restrict,command=\"/usr/local/sbin/finals-secret-relay-receive\" ${var.operations_relay_ssh_public_key}"
 }
 
 resource "oci_core_instance" "router" {
@@ -67,7 +70,10 @@ resource "oci_core_instance" "router" {
   }
 
   metadata = {
-    ssh_authorized_keys = var.ssh_authorized_keys
+    ssh_authorized_keys = join("\n", [
+      trimspace(var.organizer_ssh_authorized_keys),
+      local.operations_relay_authorized_key,
+    ])
     user_data = base64encode(replace(
       var.cloud_init,
       "__ROUTER_STATE__",
@@ -97,6 +103,10 @@ resource "oci_core_private_ip" "ingress" {
   vnic_id      = data.oci_core_vnic_attachments.router[var.active_router].vnic_attachments[0].vnic_id
   display_name = each.value.display_name
   ip_address   = each.value.private_ip
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "oci_core_private_ip" "team_egress" {
@@ -105,4 +115,8 @@ resource "oci_core_private_ip" "team_egress" {
   vnic_id      = data.oci_core_vnic_attachments.router[var.active_router].vnic_attachments[0].vnic_id
   display_name = each.value.display_name
   ip_address   = each.value.private_ip
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }

@@ -1,0 +1,15 @@
+[Unit]
+Description=Restore competition router addresses and active peer state
+Wants=network-online.target
+After=network-online.target nftables.service
+Requires=nftables.service
+Before=event-router-flow-log.service event-router-activate.service event-router-inventory.path
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/event-router-restore
+UMask=0077
+RemainAfterExit=yes
+
+[Install]
+WantedBy=event-router.target
