@@ -20,7 +20,8 @@ variable "builder_instance_id" {
   validation {
     condition = (
       startswith(var.builder_instance_id, "ocid1.instance.oc1.ap-hyderabad-1.") &&
-      var.builder_instance_id != "ocid1.instance.oc1.ap-hyderabad-1.anuhsljrgek2goaceebogxa47rg74d6izhqorb2dgnjjlfsv7gupjwbevyva"
+      var.builder_instance_id != "ocid1.instance.oc1.ap-hyderabad-1.anuhsljrgek2goaceebogxa47rg74d6izhqorb2dgnjjlfsv7gupjwbevyva" &&
+      var.builder_instance_id != "ocid1.instance.oc1.ap-hyderabad-1.anuhsljrgek2goacvwoxwqstnmj6bwirfuxxan45gpqbbuzt7fw5if2zjfbq"
     )
     error_message = "builder_instance_id must be an approved instance OCID in ap-hyderabad-1."
   }

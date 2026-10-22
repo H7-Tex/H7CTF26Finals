@@ -234,18 +234,23 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn("workbench_numbers                  = var.workbench_numbers", root)
 
     def test_obsolete_gateway_image_and_plan_are_prohibited(self):
-        failed_builder = "ocid1.instance.oc1.ap-hyderabad-1.anuhsljrgek2goaceebogxa47rg74d6izhqorb2dgnjjlfsv7gupjwbevyva"
+        failed_builders = (
+            "ocid1.instance.oc1.ap-hyderabad-1.anuhsljrgek2goaceebogxa47rg74d6izhqorb2dgnjjlfsv7gupjwbevyva",
+            "ocid1.instance.oc1.ap-hyderabad-1.anuhsljrgek2goacvwoxwqstnmj6bwirfuxxan45gpqbbuzt7fw5if2zjfbq",
+        )
         docs = "\n".join(
             (ROOT / f"terraform/environments/production/{root}/README.md").read_text(encoding="utf-8")
             for root in ("oci-gateway-builder", "oci-gateway-image")
         )
         self.assertIn("gateway-5095652d3d90", docs)
         self.assertIn("11bdcffc06c9d4d0b6f08a58b0cf34e6f1aa0d1f", docs)
-        self.assertIn(failed_builder, docs)
+        for failed_builder in failed_builders:
+            self.assertIn(failed_builder, docs)
         self.assertGreaterEqual(docs.count("prohibited"), 2)
         self.assertGreaterEqual(docs.count("router-image"), 2)
         capture_variables = (ROOT / "terraform/environments/production/oci-gateway-image/variables.tf").read_text(encoding="utf-8")
-        self.assertIn(f'var.builder_instance_id != "{failed_builder}"', capture_variables)
+        for failed_builder in failed_builders:
+            self.assertIn(f'var.builder_instance_id != "{failed_builder}"', capture_variables)
 
 
 if __name__ == "__main__":
