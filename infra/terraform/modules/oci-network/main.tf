@@ -78,6 +78,10 @@ resource "oci_core_vcn" "finals" {
   display_name   = "arena"
   dns_label      = "arena"
   freeform_tags  = local.tags
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "oci_core_internet_gateway" "edge" {
