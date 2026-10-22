@@ -66,6 +66,9 @@ case "$role" in
     grep -Eq '^10\.60\.200\.10[[:space:]]+finals\.h7tex\.com([[:space:]]|$)' /etc/hosts || printf '10.60.200.10 finals.h7tex.com\n' >> /etc/hosts
     systemctl disable peer-reconciler.timer checker-runtime.service finals-checkers-ready.service >/dev/null 2>&1 || true
     ;;
+  hill-01 | hill-02 | hill-03)
+    systemctl disable finals-hill-credentials.service >/dev/null 2>&1 || true
+    ;;
 esac
 systemctl daemon-reload
 systemctl enable finals-platform.target

@@ -28,6 +28,7 @@ locals {
     archive          = "${path.module}/../../../../archive"
     checkers         = "${path.module}/../../../../checkers"
     deployment       = "${path.module}/../../../../deployment"
+    hills            = "${path.module}/../../../../hills"
     platform         = "${path.module}/../../../../platform"
     reconciler       = "${path.module}/../../../../reconciler"
     secret-bootstrap = "${path.module}/../../../../secrets"
@@ -45,6 +46,9 @@ locals {
     "archive/tests/run.sh",
     "deployment/install.sh",
     "deployment/tests/run.sh",
+    "hills/credential_sync.py",
+    "hills/install.sh",
+    "hills/tests/run.sh",
     "checkers/install.sh",
     "checkers/rootfs/usr/local/libexec/checker-runtime/runtime.py",
     "checkers/rootfs/usr/local/sbin/checker-runtime-commission",

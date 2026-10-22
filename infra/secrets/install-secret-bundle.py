@@ -63,6 +63,9 @@ BUNDLES = {
     "control-checkers": {
         "admin_token": ("etc/checker-runtime/anvil-admin.token", 0o600, "root"),
     },
+    "hill-control": {
+        "internal_token": ("etc/finals-hill/anvil.token", 0o600, "root"),
+    },
     "repository": {
         "environment": ("etc/finals-platform/repository/repository.env", 0o600, "root"),
         "certificate": ("etc/finals-platform/repository/tls/fullchain.pem", 0o644, "root"),
@@ -260,6 +263,10 @@ def validate_bundle(bundle_type, files):
         token = files["admin_token"].strip()
         if not 32 <= len(token) <= 4096 or not JWT.fullmatch(token):
             raise BundleError("checker commissioning token is malformed")
+    elif bundle_type == "hill-control":
+        token = files["internal_token"].strip()
+        if not 32 <= len(token) <= 4096 or not re.fullmatch(rb"[A-Za-z0-9_./:@+,=-]+", token):
+            raise BundleError("hill internal token is malformed")
     elif bundle_type == "repository":
         values = parse_environment(files["environment"], REPOSITORY_ENV)
         if any(len(value) < 32 for value in values.values()) or len(set(values.values())) != 2:
@@ -279,6 +286,19 @@ def validate_anvil_image_binding(files, manifest_path=Path("/etc/runtime-image.j
     values = parse_environment(files["environment"], ANVIL_ENV)
     if not isinstance(expected, str) or values["ANVIL_IMAGE_REVISION"] != expected:
         raise BundleError("Anvil environment revision does not match the immutable image")
+
+
+def validate_install_role(bundle_type, role_path=Path("/etc/finals-platform/role")):
+    if bundle_type != "hill-control":
+        return
+    try:
+        document = json.loads(role_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise BundleError("fixed hill role is missing or invalid") from error
+    if not isinstance(document, dict) or set(document) != {"role"} or document["role"] not in {
+        "hill-01", "hill-02", "hill-03"
+    }:
+        raise BundleError("hill control bundle is not valid for this host role")
 
 
 def owner_ids(account):
@@ -345,6 +365,7 @@ def main():
         files = decode_bundle(decrypt(ciphertext), sys.argv[1])
         if sys.argv[1] == "anvil":
             validate_anvil_image_binding(files)
+        validate_install_role(sys.argv[1])
         install_bundle(sys.argv[1], files)
     except BundleError as error:
         print(f"secret bundle rejected: {error}", file=sys.stderr)

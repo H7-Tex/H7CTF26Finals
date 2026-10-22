@@ -59,3 +59,5 @@ grep -Fq '"install $bundle"' "$platform_dir/rootfs/usr/local/sbin/finals-operati
 ! grep -Eq 'mirror\)|hill-0[123]\)' "$platform_dir/rootfs/usr/local/sbin/finals-operations-ssh"
 grep -Fq 'install_relay_sudoers control-reconciler control-checkers' "$platform_dir/rootfs/usr/local/sbin/finals-platform-activate"
 grep -Fq 'systemctl disable peer-reconciler.timer checker-runtime.service finals-checkers-ready.service' "$platform_dir/rootfs/usr/local/sbin/finals-platform-activate"
+grep -Fq 'systemctl disable finals-hill-credentials.service' "$platform_dir/rootfs/usr/local/sbin/finals-platform-activate"
+grep -Fq '"$source_dir/../hills/install.sh"' "$platform_dir/install.sh"

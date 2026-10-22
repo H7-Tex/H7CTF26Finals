@@ -91,6 +91,30 @@ class SecretBundleTests(unittest.TestCase):
         with self.assertRaisesRegex(MODULE.BundleError, "commissioning token"):
             MODULE.decode_bundle(document("control-checkers", {"admin_token": b"not-a-jwt"}), "control-checkers")
 
+    def test_hill_control_token_has_one_fixed_root_only_path_and_role(self):
+        token = b"h" * 48 + b"\n"
+        files = MODULE.decode_bundle(document("hill-control", {"internal_token": token}), "hill-control")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            role = root / "role"
+            role.write_text('{"role":"hill-02"}\n', encoding="utf-8")
+            MODULE.validate_install_role("hill-control", role)
+            MODULE.install_bundle(
+                "hill-control",
+                files,
+                root,
+                ownership=lambda _: (os.getuid(), os.getgid()),
+            )
+            target = root / "etc/finals-hill/anvil.token"
+            self.assertEqual(target.read_bytes(), token)
+            self.assertEqual(target.stat().st_mode & 0o777, 0o600)
+            self.assertEqual([path for path in root.rglob("*") if path.is_file() and path != role], [target])
+            role.write_text('{"role":"control"}\n', encoding="utf-8")
+            with self.assertRaisesRegex(MODULE.BundleError, "not valid"):
+                MODULE.validate_install_role("hill-control", role)
+        with self.assertRaisesRegex(MODULE.BundleError, "internal token"):
+            MODULE.decode_bundle(document("hill-control", {"internal_token": b"invalid token"}), "hill-control")
+
     def test_operations_relay_has_only_fixed_root_paths(self):
         original_private = MODULE.validate_ssh_private_key
         original_hosts = MODULE.validate_known_hosts

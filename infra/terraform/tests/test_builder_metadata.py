@@ -110,9 +110,12 @@ class BuilderMetadataTests(unittest.TestCase):
         source = (ROOT / "terraform/environments/production/oci-runtime-builders/main.tf").read_text(encoding="utf-8")
         package_script = (ROOT / "terraform/scripts/package-oci-stack.sh").read_text(encoding="utf-8")
         self.assertIn('deployment       = "${path.module}/../../../../deployment"', source)
+        self.assertIn('hills            = "${path.module}/../../../../hills"', source)
         self.assertIn('"deployment/install.sh"', source)
         self.assertIn('"deployment/tests/run.sh"', source)
-        self.assertIn("infra/deployment infra/images/runtime", package_script)
+        self.assertIn('"hills/install.sh"', source)
+        self.assertIn('"hills/tests/run.sh"', source)
+        self.assertIn("infra/deployment infra/hills infra/images/runtime", package_script)
 
     def test_builder_packages_include_the_archive_client(self):
         package_script = (ROOT / "terraform/scripts/package-oci-stack.sh").read_text(encoding="utf-8")

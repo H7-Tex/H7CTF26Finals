@@ -1,0 +1,12 @@
+services:
+  arena:
+    image: example.invalid/hill@sha256:1111111111111111111111111111111111111111111111111111111111111111
+    secrets:
+      - hill_reset
+      - hill_teams
+
+secrets:
+  hill_reset:
+    external: true
+  hill_teams:
+    external: true

@@ -114,6 +114,7 @@ if [[ $role == platform-x86 || $role == platform-arm ]]; then
   run_phase platform-tests 10m "$source_dir/platform/tests/run.sh"
   run_phase archive-tests 10m "$source_dir/archive/tests/run.sh"
   if [[ $role == platform-x86 ]]; then
+    run_phase hill-tests 10m "$source_dir/hills/tests/run.sh"
     run_phase checker-tests 10m "$source_dir/checkers/tests/run.sh"
   fi
 fi
