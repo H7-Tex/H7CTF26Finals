@@ -233,6 +233,9 @@ class BuilderMetadataTests(unittest.TestCase):
         policy_start = storage.index('resource "oci_core_volume_backup_policy"')
         self.assertIn("prevent_destroy = true", storage[volume_start:attachment_start])
         self.assertIn("prevent_destroy = true", storage[attachment_start:policy_start])
+        self.assertIn("offset_seconds    = 0", storage[policy_start:])
+        self.assertIn('period            = "ONE_HOUR"', storage[policy_start:])
+        self.assertIn("retention_seconds = 604800", storage[policy_start:])
         for relative in (
             "terraform/modules/oci-platform/main.tf",
             "terraform/modules/oci-ingress/main.tf",

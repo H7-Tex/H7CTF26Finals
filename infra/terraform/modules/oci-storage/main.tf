@@ -58,7 +58,7 @@ resource "oci_core_volume_backup_policy" "database" {
 
   schedules {
     backup_type       = "INCREMENTAL"
-    offset_seconds    = 900
+    offset_seconds    = 0
     offset_type       = "NUMERIC_SECONDS"
     period            = "ONE_HOUR"
     retention_seconds = 604800
