@@ -14,14 +14,14 @@ variable "team_count" {
   }
 }
 
-variable "vcn_cidr" {
-  description = "Finals VCN CIDR."
-  type        = string
-  default     = "10.60.0.0/15"
+variable "vcn_cidrs" {
+  description = "Finals VCN IPv4 blocks."
+  type        = list(string)
+  default     = ["10.60.0.0/16", "10.61.0.0/16"]
 
   validation {
-    condition     = var.vcn_cidr == "10.60.0.0/15"
-    error_message = "The finals routing and checker contract requires 10.60.0.0/15."
+    condition     = var.vcn_cidrs == tolist(["10.60.0.0/16", "10.61.0.0/16"])
+    error_message = "The finals routing and checker contract requires the 10.60.0.0/16 and 10.61.0.0/16 VCN blocks."
   }
 }
 

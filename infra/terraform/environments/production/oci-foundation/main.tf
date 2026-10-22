@@ -19,7 +19,7 @@ module "network" {
 
   compartment_id = oci_identity_compartment.finals.id
   team_count     = 15
-  vcn_cidr       = "10.60.0.0/15"
+  vcn_cidrs      = ["10.60.0.0/16", "10.61.0.0/16"]
 
   enable_mirror_warmup_egress = var.enable_mirror_warmup_egress
 }

@@ -5,6 +5,7 @@ This tree is the reproducible infrastructure source for H7CTF'26 Finals. It is s
 ## Locked topology
 
 - OCI Hyderabad is the only live game data plane.
+- The VCN uses OCI-native `10.60.0.0/16` and `10.61.0.0/16` blocks; clients may advertise the aggregate `10.60.0.0/15` route.
 - GCP project `ctf26-512405` is backup/archive only and is never on the scoring path.
 - Cloudflare publishes `finals.h7tex.com` and `vpn.h7tex.com` as DNS-only records after OCI reserves two stable public IPs. Caddy manages public TLS for the web ingress; WireGuard uses UDP 443 directly.
 - 15 team monorepositories feed 15 team Deployment Orchestrators. Dormant service directories are added only at release.

@@ -67,7 +67,7 @@ locals {
 
 resource "oci_core_vcn" "finals" {
   compartment_id = var.compartment_id
-  cidr_blocks    = [var.vcn_cidr]
+  cidr_blocks    = var.vcn_cidrs
   display_name   = "h7f-vcn"
   dns_label      = "h7f"
   freeform_tags  = local.tags
@@ -175,10 +175,12 @@ resource "oci_core_network_security_group" "infra" {
 }
 
 resource "oci_core_network_security_group_security_rule" "router_game_ingress" {
+  for_each = toset(var.vcn_cidrs)
+
   network_security_group_id = oci_core_network_security_group.router.id
   direction                 = "INGRESS"
   protocol                  = "all"
-  source                    = var.vcn_cidr
+  source                    = each.value
   source_type               = "CIDR_BLOCK"
   stateless                 = true
   description               = "Routed finals traffic"
@@ -229,20 +231,24 @@ resource "oci_core_network_security_group_security_rule" "router_egress" {
 }
 
 resource "oci_core_network_security_group_security_rule" "game_ingress" {
+  for_each = toset(var.vcn_cidrs)
+
   network_security_group_id = oci_core_network_security_group.game.id
   direction                 = "INGRESS"
   protocol                  = "all"
-  source                    = var.vcn_cidr
+  source                    = each.value
   source_type               = "CIDR_BLOCK"
   stateless                 = true
   description               = "Finals VCN ingress"
 }
 
 resource "oci_core_network_security_group_security_rule" "game_egress" {
+  for_each = toset(var.vcn_cidrs)
+
   network_security_group_id = oci_core_network_security_group.game.id
   direction                 = "EGRESS"
   protocol                  = "all"
-  destination               = var.vcn_cidr
+  destination               = each.value
   destination_type          = "CIDR_BLOCK"
   stateless                 = true
   description               = "Finals VCN egress only"

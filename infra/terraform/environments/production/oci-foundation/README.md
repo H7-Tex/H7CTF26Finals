@@ -1,6 +1,6 @@
 # OCI foundation stack
 
-This root creates only the dedicated finals compartment, VCN, gateways, base route tables, NSGs, and 37 subnets. It runs in OCI Resource Manager and therefore has no backend block or committed OCI credentials.
+This root creates only the dedicated finals compartment, two-block VCN, gateways, base route tables, NSGs, and 36 subnets. It runs in OCI Resource Manager and therefore has no backend block or committed OCI credentials.
 
 The isolated route table intentionally has no route rules. A later reviewed ingress/routing composition attaches game routes to the two-router design after the reserved web and VPN addresses exist. Do not run the legacy shell scripts in parallel with this stack.
 
