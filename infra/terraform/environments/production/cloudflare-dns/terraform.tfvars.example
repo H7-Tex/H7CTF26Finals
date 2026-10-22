@@ -1,0 +1,4 @@
+cloudflare_zone_id = "replace-with-h7tex-zone-id"
+web_ipv4            = "192.0.2.10"
+vpn_ipv4            = "192.0.2.11"
+ttl                 = 60

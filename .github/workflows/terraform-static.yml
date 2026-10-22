@@ -1,0 +1,35 @@
+name: Terraform static checks
+
+on:
+  pull_request:
+    paths:
+      - "infra/terraform/**"
+      - ".github/workflows/terraform-static.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "infra/terraform/**"
+      - ".github/workflows/terraform-static.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Terraform ${{ matrix.terraform_version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        terraform_version:
+          - 1.5.7
+          - 1.16.6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ matrix.terraform_version }}
+          terraform_wrapper: false
+      - name: Format and validate without cloud credentials
+        run: infra/terraform/scripts/check.sh
