@@ -16,8 +16,8 @@ git -C "$temporary" fetch --quiet --depth 1 origin "$revision"
 git -C "$temporary" checkout --quiet --detach FETCH_HEAD
 [[ $(git -C "$temporary" rev-parse HEAD) == "$revision" ]] || { echo "Anvil revision mismatch" >&2; exit 1; }
 TMPDIR=/run "$temporary/deployments/finals/test.sh"
-docker build --file "$temporary/deployments/docker/Dockerfile.api" --tag "anvil-finals-api:$revision" "$temporary"
-docker build --file "$temporary/deployments/docker/Dockerfile.web" --target production --tag "anvil-finals-web:$revision" "$temporary/web"
+DOCKER_BUILDKIT=1 docker build --file "$temporary/deployments/docker/Dockerfile.api" --tag "anvil-finals-api:$revision" "$temporary"
+DOCKER_BUILDKIT=1 docker build --file "$temporary/deployments/docker/Dockerfile.web" --target production --tag "anvil-finals-web:$revision" "$temporary/web"
 while read -r image; do
   docker pull "$image"
 done < <(awk '$1 == "image:" && $2 ~ /@sha256:[0-9a-f]{64}$/ { print $2 }' \
