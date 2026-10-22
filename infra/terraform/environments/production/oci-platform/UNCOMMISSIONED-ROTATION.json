@@ -1,0 +1,17 @@
+{
+  "platform_arm_image_id": "ocid1.image.oc1.ap-hyderabad-1.aaaaaaaak4rptv4l7mvlo4yjshsmd2p34uonkz4szcjh26hdkktip65ud6qq",
+  "platform_x86_image_id": "ocid1.image.oc1.ap-hyderabad-1.aaaaaaaaoqm5untblbbrryed6ily4z5bgpedvcvrmjwnaqyd2uozwyrj5lta",
+  "preserve": [
+    "block_volumes",
+    "database_backup_policy",
+    "gateways",
+    "protected_images",
+    "reserved_public_ips"
+  ],
+  "replace": [
+    "platform_hosts",
+    "platform_volume_attachments"
+  ],
+  "source_revision": "941812b0a37f6285c135980d27ef341cf4b69650",
+  "state": "in_progress"
+}
