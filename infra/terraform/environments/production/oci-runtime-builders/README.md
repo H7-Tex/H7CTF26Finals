@@ -10,4 +10,4 @@ The first plan is one private bucket, four source objects, four PARs, one NSG, o
 
 Each role must stop naturally within its bounded build window. Serial evidence must show verified download and digest checks, every role-applicable install and test phase, seal scheduling and a final `phase=seal status=success` record binding the exact source revision, role and package-manifest SHA-256. Missing, failed or out-of-order evidence keeps that role red.
 
-The v0.0.43, v0.0.44, v0.0.46, v0.0.47 and v0.0.48 builder generations failed before all four roles sealed and are prohibited from capture. Their instance OCIDs are recorded in the `oci-runtime-images` validation and README.
+The v0.0.43, v0.0.44, v0.0.46, v0.0.47, v0.0.48 and v0.0.49 builder generations failed before all four roles sealed and are prohibited from capture. Their instance OCIDs are recorded in the `oci-runtime-images` validation and README.

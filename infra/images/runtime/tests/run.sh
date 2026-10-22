@@ -12,6 +12,7 @@ for command in auditctl chronyc curl docker git jq nft python3 rsync sshd; do
   command -v "$command" >/dev/null
 done
 command -v age >/dev/null
+docker buildx version >/dev/null
 docker compose version >/dev/null
 sshd -t
 python3 -m json.tool /etc/docker/daemon.json >/dev/null

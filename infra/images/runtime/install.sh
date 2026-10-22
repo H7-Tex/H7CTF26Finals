@@ -19,6 +19,7 @@ apt-get install --yes --no-install-recommends \
   ca-certificates \
   chrony \
   curl \
+  docker-buildx \
   docker-compose-v2 \
   docker.io \
   git \

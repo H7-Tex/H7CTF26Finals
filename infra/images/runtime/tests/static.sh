@@ -12,6 +12,7 @@ bash -n \
   "$runtime_dir/tests/static.sh"
 python3 -m json.tool "$runtime_dir/rootfs/etc/docker/daemon.json" >/dev/null
 grep -Fxq 'PasswordAuthentication no' "$runtime_dir/rootfs/etc/ssh/sshd_config.d/90-runtime.conf"
+grep -Fq 'docker-buildx' "$runtime_dir/install.sh"
 grep -Fq 'docker-compose-v2' "$runtime_dir/install.sh"
 grep -Fq 'cloud-init clean --logs --machine-id' "$runtime_dir/seal-image"
 grep -Fq 'rm -f /etc/ssh/ssh_host_*' "$runtime_dir/seal-image"
