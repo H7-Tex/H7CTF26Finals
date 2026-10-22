@@ -12,6 +12,8 @@ import (
 	"time"
 )
 
+const maximumServiceMemoryBytes = 8 * 1024 * 1024 * 1024
+
 type Manifest struct {
 	SchemaVersion int               `json:"schema_version"`
 	PolicyVersion string            `json:"policy_version"`
@@ -84,7 +86,7 @@ func (m *Manifest) validate(expected int) error {
 				return fmt.Errorf("service %q has invalid allowed path %q", s.Slug, allowed)
 			}
 		}
-		if s.MaximumContext < 1024 || s.MaximumContext > 100*1024*1024 || s.MemoryBytes < 64*1024*1024 || s.CPUMillis < 100 || s.CPUMillis > 4000 || s.PIDs < 16 || s.PIDs > 1024 {
+		if s.MaximumContext < 1024 || s.MaximumContext > 100*1024*1024 || s.MemoryBytes < 64*1024*1024 || s.MemoryBytes > maximumServiceMemoryBytes || s.CPUMillis < 100 || s.CPUMillis > 4000 || s.PIDs < 16 || s.PIDs > 1024 {
 			return fmt.Errorf("service %q has invalid resource bounds", s.Slug)
 		}
 		for name, duration := range map[string]time.Duration{

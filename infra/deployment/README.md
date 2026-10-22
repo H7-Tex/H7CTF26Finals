@@ -2,7 +2,7 @@
 
 The Deployment Orchestrator is the organizer-owned, per-team control service for the Verified Deployment Model. It runs on each production host on TCP 9300. It accepts only the matching private Gitea repository's signed push webhook and Anvil's scoped internal token.
 
-This directory is a production canary, not an enabled production deployment. It deliberately has no fallback runner. The service will not validate, initialize or start until the root-owned runner, exact team identity, two 32-byte secrets, one seeded repository and all configured service manifests are present.
+This directory is a production canary, not an enabled production deployment. It deliberately has no fallback backend. The service will not validate, initialize or start until the exact team identity, executor policy and five root-only backend commands, two 32-byte secrets, one seeded repository and all configured service manifests are present.
 
 ## Security contract
 
@@ -14,7 +14,9 @@ This directory is a production canary, not an enabled production deployment. It 
 - Promotion waits for Anvil's live checker quiet window and cannot promote the same service twice in one tick. A transport-ambiguous cutover retries its exact idempotent request; an explicit failed cutover asks the runner to restore the previous digest. A candidate enters green history only after two consecutive post-promotion `OK` ticks. Two consecutive ticks count toward automatic rollback only when the promoted digest is down and the corresponding prior digest is healthy.
 - State is atomically replaced. Audit events are append-only, fsynced and sequence-linked to the state snapshot. Startup fsync-truncates at most one complete or partial audit tail left ahead of unchanged state; any gap, malformed complete record or larger divergence fails closed.
 
-The systemd unit uses a locked `deploy-orchestrator` account, no capabilities, a read-only host filesystem, private temporary and device namespaces, syscall restrictions and explicit network destinations. Root-owned configuration remains mode 0700 under `/etc/deployment-orchestrator`; systemd credentials expose read-only copies to the service. Its root preflight requires exact ownership and modes for configuration, the fixed runner, repository and initialized state before the unprivileged process can start.
+The systemd unit uses a locked `deploy-orchestrator` account, no capabilities, a read-only host filesystem, private temporary and device namespaces, syscall restrictions and explicit network destinations. Root-owned configuration remains mode 0700 under `/etc/deployment-orchestrator`; systemd credentials expose read-only copies to the service. Its root preflight requires exact ownership and modes for configuration, the fixed runner, offline lock, repository and initialized state before the unprivileged process can start. The repository is mode 0750 and created under umask 0027. The capless executor receives only the `deploy-orchestrator` supplementary group, allowing read-only build-context traversal without access to mode-0600 state or any container-runtime group.
+
+The runner validates JSON and connects only to `/run/deployment-executor/control.sock`. The socket authenticates the peer UID and activates a root service with no IP address family. The executor repeats every authorization check, records idempotency state before effects, and invokes only an exact mode-0700 command from its root-only command directory. Both the socket and orchestrator ship disabled.
 
 ## Internal API
 
@@ -32,14 +34,19 @@ Every `/v1` endpoint except the webhook requires `Authorization: Bearer $ANVIL_G
 ## Commissioning
 
 1. Generate the six-service file from the committed challenge release manifests. Use only the locked slugs `sign-me-in`, `can-we-settle-this`, `update-pending`, `book-me-if-you-can`, `ship-it` and `terms-may-apply`; set `expected_services` to 6. Copy each committed player export's `BUNDLE.json` digest into `bundle_sha256`.
-2. Seed `team-NN/services` from those player exports, retain the common initial monorepo commit, clone it to `/var/lib/deployment-orchestrator/repository`, and install a read-only deploy key plus pinned Gitea host key below the service account's `.ssh` directory. The clone's `origin` must exactly match `remote_url`.
-3. Install the fixed unprivileged runner adapter and its organizer-owned build definitions. It must pass the contract in [RUNNER-CONTRACT.md](RUNNER-CONTRACT.md). The executable must be root-owned and not group/world-writable. Promotion still requires the separately reviewed privileged executor/socket described there; do not add the service account to the Docker group or mount a runtime socket into this unit.
+2. Seed `team-NN/services` from those player exports, retain the common initial monorepo commit, and clone it as `deploy-orchestrator` under umask 0027 to `/var/lib/deployment-orchestrator/repository`. The complete working tree must remain owner-writable, group-readable, never group-writable and inaccessible to other users. Install a read-only deploy key plus pinned Gitea host key below the service account's `.ssh` directory. The clone's `origin` must exactly match `remote_url`.
+3. Install the five reviewed backend commands below `/usr/local/libexec/deployment-executor/commands`, each root-owned mode 0700. Install `/etc/deployment-executor/policy.json` as root-owned mode 0600 with the exact service identities, resource contracts, `deploy-orchestrator` UID and command paths. The backend must implement the digest-only behavior in [RUNNER-CONTRACT.md](RUNNER-CONTRACT.md); do not add the service account to the Docker group or mount a runtime socket into the orchestrator.
+   Before enabling the socket, extend the final policy and backend preflight to bind the six service identities to the fixed `7001` through `7006` XFS project-quota map documented in the runner contract. Reject named volumes, undeclared persistence and every bind mount outside `/srv/finals/service-data/<port>/{live,gate,recovery}`. This binding is intentionally absent until the six signed service manifests exist.
 4. Install `config.json`, `services.json`, `webhook.secret` and `anvil.token` as root-only files below `/etc/deployment-orchestrator`. Add `10.60.200.10 finals.h7tex.com` to the production host's private resolution so tick HTTPS keeps the public certificate name without public hairpinning.
 5. Build without embedding source state in the image, then install:
 
    ```bash
-   CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o deployment-orchestrator ./cmd/deployment-orchestrator
-   sudo ./install.sh ./deployment-orchestrator
+   mkdir -p build
+   CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o build/deployment-orchestrator ./cmd/deployment-orchestrator
+   CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o build/runner ./cmd/deployment-runner
+   CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o build/executor ./cmd/deployment-executor
+   CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o build/deployment-orchestrator-state ./cmd/deployment-state
+   sudo ./install.sh build/deployment-orchestrator build/runner build/executor build/deployment-orchestrator-state
    ```
 
 6. Before the first start, verify the live factory digest for every service and create the durable state exactly once:
@@ -55,8 +62,24 @@ Every `/v1` endpoint except the webhook requires `Authorization: Bearer $ANVIL_G
 7. Enable one canary only after [REHEARSAL.md](REHEARSAL.md) passes. The unit is shipped disabled:
 
    ```bash
-   sudo systemctl enable --now deployment-orchestrator.service
+   sudo systemctl enable --now deployment-executor.socket deployment-orchestrator.service
    sudo journalctl -u deployment-orchestrator.service -n 50 --no-pager
    ```
 
-The generic production image contains the account, static binary, hardened unit and empty directories, but does not enable the unit or install a runner, configuration, credentials or state. Missing challenge manifests, a real Deployment Gate, the unprivileged runner adapter, privileged executor, production secret-bundle delivery, Anvil lifecycle integration and a rehearsed state backup/restore are release blockers, not optional development modes. The current secret relay targets only shared platform roles; it does not commission production hosts.
+## Offline state backup
+
+`deployment-orchestrator-state` backs up and restores `state.json` and `audit.jsonl` as one verified pair. It takes the exclusive locks held for the full orchestrator and executor lifetimes, so no container effect can remain in flight. A restore writes a durable marker before replacing either file; startup fails closed while that marker exists, and retrying the same restore completes it. Restore also requires the exact team UUID.
+
+The image includes a static, disabled `deployment-orchestrator-backup.service`. It runs only when the orchestrator is stopped and a root-owned mode-0700 durable mount already exists at `/var/backups/deployment-orchestrator`. No timer is provided. Restore is intentionally manual:
+
+```bash
+sudo systemctl start deployment-orchestrator-backup.service
+sudo /usr/local/sbin/deployment-orchestrator-state restore \
+  --config /etc/deployment-orchestrator/config.json \
+  --services /etc/deployment-orchestrator/services.json \
+  --backup /var/backups/deployment-orchestrator/backup-YYYYMMDDTHHMMSSZ-ID \
+  --confirm-team TEAM-UUID
+sudo systemctl start deployment-orchestrator.service
+```
+
+The generic production image contains the account, four static binaries, hardened units and empty private directories, but enables nothing and installs no executor policy, backend command, configuration, credential or state. Missing challenge manifests, exact port/quota/persistence binding, real backend commands and Deployment Gate, production credential delivery, Anvil lifecycle integration and a mounted/tested backup target remain release blockers. The current secret relay targets only shared platform roles; it does not commission production hosts.

@@ -43,8 +43,9 @@ func validateHostPaths(root string, rootUID, rootGID, serviceUID, serviceGID uin
 		{path: "/etc/deployment-orchestrator/webhook.secret", mode: 0600, uid: rootUID, gid: rootGID},
 		{path: "/etc/deployment-orchestrator/anvil.token", mode: 0600, uid: rootUID, gid: rootGID},
 		{path: "/usr/local/libexec/deployment-orchestrator/runner", mode: 0755, uid: rootUID, gid: rootGID},
-		{path: "/var/lib/deployment-orchestrator", mode: 0700, uid: serviceUID, gid: serviceGID, directory: true},
-		{path: "/var/lib/deployment-orchestrator/repository", mode: 0700, uid: serviceUID, gid: serviceGID, directory: true},
+		{path: "/var/lib/deployment-orchestrator", mode: 0710, uid: serviceUID, gid: serviceGID, directory: true},
+		{path: "/var/lib/deployment-orchestrator/repository", mode: 0750, uid: serviceUID, gid: serviceGID, directory: true},
+		{path: "/var/lib/deployment-orchestrator/offline.lock", mode: 0600, uid: serviceUID, gid: serviceGID},
 		{path: "/var/lib/deployment-orchestrator/state.json", mode: 0600, uid: serviceUID, gid: serviceGID},
 		{path: "/var/lib/deployment-orchestrator/audit.jsonl", mode: 0600, uid: serviceUID, gid: serviceGID},
 	}

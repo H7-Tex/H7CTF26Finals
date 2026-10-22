@@ -40,13 +40,32 @@ fi
 if [[ $role == production ]]; then
   getent passwd deploy-orchestrator | grep -Fq '/usr/sbin/nologin'
   [[ $(stat -c '%U:%G:%a' /etc/deployment-orchestrator) == root:deploy-orchestrator:700 ]]
-  [[ $(stat -c '%U:%G:%a' /var/lib/deployment-orchestrator) == deploy-orchestrator:deploy-orchestrator:700 ]]
+  [[ $(stat -c '%U:%G:%a' /var/lib/deployment-orchestrator) == deploy-orchestrator:deploy-orchestrator:710 ]]
+  [[ $(stat -c '%U:%G:%a' /var/lib/deployment-orchestrator/repository) == deploy-orchestrator:deploy-orchestrator:750 ]]
+  [[ $(stat -c '%U:%G:%a' /var/lib/deployment-orchestrator/offline.lock) == deploy-orchestrator:deploy-orchestrator:600 ]]
+  [[ $(stat -c '%U:%G:%a' /etc/deployment-executor) == root:root:700 ]]
+  [[ $(stat -c '%U:%G:%a' /var/lib/deployment-executor) == root:root:700 ]]
+  [[ $(stat -c '%U:%G:%a' /var/lib/deployment-executor/operations) == root:root:700 ]]
+  [[ $(stat -c '%U:%G:%a' /var/lib/deployment-executor/offline.lock) == root:root:600 ]]
+  [[ $(stat -c '%U:%G:%a' /usr/local/libexec/deployment-executor/commands) == root:root:700 ]]
+  [[ -z $(find /usr/local/libexec/deployment-executor/commands -mindepth 1 -print -quit) ]]
   test -x /usr/local/bin/deployment-orchestrator
+  test -x /usr/local/libexec/deployment-orchestrator/runner
+  test -x /usr/local/libexec/deployment-executor/executor
+  test -x /usr/local/sbin/deployment-orchestrator-state
   ! ldd /usr/local/bin/deployment-orchestrator >/dev/null 2>&1
+  ! ldd /usr/local/libexec/deployment-orchestrator/runner >/dev/null 2>&1
+  ! ldd /usr/local/libexec/deployment-executor/executor >/dev/null 2>&1
+  ! ldd /usr/local/sbin/deployment-orchestrator-state >/dev/null 2>&1
   [[ $(systemctl is-enabled deployment-orchestrator.service 2>/dev/null) == disabled ]]
   ! systemctl is-active --quiet deployment-orchestrator.service
-  [[ ! -e /usr/local/libexec/deployment-orchestrator/runner ]]
+  [[ $(systemctl is-enabled deployment-executor.socket 2>/dev/null) == disabled ]]
+  ! systemctl is-active --quiet deployment-executor.socket
+  ! systemctl is-active --quiet deployment-executor.service
+  ! systemctl is-active --quiet deployment-orchestrator-backup.service
   [[ ! -e /etc/deployment-orchestrator/config.json ]]
+  [[ ! -e /etc/deployment-executor/policy.json ]]
+  [[ ! -e /var/backups/deployment-orchestrator ]]
   [[ ! -e /var/lib/deployment-orchestrator/state.json ]]
   [[ $(cat /etc/finals-platform/role) == '{"role":"production"}' ]]
   [[ $(grep -Ec '^10\.60\.200\.10[[:space:]]+finals\.h7tex\.com([[:space:]]|$)' /etc/hosts) == 1 ]]

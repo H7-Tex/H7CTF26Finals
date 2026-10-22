@@ -1,0 +1,44 @@
+[Unit]
+Description=Offline Deployment Orchestrator state backup
+Conflicts=deployment-orchestrator.service deployment-executor.socket deployment-executor.service
+Before=deployment-orchestrator.service deployment-executor.socket deployment-executor.service
+ConditionPathExists=/etc/deployment-orchestrator/config.json
+ConditionPathExists=/etc/deployment-orchestrator/services.json
+ConditionPathIsDirectory=/var/lib/deployment-orchestrator
+ConditionPathExists=/var/lib/deployment-orchestrator/offline.lock
+ConditionPathExists=/var/lib/deployment-executor/offline.lock
+ConditionPathIsMountPoint=/var/backups/deployment-orchestrator
+ConditionFileIsExecutable=/usr/local/sbin/deployment-orchestrator-state
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+UMask=0077
+ExecStart=/usr/local/sbin/deployment-orchestrator-state backup --config /etc/deployment-orchestrator/config.json --services /etc/deployment-orchestrator/services.json --destination /var/backups/deployment-orchestrator
+NoNewPrivileges=yes
+CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER
+AmbientCapabilities=
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHome=yes
+ProtectHostname=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectProc=invisible
+ProtectSystem=strict
+ReadOnlyPaths=/etc/deployment-orchestrator /var/lib/deployment-orchestrator
+ReadWritePaths=/var/backups/deployment-orchestrator
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+IPAddressDeny=any

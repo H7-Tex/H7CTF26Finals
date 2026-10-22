@@ -70,5 +70,5 @@ fi
 if [[ $role == production ]]; then
   systemd-sysusers /usr/lib/sysusers.d/deployment-orchestrator.conf
   install -d -o root -g deploy-orchestrator -m 0700 /etc/deployment-orchestrator
-  install -d -o deploy-orchestrator -g deploy-orchestrator -m 0700 /var/lib/deployment-orchestrator
+  install -d -o deploy-orchestrator -g deploy-orchestrator -m 0710 /var/lib/deployment-orchestrator
 fi

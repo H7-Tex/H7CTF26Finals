@@ -11,14 +11,21 @@ if [[ $role == production ]]; then
   export DEBIAN_FRONTEND=noninteractive
   apt-get install --yes --no-install-recommends build-essential golang-go
   "$source_dir/deployment/tests/run.sh"
-  deployment_binary=$(mktemp)
+  deployment_build_dir=$(mktemp -d)
   (
     cd "$source_dir/deployment"
-    CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o "$deployment_binary" ./cmd/deployment-orchestrator
+    CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o "$deployment_build_dir/deployment-orchestrator" ./cmd/deployment-orchestrator
+    CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o "$deployment_build_dir/runner" ./cmd/deployment-runner
+    CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o "$deployment_build_dir/executor" ./cmd/deployment-executor
+    CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o "$deployment_build_dir/deployment-orchestrator-state" ./cmd/deployment-state
   )
-  chmod 0755 "$deployment_binary"
-  "$source_dir/deployment/install.sh" "$deployment_binary"
-  rm -f "$deployment_binary"
+  chmod 0755 "$deployment_build_dir/deployment-orchestrator" "$deployment_build_dir/runner" "$deployment_build_dir/executor" "$deployment_build_dir/deployment-orchestrator-state"
+  "$source_dir/deployment/install.sh" \
+    "$deployment_build_dir/deployment-orchestrator" \
+    "$deployment_build_dir/runner" \
+    "$deployment_build_dir/executor" \
+    "$deployment_build_dir/deployment-orchestrator-state"
+  rm -rf "$deployment_build_dir"
 
   install -D -m 0755 "$source_dir/platform/rootfs/usr/local/libexec/finals-platform/firewall" /usr/local/libexec/finals-platform/firewall
   install -D -m 0644 "$source_dir/platform/rootfs/etc/systemd/system/finals-host-firewall.service" /etc/systemd/system/finals-host-firewall.service

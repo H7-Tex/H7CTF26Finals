@@ -2,6 +2,8 @@
 Description=Deployment Orchestrator
 After=network-online.target
 Wants=network-online.target
+Requires=deployment-executor.socket finals-volume@production.service
+After=deployment-executor.socket finals-volume@production.service
 ConditionPathIsDirectory=/etc/deployment-orchestrator
 ConditionPathExists=/etc/deployment-orchestrator/config.json
 ConditionPathExists=/etc/deployment-orchestrator/services.json
@@ -17,7 +19,7 @@ ConditionPathExists=/var/lib/deployment-orchestrator/audit.jsonl
 Type=simple
 User=deploy-orchestrator
 Group=deploy-orchestrator
-UMask=0077
+UMask=0027
 LoadCredential=config.json:/etc/deployment-orchestrator/config.json
 LoadCredential=services.json:/etc/deployment-orchestrator/services.json
 LoadCredential=webhook.secret:/etc/deployment-orchestrator/webhook.secret

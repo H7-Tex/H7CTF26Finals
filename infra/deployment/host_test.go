@@ -22,8 +22,9 @@ func TestHostPreflightRequiresExactFilesModesAndTypes(t *testing.T) {
 		{"/etc/deployment-orchestrator/webhook.secret", 0600, false},
 		{"/etc/deployment-orchestrator/anvil.token", 0600, false},
 		{"/usr/local/libexec/deployment-orchestrator/runner", 0755, false},
-		{"/var/lib/deployment-orchestrator", 0700, true},
-		{"/var/lib/deployment-orchestrator/repository", 0700, true},
+		{"/var/lib/deployment-orchestrator", 0710, true},
+		{"/var/lib/deployment-orchestrator/repository", 0750, true},
+		{"/var/lib/deployment-orchestrator/offline.lock", 0600, false},
 		{"/var/lib/deployment-orchestrator/state.json", 0600, false},
 		{"/var/lib/deployment-orchestrator/audit.jsonl", 0600, false},
 	}

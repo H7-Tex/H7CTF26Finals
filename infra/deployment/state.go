@@ -126,6 +126,11 @@ func InitializeStore(directory string, initial PersistentState) error {
 	if err := os.MkdirAll(directory, 0700); err != nil {
 		return err
 	}
+	if _, err := os.Lstat(filepath.Join(directory, restoreMarkerName)); err == nil {
+		return errors.New("offline restore is incomplete")
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
 	statePath := filepath.Join(directory, "state.json")
 	auditPath := filepath.Join(directory, "audit.jsonl")
 	stateExists, err := initializationStateMatches(statePath, initial)
@@ -227,6 +232,11 @@ func samePristineState(existing, initial PersistentState) bool {
 }
 
 func OpenStore(cfg *Config, manifestHash string) (*Store, error) {
+	if _, err := os.Lstat(filepath.Join(cfg.StateDirectory, restoreMarkerName)); err == nil {
+		return nil, errors.New("offline restore is incomplete")
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
 	statePath := filepath.Join(cfg.StateDirectory, "state.json")
 	auditPath := filepath.Join(cfg.StateDirectory, "audit.jsonl")
 	data, err := os.ReadFile(statePath)

@@ -1,0 +1,38 @@
+[Unit]
+Description=Deployment Executor
+Requires=deployment-executor.socket finals-volume@production.service
+After=deployment-executor.socket docker.service finals-volume@production.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+SupplementaryGroups=deploy-orchestrator
+UMask=0077
+ExecStart=/usr/local/libexec/deployment-executor/executor
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHome=yes
+ProtectHostname=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectProc=invisible
+ProtectSystem=strict
+ReadWritePaths=/var/lib/deployment-executor /run/deployment-executor
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+IPAddressDeny=any
+TimeoutStopSec=15s

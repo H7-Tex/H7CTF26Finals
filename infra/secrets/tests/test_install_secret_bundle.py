@@ -115,7 +115,7 @@ class SecretBundleTests(unittest.TestCase):
             "ANVIL_JWT_SECRET": "2" * 32,
             "ANVIL_SECRETS_ENCRYPTION_KEY": "3" * 32,
             "ANVIL_GAME_INTERNAL_TOKEN": "4" * 32,
-            "ANVIL_IMAGE_REVISION": "c879ebf6c9a583416edf141830fbc1e606e0eb1c",
+            "ANVIL_IMAGE_REVISION": "f55f44f9328aa12fdf60babfd9c8ff2669c35fa8",
             "ANVIL_VPN_ENABLED": "false",
             "ANVIL_VPN_PEER_CONTROL": "external",
             "ANVIL_VPN_PUBLIC_ENDPOINT": "vpn.h7tex.com:443",

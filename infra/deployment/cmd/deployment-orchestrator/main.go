@@ -68,6 +68,11 @@ func run() error {
 }
 
 func initialize(ctx context.Context, cfg *orchestrator.Config, manifest *orchestrator.Manifest, manifestHash string) error {
+	lock, err := orchestrator.AcquireStateLock(cfg.StateDirectory)
+	if err != nil {
+		return err
+	}
+	defer lock.Close()
 	repository := orchestrator.GitRepository{Config: cfg.Repository}
 	head, err := repository.FetchRemoteHead(ctx)
 	if err != nil {
@@ -91,6 +96,11 @@ func initialize(ctx context.Context, cfg *orchestrator.Config, manifest *orchest
 }
 
 func serve(cfg *orchestrator.Config, manifest *orchestrator.Manifest, manifestHash string) error {
+	lock, err := orchestrator.AcquireStateLock(cfg.StateDirectory)
+	if err != nil {
+		return err
+	}
+	defer lock.Close()
 	store, err := orchestrator.OpenStore(cfg, manifestHash)
 	if err != nil {
 		return err

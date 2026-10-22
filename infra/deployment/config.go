@@ -70,20 +70,8 @@ func (d *Duration) UnmarshalJSON(data []byte) error {
 func (d Duration) Value() time.Duration { return time.Duration(d) }
 
 func LoadConfig(path string) (*Config, *Manifest, error) {
-	data, err := os.ReadFile(path)
+	cfg, err := loadConfigMetadata(path)
 	if err != nil {
-		return nil, nil, fmt.Errorf("read config: %w", err)
-	}
-	var cfg Config
-	dec := json.NewDecoder(strings.NewReader(string(data)))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&cfg); err != nil {
-		return nil, nil, fmt.Errorf("decode config: %w", err)
-	}
-	if dec.Decode(&struct{}{}) != io.EOF {
-		return nil, nil, errors.New("config must contain one JSON value")
-	}
-	if err := cfg.validate(); err != nil {
 		return nil, nil, err
 	}
 	if cfg.WebhookSecret, err = readSecret(cfg.WebhookSecretFile); err != nil {
@@ -99,7 +87,27 @@ func LoadConfig(path string) (*Config, *Manifest, error) {
 	if err := validateRunner(cfg.RunnerCommand); err != nil {
 		return nil, nil, err
 	}
-	return &cfg, manifest, nil
+	return cfg, manifest, nil
+}
+
+func loadConfigMetadata(path string) (*Config, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read config: %w", err)
+	}
+	var cfg Config
+	dec := json.NewDecoder(strings.NewReader(string(data)))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&cfg); err != nil {
+		return nil, fmt.Errorf("decode config: %w", err)
+	}
+	if dec.Decode(&struct{}{}) != io.EOF {
+		return nil, errors.New("config must contain one JSON value")
+	}
+	if err := cfg.validate(); err != nil {
+		return nil, err
+	}
+	return &cfg, nil
 }
 
 func (c *Config) validate() error {
