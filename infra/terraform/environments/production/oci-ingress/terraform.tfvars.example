@@ -1,0 +1,15 @@
+region                  = "ap-hyderabad-1"
+finals_compartment_id   = "ocid1.compartment.oc1..replace-me"
+availability_domain     = "replace-with-hyderabad-ad-name"
+edge_subnet_id          = "ocid1.subnet.oc1.ap-hyderabad-1.replace-me"
+router_nsg_id           = "ocid1.networksecuritygroup.oc1.ap-hyderabad-1.replace-me"
+router_image_id         = "ocid1.image.oc1.ap-hyderabad-1.replace-with-reviewed-image"
+ssh_authorized_keys     = "ssh-ed25519 replace-with-organizer-public-key"
+active_router           = "r1"
+router_cloud_init       = <<-YAML
+  #cloud-config
+  # This example is intentionally non-runnable. Supply the reviewed router
+  # image bootstrap that configures and firewalls both addresses:
+  # 10.60.250.100 UDP 443 only
+  # 10.60.250.101 TCP 443 only
+YAML

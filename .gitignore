@@ -13,6 +13,7 @@ secrets/
 *.tfstate.*
 *.tfvars
 !*.tfvars.example
+infra/terraform/modules/**/.terraform.lock.hcl
 crash.log
 crash.*.log
 override.tf
