@@ -7,7 +7,7 @@ This tree is the reproducible infrastructure source for H7CTF'26 Finals. It is s
 - OCI Hyderabad is the only live game data plane.
 - GCP project `ctf26-512405` is backup/archive only and is never on the scoring path.
 - Cloudflare exposes `finals.h7tex.com` on TCP 443 and `vpn.h7tex.com` on UDP 443 as DNS-only records after OCI reserves two stable public IPs.
-- 15 team monorepositories feed 15 team `h7d` deployers. Dormant service directories are added only at release.
+- 15 team monorepositories feed 15 team Deployment Orchestrators. Dormant service directories are added only at release.
 - The fleet is 16 production boxes including NOP, 15 workbenches, six Attack-Defense services, and three hills.
 - Mirror and shared-service internet egress are explicit warm-up switches and default off; production and workbench subnets never receive an internet default route.
 
