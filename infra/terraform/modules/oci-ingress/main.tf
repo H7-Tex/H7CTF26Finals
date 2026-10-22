@@ -23,6 +23,13 @@ locals {
     }
   }
 
+  team_egress = {
+    for team in range(1, 16) : format("team-%02d", team) => {
+      private_ip   = format("10.60.250.%d", 120 + team)
+      display_name = format("team-%02d-egress", team)
+    }
+  }
+
   tags = {
     event      = "finals-2026"
     managed_by = "terraform"
@@ -61,7 +68,11 @@ resource "oci_core_instance" "router" {
 
   metadata = {
     ssh_authorized_keys = var.ssh_authorized_keys
-    user_data           = base64encode(var.cloud_init)
+    user_data = base64encode(replace(
+      var.cloud_init,
+      "__ROUTER_STATE__",
+      each.key == var.active_router ? "active" : "standby"
+    ))
   }
 
   instance_options {
@@ -82,6 +93,14 @@ data "oci_core_vnic_attachments" "router" {
 
 resource "oci_core_private_ip" "ingress" {
   for_each = local.ingress
+
+  vnic_id      = data.oci_core_vnic_attachments.router[var.active_router].vnic_attachments[0].vnic_id
+  display_name = each.value.display_name
+  ip_address   = each.value.private_ip
+}
+
+resource "oci_core_private_ip" "team_egress" {
+  for_each = local.team_egress
 
   vnic_id      = data.oci_core_vnic_attachments.router[var.active_router].vnic_attachments[0].vnic_id
   display_name = each.value.display_name

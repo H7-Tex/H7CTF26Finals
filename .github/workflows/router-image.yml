@@ -1,0 +1,30 @@
+name: Router image checks
+
+on:
+  pull_request:
+    paths:
+      - "infra/images/router/**"
+      - "infra/terraform/modules/oci-ingress/**"
+      - "infra/terraform/environments/production/oci-ingress/**"
+      - ".github/workflows/router-image.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "infra/images/router/**"
+      - "infra/terraform/modules/oci-ingress/**"
+      - "infra/terraform/environments/production/oci-ingress/**"
+      - ".github/workflows/router-image.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install network test dependencies
+        run: sudo apt-get update && sudo apt-get install --yes nftables iproute2 wireguard-tools conntrack python3
+      - name: Test router policy
+        run: sudo infra/images/router/tests/run.sh

@@ -30,10 +30,11 @@ variable "cloud_init" {
 
   validation {
     condition = (
-      length(regexall("10\\.60\\.250\\.100", var.cloud_init)) > 0 &&
-      length(regexall("10\\.60\\.250\\.101", var.cloud_init)) > 0
+      length(regexall("__ROUTER_STATE__", var.cloud_init)) == 2 &&
+      length(regexall("event-router-addresses", var.cloud_init)) > 0 &&
+      length(regexall("event-router\\.target", var.cloud_init)) > 0
     )
-    error_message = "cloud_init must configure and firewall both the VPN and web secondary private IPs."
+    error_message = "cloud_init must contain two gateway-role placeholders and start the reviewed router runtime."
   }
 }
 

@@ -1,0 +1,10 @@
+[Unit]
+Description=Watch the active WireGuard peer inventory
+
+[Path]
+PathExists=/etc/event-router/peers.json
+PathChanged=/etc/event-router/peers.json
+Unit=event-router-inventory.service
+
+[Install]
+WantedBy=event-router.target

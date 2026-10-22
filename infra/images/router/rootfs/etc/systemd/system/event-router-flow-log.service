@@ -1,0 +1,25 @@
+[Unit]
+Description=Record router conntrack lifecycle metadata
+After=nftables.service
+Requires=nftables.service
+ConditionPathExists=/usr/sbin/conntrack
+
+[Service]
+Type=simple
+ExecStart=/usr/sbin/conntrack --event --event-mask NEW,DESTROY --output timestamp,extended,id
+Restart=always
+RestartSec=2
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=event-router-flow
+NoNewPrivileges=true
+CapabilityBoundingSet=CAP_NET_ADMIN
+AmbientCapabilities=CAP_NET_ADMIN
+ProtectHome=true
+ProtectSystem=strict
+ProtectKernelTunables=true
+PrivateTmp=true
+RestrictAddressFamilies=AF_NETLINK
+
+[Install]
+WantedBy=event-router.target

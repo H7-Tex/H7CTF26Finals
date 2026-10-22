@@ -1,0 +1,7 @@
+[Unit]
+Description=Competition ingress router
+Wants=network-online.target nftables.service systemd-timesyncd.service event-router-flow-log.service event-router-inventory.path
+After=network-online.target nftables.service
+
+[Install]
+WantedBy=multi-user.target

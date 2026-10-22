@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+[[ $EUID -eq 0 ]] || { echo "must run as root" >&2; exit 1; }
+
+inventory=${1:-/etc/event-router/peers.json}
+private_key=/etc/wireguard/private.key
+[[ -f $inventory ]] || { echo "inventory not found: $inventory" >&2; exit 1; }
+[[ -f $private_key ]] || { echo "WireGuard private key not found" >&2; exit 1; }
+
+inventory_mode=$(stat -c '%a' "$inventory")
+(( (8#$inventory_mode & 077) == 0 )) || { echo "peer inventory must not be group/world accessible" >&2; exit 1; }
+mode=$(stat -c '%a' "$private_key")
+(( (8#$mode & 077) == 0 )) || { echo "WireGuard private key must not be group/world accessible" >&2; exit 1; }
+
+active_inventory=/var/lib/event-router/active-peers.json
+
+workdir=$(mktemp -d /run/event-router.XXXXXX)
+trap 'rm -rf -- "$workdir"' EXIT
+
+render_args=(
+  "$inventory" \
+  --wireguard-output "$workdir/peers.conf" \
+  --nft-output "$workdir/peers.nft"
+)
+[[ ! -f $active_inventory ]] || render_args+=(--active-inventory "$active_inventory")
+/usr/local/libexec/event-router/render_inventory.py "${render_args[@]}"
+
+{
+  printf '[Interface]\nPrivateKey = '
+  tr -d '\n' < "$private_key"
+  printf '\nListenPort = 443\n\n'
+  cat "$workdir/peers.conf"
+} > "$workdir/wg0.conf"
+
+ip link show wg0 >/dev/null 2>&1 || ip link add wg0 type wireguard
+ip address replace 10.80.255.1/16 dev wg0
+wg syncconf wg0 "$workdir/wg0.conf"
+ip link set mtu 1280 up dev wg0
+nft -f "$workdir/peers.nft"
+install -D -m 0600 "$inventory" "$active_inventory"
+
+peer_count=$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1], encoding="utf-8"))["peers"]))' "$inventory")
+logger --tag event-router-inventory "applied generation $(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["generation"])' "$inventory") with $peer_count peers"

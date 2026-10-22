@@ -38,11 +38,6 @@ variable "ssh_authorized_keys" {
   type        = string
 }
 
-variable "router_cloud_init" {
-  description = "Reviewed non-secret router cloud-init with destination-IP-separated nftables policy."
-  type        = string
-}
-
 variable "active_router" {
   description = "Router that owns both ingress IP pairs."
   type        = string

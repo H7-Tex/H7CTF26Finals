@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+[[ $EUID -eq 0 ]] || { echo "must run as root" >&2; exit 1; }
+state=${1:?usage: event-router-addresses active|standby}
+[[ $state == active || $state == standby ]] || { echo "state must be active or standby" >&2; exit 1; }
+
+interface=${EVENT_ROUTER_INTERFACE:-$(ip -o route show default | awk 'NR == 1 { print $5 }')}
+[[ -n $interface ]] || { echo "cannot determine the primary interface" >&2; exit 1; }
+
+addresses=(10.60.250.100 10.60.250.101)
+for team in $(seq 1 15); do
+  addresses+=("10.60.250.$((120 + team))")
+done
+
+for address in "${addresses[@]}"; do
+  if [[ $state == active ]]; then
+    ip address replace "$address/24" dev "$interface"
+  elif ip -o -4 address show dev "$interface" | awk '{ print $4 }' | grep -Fxq "$address/24"; then
+    ip address delete "$address/24" dev "$interface"
+  fi
+done

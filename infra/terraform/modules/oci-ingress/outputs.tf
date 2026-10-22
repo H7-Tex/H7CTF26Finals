@@ -9,3 +9,11 @@ output "ingress_private_ip_ids" {
 output "ingress_private_ips" {
   value = { for name, address in oci_core_private_ip.ingress : name => address.ip_address }
 }
+
+output "team_egress_private_ip_ids" {
+  value = { for name, address in oci_core_private_ip.team_egress : name => address.id }
+}
+
+output "team_egress_private_ips" {
+  value = { for name, address in oci_core_private_ip.team_egress : name => address.ip_address }
+}

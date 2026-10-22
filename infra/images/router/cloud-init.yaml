@@ -1,0 +1,10 @@
+#cloud-config
+write_files:
+  - path: /etc/event-router/role
+    owner: root:root
+    permissions: '0644'
+    content: |
+      __ROUTER_STATE__
+runcmd:
+  - ["/usr/local/sbin/event-router-addresses", "__ROUTER_STATE__"]
+  - ["systemctl", "enable", "--now", "event-router.target"]
