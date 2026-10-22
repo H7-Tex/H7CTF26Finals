@@ -90,4 +90,8 @@ resource "oci_core_instance" "builder" {
   instance_options {
     are_legacy_imds_endpoints_disabled = true
   }
+
+  lifecycle {
+    replace_triggered_by = [oci_core_network_security_group.builder.freeform_tags]
+  }
 }
