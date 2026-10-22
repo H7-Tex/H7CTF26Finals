@@ -1,0 +1,36 @@
+# Credentials and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+secrets/
+
+# Terraform runtime data (the dependency lock file is intentionally committed)
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Build and test output
+build/
+dist/
+coverage/
+.pytest_cache/
+__pycache__/
+*.py[cod]
+node_modules/
+
+# Editors and operating systems
+.idea/
+.vscode/
+*.swp
+.DS_Store
