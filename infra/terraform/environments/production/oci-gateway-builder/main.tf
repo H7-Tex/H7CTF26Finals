@@ -4,7 +4,7 @@ locals {
   source_files = setunion(
     fileset(local.source_dir, "rootfs/**"),
     fileset(local.source_dir, "tests/**"),
-    toset(["build-image", "gateway-image-seal.service", "install.sh", "seal-image"])
+    toset(["build-image", "cloud-init.yaml", "gateway-image-seal.service", "install.sh", "seal-image"])
   )
   auxiliary_sources = {
     archive          = "${path.module}/../../../../archive"

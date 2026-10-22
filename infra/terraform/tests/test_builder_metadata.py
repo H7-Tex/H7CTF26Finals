@@ -69,6 +69,10 @@ class BuilderMetadataTests(unittest.TestCase):
             self.assertIn(f"timeout --signal=TERM --kill-after=30s {deadline}", payload)
             self.assertIn("source_revision = var.source_revision", source)
 
+    def test_gateway_builder_packages_every_router_policy_input(self):
+        source = (ROOT / "terraform/environments/production/oci-gateway-builder/main.tf").read_text(encoding="utf-8")
+        self.assertIn('"cloud-init.yaml"', source)
+
     def test_image_builds_have_bounded_phases_and_serial_evidence(self):
         gateway = (ROOT / "images/router/build-image").read_text(encoding="utf-8")
         runtime = (ROOT / "images/runtime/build-image").read_text(encoding="utf-8")
@@ -237,6 +241,7 @@ class BuilderMetadataTests(unittest.TestCase):
         failed_builders = (
             "ocid1.instance.oc1.ap-hyderabad-1.anuhsljrgek2goaceebogxa47rg74d6izhqorb2dgnjjlfsv7gupjwbevyva",
             "ocid1.instance.oc1.ap-hyderabad-1.anuhsljrgek2goacvwoxwqstnmj6bwirfuxxan45gpqbbuzt7fw5if2zjfbq",
+            "ocid1.instance.oc1.ap-hyderabad-1.anuhsljrgek2goacptf4hmhhjlqee2ucownqcd6amop4lye7j3m3z27z2uqq",
         )
         docs = "\n".join(
             (ROOT / f"terraform/environments/production/{root}/README.md").read_text(encoding="utf-8")
