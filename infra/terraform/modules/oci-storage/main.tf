@@ -47,6 +47,9 @@ resource "oci_core_volume_attachment" "data" {
   instance_id     = var.instance_ids[each.value.instance]
   volume_id       = oci_core_volume.data[each.key].id
 
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "oci_core_volume_backup_policy" "database" {

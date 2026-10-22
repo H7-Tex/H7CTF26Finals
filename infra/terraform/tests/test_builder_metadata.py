@@ -228,18 +228,11 @@ class BuilderMetadataTests(unittest.TestCase):
 
     def test_long_lived_compute_addresses_and_storage_are_guarded(self):
         storage = (ROOT / "terraform/modules/oci-storage/main.tf").read_text(encoding="utf-8")
-        rotation_path = ROOT / "terraform/environments/production/oci-platform/UNCOMMISSIONED-ROTATION.json"
-        rotation = json.loads(rotation_path.read_text(encoding="utf-8")) if rotation_path.exists() else None
         volume_start = storage.index('resource "oci_core_volume" "data"')
         attachment_start = storage.index('resource "oci_core_volume_attachment" "data"')
         policy_start = storage.index('resource "oci_core_volume_backup_policy"')
         self.assertIn("prevent_destroy = true", storage[volume_start:attachment_start])
-        if rotation is None:
-            self.assertIn("prevent_destroy = true", storage[attachment_start:policy_start])
-        else:
-            self.assertEqual(rotation["source_revision"], "941812b0a37f6285c135980d27ef341cf4b69650")
-            self.assertEqual(rotation["state"], "in_progress")
-            self.assertNotIn("prevent_destroy = true", storage[attachment_start:policy_start])
+        self.assertIn("prevent_destroy = true", storage[attachment_start:policy_start])
         self.assertIn("offset_seconds    = 0", storage[policy_start:])
         self.assertIn('period            = "ONE_DAY"', storage[policy_start:])
         self.assertIn("retention_seconds = 604800", storage[policy_start:])
@@ -249,10 +242,7 @@ class BuilderMetadataTests(unittest.TestCase):
             "terraform/modules/oci-compute-fleet/main.tf",
         ):
             source = (ROOT / relative).read_text(encoding="utf-8")
-            if rotation is not None and relative == "terraform/modules/oci-platform/main.tf":
-                self.assertNotIn("prevent_destroy = true", source)
-            else:
-                self.assertIn("prevent_destroy = true", source)
+            self.assertIn("prevent_destroy = true", source)
 
         ingress = (ROOT / "terraform/modules/oci-ingress/main.tf").read_text(encoding="utf-8")
         self.assertGreaterEqual(ingress.count("prevent_destroy = true"), 3)
