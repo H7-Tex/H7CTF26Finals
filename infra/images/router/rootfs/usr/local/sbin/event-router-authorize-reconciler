@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+[[ $EUID -eq 0 ]] || { echo "must run as root" >&2; exit 1; }
+[[ $# -eq 1 && -f $1 ]] || { echo "usage: $0 PUBLIC_KEY_FILE" >&2; exit 1; }
+
+public_key_file=$1
+[[ $(grep -cve '^[[:space:]]*$' "$public_key_file") -eq 1 ]] || { echo "expected exactly one public key" >&2; exit 1; }
+ssh-keygen -l -E sha256 -f "$public_key_file" | grep -Fq ' (ED25519)' || {
+  echo "an Ed25519 public key is required" >&2
+  exit 1
+}
+read -r key_type key_data _ < "$public_key_file"
+[[ $key_type == ssh-ed25519 && -n $key_data ]] || { echo "invalid Ed25519 public key" >&2; exit 1; }
+
+home=/var/lib/peer-reconciler
+install -d -o root -g root -m 0755 "$home"
+install -d -o root -g root -m 0700 "$home/.ssh"
+temporary=$(mktemp "$home/.ssh/.authorized_keys.XXXXXX")
+trap 'rm -f -- "$temporary"' EXIT
+printf 'restrict,command="/usr/bin/sudo -n /usr/local/sbin/event-router-receive-inventory" %s %s\n' \
+  "$key_type" "$key_data" > "$temporary"
+chmod 0600 "$temporary"
+chown root:root "$temporary"
+mv -f "$temporary" "$home/.ssh/authorized_keys"
+sshd -t
+systemctl reload ssh.service

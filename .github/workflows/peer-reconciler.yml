@@ -1,0 +1,26 @@
+name: Peer reconciler checks
+
+on:
+  pull_request:
+    paths:
+      - "infra/reconciler/**"
+      - "infra/images/router/**"
+      - ".github/workflows/peer-reconciler.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "infra/reconciler/**"
+      - "infra/images/router/**"
+      - ".github/workflows/peer-reconciler.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test reconciliation state machine
+        run: infra/reconciler/tests/run.sh

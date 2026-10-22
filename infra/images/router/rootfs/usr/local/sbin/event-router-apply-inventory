@@ -40,5 +40,5 @@ ip link set mtu 1280 up dev wg0
 nft -f "$workdir/peers.nft"
 install -D -m 0600 "$inventory" "$active_inventory"
 
-peer_count=$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1], encoding="utf-8"))["peers"]))' "$inventory")
-logger --tag event-router-inventory "applied generation $(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["generation"])' "$inventory") with $peer_count peers"
+read -r generation peer_count < <(python3 -c 'import json,sys; value=json.load(open(sys.argv[1], encoding="utf-8")); print(value["generation"], len(value["peers"]))' "$inventory")
+logger --tag event-router-inventory -- "{\"event\":\"inventory_applied\",\"generation\":$generation,\"peer_count\":$peer_count}"

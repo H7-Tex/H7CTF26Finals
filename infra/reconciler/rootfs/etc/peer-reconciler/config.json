@@ -1,0 +1,11 @@
+{
+  "endpoint": "https://finals.h7tex.com/api/v1/internal/arena/vpn/peers",
+  "token_path": "/etc/peer-reconciler/anvil.token",
+  "ssh_identity_path": "/etc/peer-reconciler/id_ed25519",
+  "known_hosts_path": "/etc/peer-reconciler/known_hosts",
+  "validator_path": "/usr/local/libexec/event-router/render_inventory.py",
+  "gateways": {
+    "standby": "10.60.250.11",
+    "primary": "10.60.250.10"
+  }
+}

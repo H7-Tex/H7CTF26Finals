@@ -1,0 +1,29 @@
+[Unit]
+Description=Reconcile desired VPN peers to the ingress gateways
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=peer-reconciler
+Group=peer-reconciler
+ExecStart=/usr/local/libexec/peer-reconciler/reconcile.py
+StateDirectory=peer-reconciler
+StateDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectControlGroups=yes
+ProtectHome=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/peer-reconciler
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

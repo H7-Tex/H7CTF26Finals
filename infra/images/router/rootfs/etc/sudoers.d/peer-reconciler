@@ -1,0 +1,1 @@
+peer-reconciler ALL=(root) NOPASSWD: /usr/local/sbin/event-router-receive-inventory

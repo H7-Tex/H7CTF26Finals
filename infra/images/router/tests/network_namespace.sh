@@ -137,6 +137,8 @@ nsenter --target "$CORE_PID" --net ip route add default via 10.60.201.1
 nsenter --target "$MIRROR_PID" --net ip route add default via 10.60.202.1
 
 EVENT_ROUTER_INTERFACE=wan-r "$ADDRESS_TOOL" active
+ip address add 10.60.250.10/24 dev wan-r
+nsenter --target "$WAN_PID" --net ip address add 10.60.250.11/24 dev wan-c
 ip address show dev wan-r | grep -Fq '10.60.250.100/24'
 ip address show dev wan-r | grep -Fq '10.60.250.101/24'
 ip address show dev wan-r | grep -Fq '10.60.250.121/24'
@@ -170,11 +172,32 @@ start_tcp_server "$LAN_PID" 10.60.200.10 443
 start_tcp_server "$LAN_PID" 10.60.200.10 443
 [[ $(tcp_client "$PEER_PID" 10.60.200.10 443) == 10.60.250.121 ]]
 
+start_tcp_server "$LAN_PID" 10.60.200.10 4141
+[[ $(tcp_client "$PEER_PID" 10.60.200.10 4141) == 10.60.250.121 ]]
+
+start_tcp_server "$LAN_PID" 10.60.200.10 4141
+[[ $(tcp_client "$WORKBENCH_PID" 10.60.200.10 4141) == 10.60.250.121 ]]
+
+start_tcp_server self 10.60.250.101 4141
+if tcp_client "$WAN_PID" 10.60.250.101 4141 >/dev/null 2>&1; then
+  echo "the public web address exposed the VPN-only submission port" >&2
+  exit 1
+fi
+
 start_tcp_server "$PRODUCTION_PID" 10.60.1.2 7001
 [[ $(tcp_client "$PEER_PID" 10.60.1.2 7001) == 10.60.250.121 ]]
 
 start_tcp_server "$PRODUCTION_PID" 10.60.1.2 7002
 [[ $(tcp_client "$WORKBENCH_PID" 10.60.1.2 7002) == 10.60.250.121 ]]
+
+start_tcp_server "$MIRROR_PID" 10.60.202.10 3141
+[[ $(tcp_client "$WORKBENCH_PID" 10.60.202.10 3141) == 10.60.250.121 ]]
+
+start_tcp_server "$MIRROR_PID" 10.60.202.10 22
+if tcp_client "$WORKBENCH_PID" 10.60.202.10 22 >/dev/null 2>&1; then
+  echo "a workbench reached a non-mirror port" >&2
+  exit 1
+fi
 
 start_tcp_server "$WORKBENCH_PID" 10.61.1.2 2222
 [[ $(tcp_client "$PEER_PID" 10.61.1.2 2222) == 10.60.250.121 ]]
@@ -209,6 +232,28 @@ fi
 start_tcp_server "$PRODUCTION_PID" 10.60.1.2 7003
 [[ $(tcp_client "$CORE_PID" 10.60.1.2 7003 10.60.201.20) == 10.60.201.20 ]]
 
+start_tcp_server "$LAN_PID" 10.60.200.10 443
+[[ $(tcp_client "$CORE_PID" 10.60.200.10 443 10.60.201.20) == 10.60.201.20 ]]
+
+start_tcp_server "$LAN_PID" 10.60.200.10 443
+if tcp_client "$CORE_PID" 10.60.200.10 443 10.60.201.30 >/dev/null 2>&1; then
+  echo "a non-control core host reached Anvil" >&2
+  exit 1
+fi
+kill "${servers[-1]}" 2>/dev/null || true
+
+start_tcp_server self 10.60.250.10 22
+[[ $(tcp_client "$CORE_PID" 10.60.250.10 22 10.60.201.20) == 10.60.201.20 ]]
+
+start_tcp_server self 10.60.250.10 22
+if tcp_client "$CORE_PID" 10.60.250.10 22 10.60.201.30 >/dev/null 2>&1; then
+  echo "a non-control core host reached gateway SSH" >&2
+  exit 1
+fi
+
+start_tcp_server "$WAN_PID" 10.60.250.11 22
+[[ $(tcp_client "$CORE_PID" 10.60.250.11 22 10.60.201.20) == 10.60.201.20 ]]
+
 start_tcp_server "$PRODUCTION_PID" 10.60.1.3 7004
 [[ $(tcp_client "$CORE_PID" 10.60.1.3 7004 10.60.201.20) == 10.60.201.20 ]]
 
@@ -221,11 +266,26 @@ start_tcp_server "$CORE_PID" 10.60.201.30 443
 start_tcp_server "$MIRROR_PID" 10.60.202.10 5000
 [[ $(tcp_client "$PRODUCTION_PID" 10.60.202.10 5000) == 10.60.1.2 ]]
 
+start_tcp_server "$MIRROR_PID" 10.60.202.10 4873
+[[ $(tcp_client "$PRODUCTION_PID" 10.60.202.10 4873) == 10.60.1.2 ]]
+
+start_tcp_server "$MIRROR_PID" 10.60.202.10 443
+if tcp_client "$PRODUCTION_PID" 10.60.202.10 443 >/dev/null 2>&1; then
+  echo "a production host reached a non-mirror port" >&2
+  exit 1
+fi
+
 start_tcp_server "$CORE_PID" 10.60.201.20 9300
 [[ $(tcp_client "$PRODUCTION_PID" 10.60.201.20 9300) == 10.60.1.2 ]]
 
 start_tcp_server "$LAN_PID" 10.60.200.10 443
 [[ $(tcp_client "$PRODUCTION_PID" 10.60.200.10 443) == 10.60.1.2 ]]
+
+start_tcp_server "$LAN_PID" 10.60.200.10 4141
+if tcp_client "$PRODUCTION_PID" 10.60.200.10 4141 >/dev/null 2>&1; then
+  echo "a production host reached the VPN-only submission port" >&2
+  exit 1
+fi
 
 nsenter --target "$PEER_PID" --net ip address add 10.80.2.200/16 dev peer-c
 start_tcp_server "$PRODUCTION_PID" 10.60.1.2 7005

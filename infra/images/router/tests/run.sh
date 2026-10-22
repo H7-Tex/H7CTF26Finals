@@ -9,6 +9,7 @@ bash -n \
   "$ROUTER_DIR/install.sh" \
   "$ROUTER_DIR/rootfs/usr/local/sbin/event-router-addresses" \
   "$ROUTER_DIR/rootfs/usr/local/sbin/event-router-apply-inventory" \
+  "$ROUTER_DIR/rootfs/usr/local/sbin/event-router-authorize-reconciler" \
   "$ROUTER_DIR/seal-image" \
   "$ROUTER_DIR/tests/network_namespace.sh"
 python3 -m unittest discover -s "$ROUTER_DIR/tests" -p 'test_*.py'

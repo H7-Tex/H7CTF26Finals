@@ -8,6 +8,7 @@ Private source repository for the H7CTF'26 Finals: a 24-hour Attack–Defense ev
 - `hills/` — three King of the Hill targets, controllers, reference interactions, and tests.
 - `infra/terraform/` — reproducible OCI-primary, GCP-backup, and Cloudflare infrastructure.
 - `infra/images/` — image-building and host-bootstrap inputs.
+- `infra/reconciler/` — private desired-state distribution from Anvil to both VPN gateways.
 - `ops/` — runbooks, rehearsals, monitoring, recovery, and event configuration.
 - `docs/` — author contracts and internal architecture decisions.
 

@@ -11,6 +11,8 @@ locals {
     "rootfs/usr/local/libexec/event-router/render_inventory.py",
     "rootfs/usr/local/sbin/event-router-addresses",
     "rootfs/usr/local/sbin/event-router-apply-inventory",
+    "rootfs/usr/local/sbin/event-router-authorize-reconciler",
+    "rootfs/usr/local/sbin/event-router-receive-inventory",
     "seal-image",
     "tests/network_namespace.sh",
     "tests/run.sh",

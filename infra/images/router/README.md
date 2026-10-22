@@ -20,8 +20,9 @@ There are exactly two reserved public IPs. The 15 team identities are secondary 
 
 - accepts UDP 443 only on the VPN destination and forwards TCP 443 only on the web destination;
 - drops the inverse protocol/address combinations before generic state handling;
-- limits peers and workbenches to released service ports, hill endpoints, Anvil, Gitea and their team-owned management paths;
+- limits peers and workbenches to released service ports, hill endpoints, Anvil HTTPS and VPN-only TCP `4141`, Gitea and their team-owned management paths;
 - limits checker, repository, production dependency and organizer management traffic to sparse source, destination and port sets;
+- limits workbench and production dependency downloads to the mirror's PyPI `3141`, APT `3142`, npm `4873` and OCI registry `5000` ports;
 - denies unmapped WireGuard sources and VPN internet forwarding;
 - SNATs every accepted individual peer and team workbench to the stable team identity;
 - records rate-limited pre-NAT allow/drop metadata in the kernel journal;
@@ -53,7 +54,7 @@ The renderer rejects unknown fields, duplicate identifiers, keys and addresses, 
 
 Private keys, user names, email addresses, Discord identities and revoked peers never appear in the snapshot. The WireGuard server private key is delivered separately to `/etc/wireguard/private.key` on both routers by the audited secret bootstrap. It is never stored in Terraform state or this repository.
 
-An external privileged reconciler must convert Anvil's desired peer records into the root-only monotonic snapshot on both gateways. Anvil does not enter network namespaces, and the gateway exposes no public peer-management API.
+The private control-host reconciler in `infra/reconciler` converts Anvil's desired peer records into the root-only monotonic snapshot on both gateways. Anvil does not enter network namespaces, and the gateway exposes no public peer-management API.
 
 ## Image build gate
 
