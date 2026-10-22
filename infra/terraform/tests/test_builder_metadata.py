@@ -92,12 +92,28 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn("install -d -m 0755 /run/sshd", installer)
         self.assertLess(installer.index("install -d -m 0755 /run/sshd"), installer.index("sshd -t"))
 
+    def test_production_go_build_uses_and_removes_an_explicit_cache(self):
+        builder = (ROOT / "images/runtime/build-image").read_text(encoding="utf-8")
+        cache = "export GOCACHE=/var/cache/finals-image-builder/go-build"
+        workspace = "export GOPATH=/var/cache/finals-image-builder/go"
+        tests = 'run_phase deployment-tests 10m "$source_dir/deployment/tests/run.sh"'
+        cleanup = "rm -rf /var/cache/finals-image-builder"
+        for value in (cache, workspace, tests, cleanup):
+            self.assertIn(value, builder)
+        self.assertLess(builder.index(cache), builder.index(tests))
+        self.assertLess(builder.index(workspace), builder.index(tests))
+        self.assertGreater(builder.index(cleanup), builder.index(tests))
+
     def test_failed_runtime_builders_are_prohibited(self):
         failed_builders = (
             "ocid1.instance.oc1.ap-hyderabad-1.anuhsljrgek2goacy3dojy463ubuy7ibn5w5qkl2wuaoclhof7q2k54wof2q",
             "ocid1.instance.oc1.ap-hyderabad-1.anuhsljrgek2goaccomxx6u2gtj4l75e7rmruf3ygrvp2sqy7e3m3ta6x3ia",
             "ocid1.instance.oc1.ap-hyderabad-1.anuhsljrgek2goacrkckfhkxhedqym7qggptmctcbcg5wrijqg7xhn6v7drq",
             "ocid1.instance.oc1.ap-hyderabad-1.anuhsljrgek2goacmb2j6gjpf63gphl7xhdc4izh4uakh6nlm5uw2pbwaguq",
+            "ocid1.instance.oc1.ap-hyderabad-1.anuhsljrgek2goacz5owemazyq72tfqdriutkqsv4k4arluim2mt223sknfq",
+            "ocid1.instance.oc1.ap-hyderabad-1.anuhsljrgek2goacdkqloulenb33an5dw6aj4fro4wbt7dplrt22v43vpyqa",
+            "ocid1.instance.oc1.ap-hyderabad-1.anuhsljrgek2goacf74slght5m37vsh54tdyyfhm2ukebicmx5du2deywo3a",
+            "ocid1.instance.oc1.ap-hyderabad-1.anuhsljrgek2goacoy7zvi6n667lc5cru636x3syhzpzuwmrhnlklybla5qa",
         )
         variables = (ROOT / "terraform/environments/production/oci-runtime-images/variables.tf").read_text(encoding="utf-8")
         docs = "\n".join(
@@ -137,17 +153,18 @@ class BuilderMetadataTests(unittest.TestCase):
         source = (ROOT / "terraform/environments/production/oci-runtime-builders/main.tf").read_text(encoding="utf-8")
         package_script = (ROOT / "terraform/scripts/package-oci-stack.sh").read_text(encoding="utf-8")
         self.assertIn('deployment       = "${path.module}/../../../../deployment"', source)
+        self.assertIn('checkers         = "${path.module}/../../../../checkers"', source)
         self.assertIn('hills            = "${path.module}/../../../../hills"', source)
         self.assertIn('"deployment/install.sh"', source)
         self.assertIn('"deployment/tests/run.sh"', source)
         self.assertIn('"hills/install.sh"', source)
         self.assertIn('"hills/tests/run.sh"', source)
-        self.assertIn("infra/deployment infra/hills infra/images/runtime", package_script)
+        self.assertIn("infra/archive infra/checkers infra/deployment infra/hills infra/images/runtime", package_script)
 
     def test_builder_packages_include_the_archive_client(self):
         package_script = (ROOT / "terraform/scripts/package-oci-stack.sh").read_text(encoding="utf-8")
         self.assertIn("oci-gateway-builder) PATHS+=(infra/archive infra/images/router", package_script)
-        self.assertIn("oci-runtime-builders) PATHS+=(infra/archive infra/deployment", package_script)
+        self.assertIn("oci-runtime-builders) PATHS+=(infra/archive infra/checkers infra/deployment", package_script)
 
     def test_runtime_builder_replaces_for_par_and_user_data_changes(self):
         source = (ROOT / "terraform/environments/production/oci-runtime-builders/main.tf").read_text(encoding="utf-8")

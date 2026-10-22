@@ -23,7 +23,7 @@ systemctl is-enabled apt-daily-upgrade.timer | grep -Fxq masked
 
 if [[ $role == workbench ]]; then
   for command in cargo clang cmake gdb go node npm rg rustc tmux; do
-    command -v "$command" >/dev/null
+    command -v "$command" >/dev/null || { echo "missing required workbench command: $command" >&2; exit 1; }
   done
   id -nG ubuntu | tr ' ' '\n' | grep -Fxq docker
 else
