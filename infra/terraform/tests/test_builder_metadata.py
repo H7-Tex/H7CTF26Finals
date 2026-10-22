@@ -194,6 +194,10 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn("oci-gateway-builder) PATHS+=(infra/archive infra/images/router", package_script)
         self.assertIn("oci-runtime-builders) PATHS+=(infra/archive infra/checkers infra/deployment", package_script)
 
+    def test_ingress_package_includes_router_cloud_init(self):
+        package_script = (ROOT / "terraform/scripts/package-oci-stack.sh").read_text(encoding="utf-8")
+        self.assertIn("oci-ingress) PATHS+=(infra/images/router)", package_script)
+
     def test_runtime_builder_replaces_for_par_and_user_data_changes(self):
         source = (ROOT / "terraform/environments/production/oci-runtime-builders/main.tf").read_text(encoding="utf-8")
         self.assertIn('resource "terraform_data" "builder_generation"', source)

@@ -25,6 +25,7 @@ PATHS=(infra/terraform)
 
 case "$STACK" in
   oci-gateway-builder) PATHS+=(infra/archive infra/images/router infra/platform infra/secrets infra/volumes) ;;
+  oci-ingress) PATHS+=(infra/images/router) ;;
   oci-runtime-builders) PATHS+=(infra/archive infra/checkers infra/deployment infra/hills infra/images/runtime infra/platform infra/reconciler infra/secrets infra/volumes) ;;
 esac
 
