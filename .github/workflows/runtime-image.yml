@@ -1,0 +1,27 @@
+name: Runtime image checks
+
+on:
+  pull_request:
+    paths:
+      - "infra/images/runtime/**"
+      - "infra/terraform/environments/production/oci-runtime-builders/**"
+      - "infra/terraform/environments/production/oci-runtime-images/**"
+      - ".github/workflows/runtime-image.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "infra/images/runtime/**"
+      - "infra/terraform/environments/production/oci-runtime-builders/**"
+      - "infra/terraform/environments/production/oci-runtime-images/**"
+      - ".github/workflows/runtime-image.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  static:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: infra/images/runtime/tests/static.sh

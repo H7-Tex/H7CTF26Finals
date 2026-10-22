@@ -1,0 +1,8 @@
+[Unit]
+Description=Seal the tested runtime image
+After=cloud-final.service
+ConditionPathExists=/run/runtime-image-ready
+
+[Service]
+Type=oneshot
+ExecStart=/opt/runtime-image/seal-image

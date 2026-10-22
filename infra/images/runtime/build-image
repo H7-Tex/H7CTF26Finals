@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+[[ $EUID -eq 0 ]] || { echo "must run as root" >&2; exit 1; }
+role=${1:-}
+source_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
+"$source_dir/install.sh" "$role"
+"$source_dir/tests/run.sh" "$role"
+install -D -m 0644 "$source_dir/runtime-image-seal.service" /etc/systemd/system/runtime-image-seal.service
+touch /run/runtime-image-ready
+systemctl daemon-reload
+systemctl start --no-block runtime-image-seal.service

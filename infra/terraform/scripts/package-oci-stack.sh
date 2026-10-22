@@ -6,9 +6,9 @@ STACK=${1:-}
 REVISION=${2:-HEAD}
 
 case "$STACK" in
-  oci-addresses | oci-foundation | oci-gateway-builder | oci-gateway-image | oci-ingress | oci-platform | oci-fleet) ;;
+  oci-addresses | oci-foundation | oci-gateway-builder | oci-gateway-image | oci-ingress | oci-platform | oci-fleet | oci-runtime-builders | oci-runtime-images) ;;
   *)
-    echo "usage: $0 {oci-addresses|oci-foundation|oci-gateway-builder|oci-gateway-image|oci-ingress|oci-platform|oci-fleet} [git-revision]" >&2
+    echo "usage: $0 {oci-addresses|oci-foundation|oci-gateway-builder|oci-gateway-image|oci-ingress|oci-platform|oci-fleet|oci-runtime-builders|oci-runtime-images} [git-revision]" >&2
     exit 2
     ;;
 esac
@@ -21,9 +21,10 @@ TEMP_DIR=$(mktemp -d)
 trap 'rm -rf "$TEMP_DIR"' EXIT
 PATHS=(infra/terraform)
 
-if [[ $STACK == oci-gateway-builder ]]; then
-  PATHS+=(infra/images/router)
-fi
+case "$STACK" in
+  oci-gateway-builder) PATHS+=(infra/images/router) ;;
+  oci-runtime-builders) PATHS+=(infra/images/runtime) ;;
+esac
 
 mkdir -p "$OUTPUT_DIR"
 git -C "$ROOT" archive --format=zip --output "$TEMP_DIR/stack.zip" "$COMMIT" "${PATHS[@]}"

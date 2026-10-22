@@ -1,0 +1,9 @@
+region         = "ap-hyderabad-1"
+compartment_id = "ocid1.compartment.oc1..replace-me"
+builder_instance_ids = {
+  platform-x86 = "ocid1.instance.oc1.ap-hyderabad-1.replace-me"
+  platform-arm = "ocid1.instance.oc1.ap-hyderabad-1.replace-me"
+  production   = "ocid1.instance.oc1.ap-hyderabad-1.replace-me"
+  workbench    = "ocid1.instance.oc1.ap-hyderabad-1.replace-me"
+}
+source_revision = "replace-with-full-reviewed-git-commit"
