@@ -97,7 +97,7 @@ check "bootstrap_metadata_limit" {
 check "fixed_payload_paths" {
   assert {
     condition = (
-      alltrue([for file in local.files : can(regex("^[A-Za-z0-9._/-]+$", file.path)) && !contains(split("/", file.path), "..")]) &&
+      alltrue([for file in local.files : can(regex("^[A-Za-z0-9._/@-]+$", file.path)) && !contains(split("/", file.path), "..")]) &&
       length(distinct([for file in local.files : file.path])) == length(local.files)
     )
     error_message = "Gateway build payload paths must be unique, relative repository paths with a fixed safe character set."

@@ -192,6 +192,7 @@ class BuilderMetadataTests(unittest.TestCase):
             self.assertIn('length(local.bootstrap_user_data', source)
             self.assertIn('var.source_revision == local.packaged_source_revision', source)
             self.assertIn('replace_triggered_by', source)
+            self.assertIn('regex("^[A-Za-z0-9._/@-]+$", file.path)', source)
 
     def test_long_lived_compute_addresses_and_storage_are_guarded(self):
         storage = (ROOT / "terraform/modules/oci-storage/main.tf").read_text(encoding="utf-8")
