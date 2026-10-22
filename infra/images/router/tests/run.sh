@@ -21,6 +21,7 @@ bash -n \
   "$ROUTER_DIR/tests/network_namespace.sh"
 python3 -m unittest discover -s "$ROUTER_DIR/tests" -p 'test_*.py'
 grep -Fq 'rm -f /etc/ssh/ssh_host_*' "$ROUTER_DIR/seal-image"
+grep -Fq 'apt-get -o DPkg::Lock::Timeout=120 clean' "$ROUTER_DIR/seal-image"
 grep -Fq "dpkg-query -W" "$ROUTER_DIR/seal-image"
 grep -Fq 'package_manifest_sha256' "$ROUTER_DIR/seal-image"
 grep -Fq 'ssh_deletekeys: true' "$ROUTER_DIR/cloud-init.yaml"

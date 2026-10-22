@@ -94,7 +94,7 @@ if [[ $role == production ]]; then
 
   phase=production-cleanup
   record_phase started
-  timeout --signal=TERM --kill-after=30s 15m apt-get purge --yes --auto-remove build-essential golang-go
+  timeout --signal=TERM --kill-after=30s 15m apt-get purge --yes --auto-remove build-essential golang-go gcc
   rm -rf /var/cache/finals-image-builder /root/.cache/go-build /root/go
   record_phase passed
 fi

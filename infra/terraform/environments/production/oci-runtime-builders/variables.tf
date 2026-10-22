@@ -57,8 +57,8 @@ variable "anvil_revision" {
   type        = string
 
   validation {
-    condition     = var.anvil_revision == "7e202e9594e2ccbdf4ef592529765f17ca60ccec"
-    error_message = "anvil_revision must be the reviewed Anvil v0.359.0 commit 7e202e9594e2ccbdf4ef592529765f17ca60ccec."
+    condition     = var.anvil_revision == "2385596058c0d861981132572f9b3359f0a8a869"
+    error_message = "anvil_revision must be the reviewed Anvil v0.360.0 commit 2385596058c0d861981132572f9b3359f0a8a869."
   }
 }
 

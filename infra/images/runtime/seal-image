@@ -54,7 +54,8 @@ record_phase passed
 phase=cleanup
 record_phase started
 logger --tag runtime-image-seal -- "package_manifest_sha256=$package_sha"
-apt-get clean
+systemctl stop apt-daily.service apt-daily-upgrade.service update-notifier-download.service || true
+timeout --signal=TERM --kill-after=5s 2m apt-get -o DPkg::Lock::Timeout=120 clean
 find /var/lib/apt/lists -mindepth 1 -delete
 journalctl --rotate
 journalctl --vacuum-time=1s
