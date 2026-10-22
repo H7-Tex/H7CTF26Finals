@@ -6,3 +6,5 @@ ConditionPathExists=/run/runtime-image-ready
 [Service]
 Type=oneshot
 ExecStart=/opt/runtime-image/seal-image
+StandardOutput=journal+console
+StandardError=journal+console

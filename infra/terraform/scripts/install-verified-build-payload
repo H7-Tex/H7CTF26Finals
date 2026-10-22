@@ -1,10 +1,24 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 
 expected_size=${1:-}
 expected_sha256=${2:-}
 destination=${3:-}
 url_file=/run/finals-builder-source.url
+phase=validate
+
+record_phase() {
+  logger --stderr --tag finals-image-builder -- "phase=$phase status=$1"
+}
+
+record_failure() {
+  status=$?
+  trap - ERR
+  logger --stderr --tag finals-image-builder -- "phase=$phase status=failed exit=$status line=${BASH_LINENO[0]:-0}"
+  exit "$status"
+}
+
+trap record_failure ERR
 
 [[ $EUID -eq 0 ]] || { echo "verified build installer must run as root" >&2; exit 1; }
 [[ $expected_size =~ ^[1-9][0-9]{0,8}$ ]] || { echo "source size is invalid" >&2; exit 2; }
@@ -13,10 +27,13 @@ url_file=/run/finals-builder-source.url
 [[ -f $url_file && $(stat -c '%a' "$url_file") == 600 ]] || { echo "private source URL is missing or exposed" >&2; exit 1; }
 url=$(<"$url_file")
 [[ $url =~ ^https://objectstorage\.ap-hyderabad-1\.oraclecloud\.com/p/[A-Za-z0-9._~%/-]+$ ]] || { echo "private source URL is invalid" >&2; exit 1; }
+record_phase passed
 
 umask 077
 temporary=$(mktemp /run/.finals-builder-payload.XXXXXX)
 trap 'rm -f -- "$temporary" "$destination" "$url_file"' EXIT
+phase=download
+record_phase started
 (
   ulimit -f "$(( (expected_size + 511) / 512 ))"
   printf 'url = "%s"\n' "$url" | curl \
@@ -26,15 +43,25 @@ trap 'rm -f -- "$temporary" "$destination" "$url_file"' EXIT
     --fail \
     --silent \
     --show-error \
+    --connect-timeout 10 \
+    --max-time 120 \
     --retry 3 \
     --retry-all-errors \
     --max-filesize "$expected_size" \
     --output "$temporary"
 )
+record_phase passed
+phase=verify
+record_phase started
 [[ $(stat -c '%s' "$temporary") == "$expected_size" ]] || { echo "source size mismatch" >&2; exit 1; }
 printf '%s  %s\n' "$expected_sha256" "$temporary" | sha256sum --check --status || { echo "source digest mismatch" >&2; exit 1; }
 chmod 0500 "$temporary"
 mv "$temporary" "$destination"
+record_phase passed
+phase=execute
+record_phase started
 "$destination"
+record_phase passed
 rm -f -- "$destination" "$url_file"
 trap - EXIT
+trap - ERR

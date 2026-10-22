@@ -1,6 +1,18 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 umask 022
+source_revision='${source_revision}'
+phase=payload
+
+record_failure() {
+  status=$?
+  trap - ERR
+  logger --stderr --tag gateway-image-build -- "source_revision=$source_revision phase=$phase status=failed exit=$status line=$${BASH_LINENO[0]:-0}"
+  exit "$status"
+}
+
+trap record_failure ERR
+logger --stderr --tag gateway-image-build -- "source_revision=$source_revision phase=$phase status=started"
 install -d -o root -g root -m 0755 /opt/gateway-image
 %{ for file in files ~}
 install -D -o root -g root -m '${file.permissions}' /dev/null '/opt/gateway-image/${file.path}'
@@ -8,4 +20,8 @@ base64 --decode > '/opt/gateway-image/${file.path}' <<'__FINALS_B64__'
 ${file.content_base64}
 __FINALS_B64__
 %{ endfor ~}
-/opt/gateway-image/build-image
+phase=build
+logger --stderr --tag gateway-image-build -- "source_revision=$source_revision phase=$phase status=started deadline=15m"
+timeout --signal=TERM --kill-after=30s 15m /opt/gateway-image/build-image
+logger --stderr --tag gateway-image-build -- "source_revision=$source_revision phase=$phase status=passed"
+trap - ERR

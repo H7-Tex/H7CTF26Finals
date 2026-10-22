@@ -1,6 +1,19 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 umask 022
+source_revision='${source_revision}'
+role='${role}'
+phase=payload
+
+record_failure() {
+  status=$?
+  trap - ERR
+  logger --stderr --tag runtime-image-build -- "source_revision=$source_revision role=$role phase=$phase status=failed exit=$status line=$${BASH_LINENO[0]:-0}"
+  exit "$status"
+}
+
+trap record_failure ERR
+logger --stderr --tag runtime-image-build -- "source_revision=$source_revision role=$role phase=$phase status=started"
 install -d -o root -g root -m 0755 /opt/runtime-image
 %{ for file in files ~}
 install -D -o root -g root -m '${file.permissions}' /dev/null '/opt/runtime-image/${file.path}'
@@ -8,4 +21,8 @@ base64 --decode > '/opt/runtime-image/${file.path}' <<'__FINALS_B64__'
 ${file.content_base64}
 __FINALS_B64__
 %{ endfor ~}
-/opt/runtime-image/build-image '${role}' '${anvil_revision}'
+phase=build
+logger --stderr --tag runtime-image-build -- "source_revision=$source_revision role=$role phase=$phase status=started deadline=90m"
+timeout --signal=TERM --kill-after=30s 90m /opt/runtime-image/build-image "$role" '${anvil_revision}'
+logger --stderr --tag runtime-image-build -- "source_revision=$source_revision role=$role phase=$phase status=passed"
+trap - ERR

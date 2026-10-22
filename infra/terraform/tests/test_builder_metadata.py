@@ -36,6 +36,9 @@ class BuilderMetadataTests(unittest.TestCase):
         for template_path in TEMPLATES:
             content = template_path.read_text(encoding="utf-8")
             self.assertIn("install-verified-build-payload", content)
+            self.assertIn('all: "| tee -a /var/log/cloud-init-output.log /dev/console"', content)
+            self.assertEqual(content.count("${source_url_json}"), 1)
+            self.assertNotIn("${source_url_json}", content.split("runcmd:", 1)[1])
             self.assertNotIn("/opt/finals-platform", content)
             self.assertNotIn("secret-bootstrap", content)
             self.assertNotIn("cloud-init single", content)
@@ -44,7 +47,56 @@ class BuilderMetadataTests(unittest.TestCase):
         installer = INSTALLER.read_text(encoding="utf-8")
         self.assertIn('ulimit -f "$(( (expected_size + 511) / 512 ))"', installer)
         self.assertIn('--max-filesize "$expected_size"', installer)
+        self.assertIn("--connect-timeout 10", installer)
+        self.assertIn("--max-time 120", installer)
         self.assertIn('sha256sum --check --status', installer)
+        self.assertIn("trap record_failure ERR", installer)
+        for phase in ("download", "verify", "execute"):
+            self.assertIn(f"phase={phase}", installer)
+
+    def test_builder_payloads_have_overall_deadlines_and_failure_evidence(self):
+        payloads = {
+            "oci-gateway-builder": "15m",
+            "oci-runtime-builders": "90m",
+        }
+        for root, deadline in payloads.items():
+            payload = (ROOT / f"terraform/environments/production/{root}/build-payload.tftpl").read_text(encoding="utf-8")
+            source = (ROOT / f"terraform/environments/production/{root}/main.tf").read_text(encoding="utf-8")
+            self.assertIn("source_revision='${source_revision}'", payload)
+            self.assertIn("trap record_failure ERR", payload)
+            self.assertIn(f"deadline={deadline}", payload)
+            self.assertIn(f"timeout --signal=TERM --kill-after=30s {deadline}", payload)
+            self.assertIn("source_revision = var.source_revision", source)
+
+    def test_image_builds_have_bounded_phases_and_serial_evidence(self):
+        gateway = (ROOT / "images/router/build-image").read_text(encoding="utf-8")
+        runtime = (ROOT / "images/runtime/build-image").read_text(encoding="utf-8")
+        for source in (gateway, runtime):
+            self.assertIn("trap record_failure ERR", source)
+            self.assertIn("logger --stderr", source)
+            self.assertIn('timeout --signal=TERM --kill-after=30s "$deadline" "$@"', source)
+            self.assertIn("phase=seal-schedule", source)
+        for phase in ("secret-tests", "volume-tests", "router-tests"):
+            self.assertIn(f"run_phase {phase} 5m", gateway)
+        for phase in ("deployment-tests", "platform-tests", "checker-tests", "runtime-tests"):
+            self.assertIn(f"run_phase {phase} 10m", runtime)
+
+    def test_seal_success_binds_revision_and_package_manifest_before_poweroff(self):
+        images = (
+            (ROOT / "images/router/seal-image", ROOT / "images/router/gateway-image-seal.service"),
+            (ROOT / "images/runtime/seal-image", ROOT / "images/runtime/runtime-image-seal.service"),
+        )
+        for script_path, unit_path in images:
+            script = script_path.read_text(encoding="utf-8")
+            success = "package_manifest_sha256=$package_sha phase=$phase status=success"
+            self.assertIn("source_revision=$source_revision", script)
+            self.assertIn(success, script)
+            self.assertGreater(script.index(success), script.index("cloud-init clean --logs --machine-id"))
+            self.assertLess(script.index(success), script.index("systemctl poweroff"))
+            self.assertIn("trap record_failure ERR", script)
+            unit = unit_path.read_text(encoding="utf-8")
+            self.assertIn("StandardOutput=journal+console", unit)
+            self.assertIn("StandardError=journal+console", unit)
 
     def test_gateway_bootstrap_installs_router_prerequisites(self):
         template = TEMPLATES[0].read_text(encoding="utf-8")
@@ -173,14 +225,18 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn("workbench_numbers                  = var.workbench_numbers", root)
 
     def test_obsolete_gateway_image_and_plan_are_prohibited(self):
+        failed_builder = "ocid1.instance.oc1.ap-hyderabad-1.anuhsljrgek2goaceebogxa47rg74d6izhqorb2dgnjjlfsv7gupjwbevyva"
         docs = "\n".join(
             (ROOT / f"terraform/environments/production/{root}/README.md").read_text(encoding="utf-8")
             for root in ("oci-gateway-builder", "oci-gateway-image")
         )
         self.assertIn("gateway-5095652d3d90", docs)
         self.assertIn("11bdcffc06c9d4d0b6f08a58b0cf34e6f1aa0d1f", docs)
+        self.assertIn(failed_builder, docs)
         self.assertGreaterEqual(docs.count("prohibited"), 2)
         self.assertGreaterEqual(docs.count("router-image"), 2)
+        capture_variables = (ROOT / "terraform/environments/production/oci-gateway-image/variables.tf").read_text(encoding="utf-8")
+        self.assertIn(f'var.builder_instance_id != "{failed_builder}"', capture_variables)
 
 
 if __name__ == "__main__":

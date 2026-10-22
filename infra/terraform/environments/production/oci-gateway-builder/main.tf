@@ -59,7 +59,10 @@ locals {
       source_revision = var.source_revision
     }))
   }])
-  build_payload  = templatefile("${path.module}/build-payload.tftpl", { files = local.files })
+  build_payload = templatefile("${path.module}/build-payload.tftpl", {
+    files           = local.files
+    source_revision = var.source_revision
+  })
   payload_base64 = base64encode(local.build_payload)
   payload_size   = (length(local.payload_base64) / 4 * 3) - (endswith(local.payload_base64, "==") ? 2 : endswith(local.payload_base64, "=") ? 1 : 0)
   bootstrap_user_data = base64gzip(templatefile("${path.module}/bootstrap-cloud-init.tftpl", {

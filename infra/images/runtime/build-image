@@ -1,16 +1,57 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 
 [[ $EUID -eq 0 ]] || { echo "must run as root" >&2; exit 1; }
 role=${1:-}
 anvil_revision=${2:-}
 source_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+source_revision=unknown
+phase=provenance
 
-"$source_dir/install.sh" "$role"
+record_phase() {
+  logger --stderr --tag runtime-image-build -- "source_revision=$source_revision role=$role phase=$phase status=$1${2:+ deadline=$2}"
+}
+
+record_failure() {
+  status=$?
+  trap - ERR
+  logger --stderr --tag runtime-image-build -- "source_revision=$source_revision role=$role phase=$phase status=failed exit=$status line=${BASH_LINENO[0]:-0}"
+  exit "$status"
+}
+
+run_phase() {
+  phase=$1
+  deadline=$2
+  shift 2
+  record_phase started "$deadline"
+  timeout --signal=TERM --kill-after=30s "$deadline" "$@"
+  record_phase passed
+}
+
+trap record_failure ERR
+source_revision=$(python3 - "$source_dir/image-manifest.json" <<'PY'
+import json
+import re
+import sys
+
+value = json.load(open(sys.argv[1], encoding="utf-8")).get("source_revision")
+if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{40}", value) is None:
+    raise SystemExit("invalid image source revision")
+print(value)
+PY
+)
+record_phase passed
+
+run_phase base-install 45m "$source_dir/install.sh" "$role"
 if [[ $role == production ]]; then
+  phase=production-dependencies
+  record_phase started
   export DEBIAN_FRONTEND=noninteractive
-  apt-get install --yes --no-install-recommends build-essential golang-go
-  "$source_dir/deployment/tests/run.sh"
+  timeout --signal=TERM --kill-after=30s 15m apt-get install --yes --no-install-recommends build-essential golang-go
+  record_phase passed
+  run_phase deployment-tests 10m "$source_dir/deployment/tests/run.sh"
+  phase=deployment-binaries
+  record_phase started
   deployment_build_dir=$(mktemp -d)
   (
     cd "$source_dir/deployment"
@@ -26,12 +67,18 @@ if [[ $role == production ]]; then
     "$deployment_build_dir/executor" \
     "$deployment_build_dir/deployment-orchestrator-state"
   rm -rf "$deployment_build_dir"
+  record_phase passed
 
+  phase=production-files
+  record_phase started
   install -D -m 0755 "$source_dir/volumes/initialize-volume.py" /usr/local/sbin/finals-initialize-volume
   install -D -m 0755 "$source_dir/volumes/rehearse-production-quota" /usr/local/sbin/finals-rehearse-production-quota
   install -D -m 0644 "$source_dir/volumes/finals-volume@.service" /etc/systemd/system/finals-volume@.service
   install -D -m 0644 "$source_dir/volumes/docker-production.conf" /etc/systemd/system/docker.service.d/90-production-volume.conf
-  "$source_dir/volumes/tests/run.sh"
+  record_phase passed
+  run_phase volume-tests 10m "$source_dir/volumes/tests/run.sh"
+  phase=production-policy
+  record_phase started
   systemctl enable finals-volume@production.service
 
   install -D -m 0755 "$source_dir/platform/rootfs/usr/local/libexec/finals-platform/firewall" /usr/local/libexec/finals-platform/firewall
@@ -40,31 +87,42 @@ if [[ $role == production ]]; then
   printf '{"role":"production"}\n' > /etc/finals-platform/role
   grep -Eq '^10\.60\.200\.10[[:space:]]+finals\.h7tex\.com([[:space:]]|$)' /etc/hosts || printf '10.60.200.10 finals.h7tex.com\n' >> /etc/hosts
   systemctl enable finals-host-firewall.service
+  record_phase passed
 
-  apt-get purge --yes --auto-remove build-essential golang-go
+  phase=production-cleanup
+  record_phase started
+  timeout --signal=TERM --kill-after=30s 15m apt-get purge --yes --auto-remove build-essential golang-go
   rm -rf /root/.cache/go-build /root/go
+  record_phase passed
 fi
 if [[ $role == platform-x86 || $role == platform-arm ]]; then
-  "$source_dir/archive/install.sh"
+  run_phase archive-install 10m "$source_dir/archive/install.sh"
+  phase=platform-files
+  record_phase started
   install -D -m 0755 "$source_dir/secret-bootstrap/install-secret-bundle.py" /usr/local/sbin/finals-install-secret-bundle
   install -D -m 0755 "$source_dir/secret-bootstrap/finals-secret-relay-receive" /usr/local/sbin/finals-secret-relay-receive
   install -D -m 0755 "$source_dir/volumes/initialize-volume.py" /usr/local/sbin/finals-initialize-volume
   install -D -m 0644 "$source_dir/volumes/finals-volume@.service" /etc/systemd/system/finals-volume@.service
-  "$source_dir/reconciler/install.sh"
+  record_phase passed
+  run_phase reconciler-install 10m "$source_dir/reconciler/install.sh"
   if [[ $role == platform-x86 ]]; then
-    "$source_dir/checkers/install.sh"
+    run_phase checker-install 10m "$source_dir/checkers/install.sh"
   fi
-  "$source_dir/platform/install.sh" "$role" "$anvil_revision"
-  "$source_dir/secret-bootstrap/tests/run.sh"
-  "$source_dir/volumes/tests/run.sh"
-  "$source_dir/platform/tests/run.sh"
-  "$source_dir/archive/tests/run.sh"
+  run_phase platform-install 45m "$source_dir/platform/install.sh" "$role" "$anvil_revision"
+  run_phase secret-tests 10m "$source_dir/secret-bootstrap/tests/run.sh"
+  run_phase volume-tests 10m "$source_dir/volumes/tests/run.sh"
+  run_phase platform-tests 10m "$source_dir/platform/tests/run.sh"
+  run_phase archive-tests 10m "$source_dir/archive/tests/run.sh"
   if [[ $role == platform-x86 ]]; then
-    "$source_dir/checkers/tests/run.sh"
+    run_phase checker-tests 10m "$source_dir/checkers/tests/run.sh"
   fi
 fi
-"$source_dir/tests/run.sh" "$role"
+run_phase runtime-tests 10m "$source_dir/tests/run.sh" "$role"
+phase=seal-schedule
+record_phase started
 install -D -m 0644 "$source_dir/runtime-image-seal.service" /etc/systemd/system/runtime-image-seal.service
 touch /run/runtime-image-ready
 systemctl daemon-reload
 systemctl start --no-block runtime-image-seal.service
+record_phase passed
+trap - ERR

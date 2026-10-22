@@ -1,21 +1,64 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 
 [[ $EUID -eq 0 ]] || { echo "must run as root" >&2; exit 1; }
 source_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+source_revision=unknown
+phase=provenance
 
-"$source_dir/install.sh"
-"$source_dir/archive/install.sh"
+record_phase() {
+  logger --stderr --tag gateway-image-build -- "source_revision=$source_revision phase=$phase status=$1${2:+ deadline=$2}"
+}
+
+record_failure() {
+  status=$?
+  trap - ERR
+  logger --stderr --tag gateway-image-build -- "source_revision=$source_revision phase=$phase status=failed exit=$status line=${BASH_LINENO[0]:-0}"
+  exit "$status"
+}
+
+run_phase() {
+  phase=$1
+  deadline=$2
+  shift 2
+  record_phase started "$deadline"
+  timeout --signal=TERM --kill-after=30s "$deadline" "$@"
+  record_phase passed
+}
+
+trap record_failure ERR
+source_revision=$(python3 - "$source_dir/image-manifest.json" <<'PY'
+import json
+import re
+import sys
+
+value = json.load(open(sys.argv[1], encoding="utf-8")).get("source_revision")
+if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{40}", value) is None:
+    raise SystemExit("invalid image source revision")
+print(value)
+PY
+)
+record_phase passed
+
+run_phase install 5m "$source_dir/install.sh"
+run_phase archive-install 5m "$source_dir/archive/install.sh"
+phase=tool-install
+record_phase started
 install -D -m 0755 "$source_dir/secret-bootstrap/install-secret-bundle.py" /usr/local/sbin/finals-install-secret-bundle
 install -D -m 0755 "$source_dir/secret-bootstrap/finals-secret-relay-receive" /usr/local/sbin/finals-secret-relay-receive
 install -D -m 0755 "$source_dir/volumes/initialize-volume.py" /usr/local/sbin/finals-initialize-volume
 install -D -m 0644 "$source_dir/volumes/finals-volume@.service" /etc/systemd/system/finals-volume@.service
 install -D -m 0755 "$source_dir/platform/finals-host-recipient" /usr/local/sbin/finals-host-recipient
-"$source_dir/secret-bootstrap/tests/run.sh"
-"$source_dir/volumes/tests/run.sh"
-"$source_dir/archive/tests/run.sh"
-"$source_dir/tests/run.sh"
+record_phase passed
+run_phase secret-tests 5m "$source_dir/secret-bootstrap/tests/run.sh"
+run_phase volume-tests 5m "$source_dir/volumes/tests/run.sh"
+run_phase archive-tests 5m "$source_dir/archive/tests/run.sh"
+run_phase router-tests 5m "$source_dir/tests/run.sh"
+phase=seal-schedule
+record_phase started
 install -D -m 0644 "$source_dir/gateway-image-seal.service" /etc/systemd/system/gateway-image-seal.service
 touch /run/gateway-image-ready
 systemctl daemon-reload
 systemctl start --no-block gateway-image-seal.service
+record_phase passed
+trap - ERR

@@ -98,9 +98,10 @@ locals {
   }
   build_payload = {
     for role in keys(local.profiles) : role => templatefile("${path.module}/build-payload.tftpl", {
-      anvil_revision = var.anvil_revision
-      files          = local.payload_files[role]
-      role           = role
+      anvil_revision  = var.anvil_revision
+      files           = local.payload_files[role]
+      role            = role
+      source_revision = var.source_revision
     })
   }
   expanded_base64 = {

@@ -1,29 +1,54 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 
 [[ $EUID -eq 0 ]] || { echo "must run as root" >&2; exit 1; }
 source_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+source_revision=unknown
+phase=manifest
+
+record_phase() {
+  logger --stderr --tag gateway-image-seal -- "source_revision=$source_revision phase=$phase status=$1"
+}
+
+record_failure() {
+  status=$?
+  trap - ERR
+  logger --stderr --tag gateway-image-seal -- "source_revision=$source_revision phase=$phase status=failed exit=$status line=${BASH_LINENO[0]:-0}"
+  exit "$status"
+}
+
+trap record_failure ERR
+record_phase started
 
 install -D -m 0644 "$source_dir/image-manifest.json" /etc/event-router/image-manifest.json
 package_manifest=/etc/event-router/image-packages.tsv
 dpkg-query -W -f='${binary:Package}\t${Version}\t${Architecture}\t${db:Status-Abbrev}\n' | LC_ALL=C sort > "$package_manifest"
 package_sha=$(sha256sum "$package_manifest" | awk '{print $1}')
 printf '%s\n' "$package_sha" > /etc/event-router/image-packages.sha256
-python3 - "$package_sha" <<'PY'
+source_revision=$(python3 - "$package_sha" <<'PY'
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
 path = Path("/etc/event-router/image-manifest.json")
 document = json.loads(path.read_text(encoding="utf-8"))
+source_revision = document.get("source_revision")
+if not isinstance(source_revision, str) or re.fullmatch(r"[0-9a-f]{40}", source_revision) is None:
+    raise SystemExit("invalid image source revision")
 document["package_manifest"] = "/etc/event-router/image-packages.tsv"
 document["package_manifest_sha256"] = sys.argv[1]
 temporary = path.with_name(".image-manifest.json.tmp")
 temporary.write_text(json.dumps(document, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
 os.chmod(temporary, 0o644)
 os.replace(temporary, path)
+print(source_revision)
 PY
+)
+record_phase passed
+phase=cleanup
+record_phase started
 logger --tag gateway-image-seal -- "package_manifest_sha256=$package_sha"
 apt-get clean
 find /var/lib/apt/lists -mindepth 1 -delete
@@ -31,4 +56,8 @@ rm -f /etc/ssh/ssh_host_*
 unlink /etc/systemd/system/gateway-image-seal.service
 find "$source_dir" -mindepth 1 -delete
 cloud-init clean --logs --machine-id
+record_phase passed
+phase=seal
+logger --stderr --tag gateway-image-seal -- "source_revision=$source_revision package_manifest_sha256=$package_sha phase=$phase status=success"
+trap - ERR
 systemctl poweroff
