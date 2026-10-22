@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)
-RULESET="$ROOT/infra/images/router/rootfs/etc/nftables.conf"
-ADDRESS_TOOL="$ROOT/infra/images/router/rootfs/usr/local/sbin/event-router-addresses"
+ROUTER_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+RULESET="$ROUTER_DIR/rootfs/etc/nftables.conf"
+ADDRESS_TOOL="$ROUTER_DIR/rootfs/usr/local/sbin/event-router-addresses"
 
 if [[ ${EVENT_ROUTER_TEST_NAMESPACE:-0} != 1 ]]; then
   if [[ $EUID -eq 0 ]]; then
@@ -101,16 +101,40 @@ spawn_namespace
 PEER_PID=$SPAWNED_PID
 spawn_namespace
 WORKBENCH_PID=$SPAWNED_PID
+spawn_namespace
+WORKBENCH_TWO_PID=$SPAWNED_PID
+spawn_namespace
+PRODUCTION_PID=$SPAWNED_PID
+spawn_namespace
+PRODUCTION_TWO_PID=$SPAWNED_PID
+spawn_namespace
+CORE_PID=$SPAWNED_PID
+spawn_namespace
+MIRROR_PID=$SPAWNED_PID
 
 attach wan-r wan-c "$WAN_PID" 192.0.2.1/24 192.0.2.2/24
 attach lan-r lan-c "$LAN_PID" 10.60.200.1/24 10.60.200.10/24
 attach wg0 peer-c "$PEER_PID" 10.80.255.1/16 10.80.1.200/16
 attach wb-r wb-c "$WORKBENCH_PID" 10.61.1.1/24 10.61.1.2/24
+attach wb2-r wb2-c "$WORKBENCH_TWO_PID" 10.61.2.1/24 10.61.2.2/24
+attach prod-r prod-c "$PRODUCTION_PID" 10.60.1.1/24 10.60.1.2/24
+attach prod2-r prod2-c "$PRODUCTION_TWO_PID" 10.60.2.1/24 10.60.2.2/24
+attach core-r core-c "$CORE_PID" 10.60.201.1/24 10.60.201.20/24
+attach mirror-r mirror-c "$MIRROR_PID" 10.60.202.1/24 10.60.202.10/24
+
+nsenter --target "$LAN_PID" --net ip address add 10.60.200.5/24 dev lan-c
+nsenter --target "$PRODUCTION_PID" --net ip address add 10.60.1.3/24 dev prod-c
+nsenter --target "$CORE_PID" --net ip address add 10.60.201.30/24 dev core-c
 
 nsenter --target "$WAN_PID" --net ip route add default via 192.0.2.1
 nsenter --target "$LAN_PID" --net ip route add default via 10.60.200.1
 nsenter --target "$PEER_PID" --net ip route add default via 10.80.255.1
 nsenter --target "$WORKBENCH_PID" --net ip route add default via 10.61.1.1
+nsenter --target "$WORKBENCH_TWO_PID" --net ip route add default via 10.61.2.1
+nsenter --target "$PRODUCTION_PID" --net ip route add default via 10.60.1.1
+nsenter --target "$PRODUCTION_TWO_PID" --net ip route add default via 10.60.2.1
+nsenter --target "$CORE_PID" --net ip route add default via 10.60.201.1
+nsenter --target "$MIRROR_PID" --net ip route add default via 10.60.202.1
 
 EVENT_ROUTER_INTERFACE=wan-r "$ADDRESS_TOOL" active
 ip address show dev wan-r | grep -Fq '10.60.250.100/24'
@@ -123,6 +147,7 @@ sysctl -q -w net.ipv4.conf.all.rp_filter=0
 nft -f "$RULESET"
 nft add element inet event_router peer_addresses '{ 10.80.1.200 }'
 nft add element inet event_router peer_snat '{ 10.80.1.200 : 10.60.250.121 }'
+nft add element inet event_router peer_workbench_access '{ 10.80.1.200 . 10.61.1.2 }'
 
 start_udp_server self 10.60.250.100 443
 [[ $(udp_client "$WAN_PID" 10.60.250.100 443) == ok ]]
@@ -142,15 +167,69 @@ fi
 start_tcp_server "$LAN_PID" 10.60.200.10 443
 [[ $(tcp_client "$WAN_PID" 10.60.250.101 443) == 10.60.200.1 ]]
 
-start_tcp_server "$LAN_PID" 10.60.200.10 9000
-[[ $(tcp_client "$PEER_PID" 10.60.200.10 9000) == 10.60.250.121 ]]
+start_tcp_server "$LAN_PID" 10.60.200.10 443
+[[ $(tcp_client "$PEER_PID" 10.60.200.10 443) == 10.60.250.121 ]]
 
-start_tcp_server "$LAN_PID" 10.60.200.10 9001
-[[ $(tcp_client "$WORKBENCH_PID" 10.60.200.10 9001) == 10.60.250.121 ]]
+start_tcp_server "$PRODUCTION_PID" 10.60.1.2 7001
+[[ $(tcp_client "$PEER_PID" 10.60.1.2 7001) == 10.60.250.121 ]]
+
+start_tcp_server "$PRODUCTION_PID" 10.60.1.2 7002
+[[ $(tcp_client "$WORKBENCH_PID" 10.60.1.2 7002) == 10.60.250.121 ]]
+
+start_tcp_server "$WORKBENCH_PID" 10.61.1.2 2222
+[[ $(tcp_client "$PEER_PID" 10.61.1.2 2222) == 10.60.250.121 ]]
+
+start_tcp_server "$WORKBENCH_TWO_PID" 10.61.2.2 22
+if tcp_client "$PEER_PID" 10.61.2.2 22 >/dev/null 2>&1; then
+  echo "a peer reached another team's workbench" >&2
+  exit 1
+fi
+
+start_tcp_server "$CORE_PID" 10.60.201.20 443
+if tcp_client "$PEER_PID" 10.60.201.20 443 >/dev/null 2>&1; then
+  echo "a peer reached the checker control host" >&2
+  exit 1
+fi
+
+start_tcp_server "$LAN_PID" 10.60.200.5 22
+if tcp_client "$PEER_PID" 10.60.200.5 22 >/dev/null 2>&1; then
+  echo "a peer reached the operations host" >&2
+  exit 1
+fi
+
+start_tcp_server "$PRODUCTION_PID" 10.60.1.2 9100
+[[ $(tcp_client "$WORKBENCH_PID" 10.60.1.2 9100) == 10.60.250.121 ]]
+
+start_tcp_server "$PRODUCTION_TWO_PID" 10.60.2.2 9100
+if tcp_client "$WORKBENCH_PID" 10.60.2.2 9100 >/dev/null 2>&1; then
+  echo "a workbench reached another team's management endpoint" >&2
+  exit 1
+fi
+
+start_tcp_server "$PRODUCTION_PID" 10.60.1.2 7003
+[[ $(tcp_client "$CORE_PID" 10.60.1.2 7003 10.60.201.20) == 10.60.201.20 ]]
+
+start_tcp_server "$PRODUCTION_PID" 10.60.1.3 7004
+[[ $(tcp_client "$CORE_PID" 10.60.1.3 7004 10.60.201.20) == 10.60.201.20 ]]
+
+start_tcp_server "$PRODUCTION_PID" 10.60.1.2 9300
+[[ $(tcp_client "$CORE_PID" 10.60.1.2 9300 10.60.201.30) == 10.60.201.30 ]]
+
+start_tcp_server "$CORE_PID" 10.60.201.30 443
+[[ $(tcp_client "$PRODUCTION_PID" 10.60.201.30 443) == 10.60.1.2 ]]
+
+start_tcp_server "$MIRROR_PID" 10.60.202.10 5000
+[[ $(tcp_client "$PRODUCTION_PID" 10.60.202.10 5000) == 10.60.1.2 ]]
+
+start_tcp_server "$CORE_PID" 10.60.201.20 9300
+[[ $(tcp_client "$PRODUCTION_PID" 10.60.201.20 9300) == 10.60.1.2 ]]
+
+start_tcp_server "$LAN_PID" 10.60.200.10 443
+[[ $(tcp_client "$PRODUCTION_PID" 10.60.200.10 443) == 10.60.1.2 ]]
 
 nsenter --target "$PEER_PID" --net ip address add 10.80.2.200/16 dev peer-c
-start_tcp_server "$LAN_PID" 10.60.200.10 9002
-if tcp_client "$PEER_PID" 10.60.200.10 9002 10.80.2.200 >/dev/null 2>&1; then
+start_tcp_server "$PRODUCTION_PID" 10.60.1.2 7005
+if tcp_client "$PEER_PID" 10.60.1.2 7005 10.80.2.200 >/dev/null 2>&1; then
   echo "an unmapped peer address was forwarded" >&2
   exit 1
 fi

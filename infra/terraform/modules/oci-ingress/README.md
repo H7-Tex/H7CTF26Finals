@@ -7,6 +7,8 @@ This module assigns two floating private ingress addresses to one active gateway
 
 It also assigns `10.60.250.121-135` as private-only team attack-egress identities on the active VNIC. The independent `oci-addresses` stack remains the sole owner of the two reserved public IPs.
 
+The `routing_private_ip_id` output is the OCID of the floating VPN private IP. Foundation consumes it only after ingress exists, so static routes follow the same private-IP object during gateway failover.
+
 The OCI NSG is attached to the VNIC rather than an individual secondary IP, so it necessarily admits both UDP 443 and TCP 443 to that VNIC. The reviewed router image and its nftables acceptance test must enforce destination-IP separation before this module can be applied:
 
 ```nft

@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+[[ $EUID -eq 0 ]] || { echo "must run as root" >&2; exit 1; }
+source_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
+"$source_dir/install.sh"
+"$source_dir/tests/run.sh"
+install -D -m 0644 "$source_dir/gateway-image-seal.service" /etc/systemd/system/gateway-image-seal.service
+touch /run/gateway-image-ready
+systemctl daemon-reload
+systemctl start --no-block gateway-image-seal.service

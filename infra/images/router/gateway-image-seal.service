@@ -1,0 +1,8 @@
+[Unit]
+Description=Seal the tested gateway image
+After=cloud-final.service
+ConditionPathExists=/run/gateway-image-ready
+
+[Service]
+Type=oneshot
+ExecStart=/opt/gateway-image/seal-image

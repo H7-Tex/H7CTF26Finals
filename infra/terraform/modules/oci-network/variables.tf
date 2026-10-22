@@ -36,3 +36,14 @@ variable "enable_service_warmup_egress" {
   type        = bool
   default     = false
 }
+
+variable "routing_private_ip_id" {
+  description = "Optional floating gateway private-IP OCID used for intra-VCN routing."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.routing_private_ip_id == null || startswith(var.routing_private_ip_id, "ocid1.privateip.oc1.ap-hyderabad-1.")
+    error_message = "routing_private_ip_id must be null or a private-IP OCID in ap-hyderabad-1."
+  }
+}

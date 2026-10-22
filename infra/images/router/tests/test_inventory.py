@@ -40,6 +40,8 @@ class InventoryTests(unittest.TestCase):
         self.assertIn("AllowedIPs = 10.80.3.201/32", wireguard)
         self.assertIn("10.80.3.201 : 10.60.250.123", nftables)
         self.assertIn("10.80.3.202 : 10.60.250.123", nftables)
+        self.assertIn("10.80.3.201 . 10.61.3.2", nftables)
+        self.assertIn("10.80.3.202 . 10.61.3.2", nftables)
 
     def test_rejects_duplicate_addresses(self):
         with self.assertRaisesRegex(ValueError, "addresses must be unique"):

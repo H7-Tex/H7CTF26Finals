@@ -107,12 +107,17 @@ def render(inventory):
 
     nftables = [
         "flush set inet event_router peer_addresses",
+        "flush set inet event_router peer_workbench_access",
         "flush map inet event_router peer_snat",
     ]
     if peers:
         addresses = ", ".join(str(address) for address, _, _ in peers)
         mappings = ", ".join(f"{address} : {egress}" for address, egress, _ in peers)
+        workbenches = ", ".join(
+            f"{address} . 10.61.{address.packed[2]}.2" for address, _, _ in peers
+        )
         nftables.append(f"add element inet event_router peer_addresses {{ {addresses} }}")
+        nftables.append(f"add element inet event_router peer_workbench_access {{ {workbenches} }}")
         nftables.append(f"add element inet event_router peer_snat {{ {mappings} }}")
 
     return "\n".join(wireguard), "\n".join(nftables) + "\n"

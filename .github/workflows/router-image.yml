@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - "infra/images/router/**"
+      - "infra/terraform/environments/production/oci-gateway-builder/**"
+      - "infra/terraform/environments/production/oci-gateway-image/**"
       - "infra/terraform/modules/oci-ingress/**"
       - "infra/terraform/environments/production/oci-ingress/**"
       - ".github/workflows/router-image.yml"
@@ -12,6 +14,8 @@ on:
       - main
     paths:
       - "infra/images/router/**"
+      - "infra/terraform/environments/production/oci-gateway-builder/**"
+      - "infra/terraform/environments/production/oci-gateway-image/**"
       - "infra/terraform/modules/oci-ingress/**"
       - "infra/terraform/environments/production/oci-ingress/**"
       - ".github/workflows/router-image.yml"

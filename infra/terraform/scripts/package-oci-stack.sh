@@ -6,9 +6,9 @@ STACK=${1:-}
 REVISION=${2:-HEAD}
 
 case "$STACK" in
-  oci-addresses | oci-foundation | oci-ingress | oci-platform | oci-fleet) ;;
+  oci-addresses | oci-foundation | oci-gateway-builder | oci-gateway-image | oci-ingress | oci-platform | oci-fleet) ;;
   *)
-    echo "usage: $0 {oci-addresses|oci-foundation|oci-ingress|oci-platform|oci-fleet} [git-revision]" >&2
+    echo "usage: $0 {oci-addresses|oci-foundation|oci-gateway-builder|oci-gateway-image|oci-ingress|oci-platform|oci-fleet} [git-revision]" >&2
     exit 2
     ;;
 esac
@@ -19,9 +19,14 @@ OUTPUT_DIR="$ROOT/build/terraform"
 OUTPUT="$OUTPUT_DIR/${STACK}-${SHORT_COMMIT}.zip"
 TEMP_DIR=$(mktemp -d)
 trap 'rm -rf "$TEMP_DIR"' EXIT
+PATHS=(infra/terraform)
+
+if [[ $STACK == oci-gateway-builder ]]; then
+  PATHS+=(infra/images/router)
+fi
 
 mkdir -p "$OUTPUT_DIR"
-git -C "$ROOT" archive --format=zip --output "$TEMP_DIR/stack.zip" "$COMMIT" infra/terraform
+git -C "$ROOT" archive --format=zip --output "$TEMP_DIR/stack.zip" "$COMMIT" "${PATHS[@]}"
 mv "$TEMP_DIR/stack.zip" "$OUTPUT"
 sha256sum "$OUTPUT" >"$OUTPUT.sha256"
 

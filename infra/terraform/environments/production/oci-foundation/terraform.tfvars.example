@@ -5,3 +5,4 @@ compartment_name = "finals"
 # Set true only for the reviewed cache-population window, then plan/apply false
 # and verify the 0.0.0.0/0 mirror route is gone before rehearsal.
 enable_mirror_warmup_egress = false
+routing_private_ip_id        = null

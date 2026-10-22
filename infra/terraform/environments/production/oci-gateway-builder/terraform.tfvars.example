@@ -1,0 +1,7 @@
+region              = "ap-hyderabad-1"
+compartment_id      = "ocid1.compartment.oc1..replace-me"
+availability_domain = "replace-with-hyderabad-ad-name"
+vcn_id              = "ocid1.vcn.oc1.ap-hyderabad-1.replace-me"
+edge_subnet_id      = "ocid1.subnet.oc1.ap-hyderabad-1.replace-me"
+base_image_id       = "ocid1.image.oc1.ap-hyderabad-1.replace-with-pinned-ubuntu-image"
+source_revision     = "replace-with-full-reviewed-git-commit"

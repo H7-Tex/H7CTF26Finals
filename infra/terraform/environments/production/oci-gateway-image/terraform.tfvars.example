@@ -1,0 +1,4 @@
+region              = "ap-hyderabad-1"
+compartment_id      = "ocid1.compartment.oc1..replace-me"
+builder_instance_id = "ocid1.instance.oc1.ap-hyderabad-1.replace-with-stopped-builder"
+source_revision     = "replace-with-full-reviewed-git-commit"

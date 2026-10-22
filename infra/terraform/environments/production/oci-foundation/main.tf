@@ -22,4 +22,5 @@ module "network" {
   vcn_cidrs      = ["10.60.0.0/16", "10.61.0.0/16"]
 
   enable_mirror_warmup_egress = var.enable_mirror_warmup_egress
+  routing_private_ip_id       = var.routing_private_ip_id
 }

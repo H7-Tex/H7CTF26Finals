@@ -126,6 +126,16 @@ resource "oci_core_route_table" "service" {
   freeform_tags  = local.tags
 
   dynamic "route_rules" {
+    for_each = var.routing_private_ip_id == null ? [] : var.vcn_cidrs
+
+    content {
+      destination       = route_rules.value
+      destination_type  = "CIDR_BLOCK"
+      network_entity_id = var.routing_private_ip_id
+    }
+  }
+
+  dynamic "route_rules" {
     for_each = var.enable_service_warmup_egress ? [true] : []
 
     content {
@@ -143,6 +153,16 @@ resource "oci_core_route_table" "mirror" {
   freeform_tags  = local.tags
 
   dynamic "route_rules" {
+    for_each = var.routing_private_ip_id == null ? [] : var.vcn_cidrs
+
+    content {
+      destination       = route_rules.value
+      destination_type  = "CIDR_BLOCK"
+      network_entity_id = var.routing_private_ip_id
+    }
+  }
+
+  dynamic "route_rules" {
     for_each = var.enable_mirror_warmup_egress ? [true] : []
 
     content {
@@ -158,6 +178,16 @@ resource "oci_core_route_table" "isolated" {
   vcn_id         = oci_core_vcn.finals.id
   display_name   = "isolated"
   freeform_tags  = local.tags
+
+  dynamic "route_rules" {
+    for_each = var.routing_private_ip_id == null ? [] : var.vcn_cidrs
+
+    content {
+      destination       = route_rules.value
+      destination_type  = "CIDR_BLOCK"
+      network_entity_id = var.routing_private_ip_id
+    }
+  }
 }
 
 resource "oci_core_network_security_group" "router" {
