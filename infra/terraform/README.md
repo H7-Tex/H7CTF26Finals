@@ -20,6 +20,7 @@ The current authoritative deployment design is `/home/abu/Main/Projects/CTF26/ha
 - `modules`: reusable cloud-specific resources.
 - `environments/production`: production roots with independent state.
 - `scripts/check.sh`: credential-free formatting and static validation.
+- `scripts/package-oci-stack.sh`: deterministic Resource Manager package from an exact Git commit.
 
 OCI roots will run as OCI Resource Manager stacks because Sage can authenticate with an OCI instance principal without copying a key. Resource Manager currently executes Terraform 1.5.x, so all code must remain compatible with Terraform 1.5 even though local development is pinned to 1.16.6.
 
@@ -49,3 +50,11 @@ CI runs the same validation with Terraform 1.5.7 and 1.16.6. It never runs `plan
 5. Apply that reviewed plan only after the explicit production gate.
 
 Never use `-auto-approve`, `-lock=false`, or a manual production edit as a normal workflow. State, plan files, `.tfvars`, keys, tokens, player profiles, and runtime secrets are ignored and must remain outside Git.
+
+Package an OCI root only after its commit exists:
+
+```bash
+infra/terraform/scripts/package-oci-stack.sh oci-platform <commit>
+```
+
+The script prints the ZIP path, SHA-256 checksum path, exact commit and Resource Manager working directory. Upload that ZIP unchanged and record the values with the plan job.
