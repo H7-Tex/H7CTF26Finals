@@ -54,13 +54,13 @@ resource "oci_core_volume_attachment" "data" {
 
 resource "oci_core_volume_backup_policy" "database" {
   compartment_id = var.compartment_id
-  display_name   = "database-hourly"
+  display_name   = "database-daily"
 
   schedules {
     backup_type       = "INCREMENTAL"
     offset_seconds    = 0
     offset_type       = "NUMERIC_SECONDS"
-    period            = "ONE_HOUR"
+    period            = "ONE_DAY"
     retention_seconds = 604800
     time_zone         = "UTC"
   }
