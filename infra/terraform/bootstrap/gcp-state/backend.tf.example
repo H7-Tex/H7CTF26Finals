@@ -1,5 +1,0 @@
-# Add this as backend.tf in a reviewed follow-up commit only after the bucket
-# exists, then run terraform init -migrate-state with the matching backend.hcl.
-terraform {
-  backend "gcs" {}
-}
