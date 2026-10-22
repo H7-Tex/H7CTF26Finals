@@ -307,6 +307,23 @@ if tcp_client "$PEER_PID" 10.60.201.20 443 >/dev/null 2>&1; then
   exit 1
 fi
 
+start_tcp_server "$CORE_PID" 10.60.201.20 9001
+[[ $(tcp_client "$LAN_PID" 10.60.201.20 9001 10.60.200.10) == 10.60.200.10 ]]
+
+start_tcp_server "$CORE_PID" 10.60.201.20 9002
+if tcp_client "$LAN_PID" 10.60.201.20 9002 10.60.200.5 >/dev/null 2>&1; then
+  echo "the operations host reached a checker listener" >&2
+  exit 1
+fi
+kill "${servers[-1]}" 2>/dev/null || true
+
+start_tcp_server "$CORE_PID" 10.60.201.20 9003
+if tcp_client "$WORKBENCH_PID" 10.60.201.20 9003 >/dev/null 2>&1; then
+  echo "a workbench reached a checker listener" >&2
+  exit 1
+fi
+kill "${servers[-1]}" 2>/dev/null || true
+
 start_tcp_server "$LAN_PID" 10.60.200.5 22
 if tcp_client "$PEER_PID" 10.60.200.5 22 >/dev/null 2>&1; then
   echo "a peer reached the operations host" >&2

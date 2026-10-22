@@ -32,9 +32,13 @@ class FirewallTests(unittest.TestCase):
             for other in set(MODULE.HILL_PORTS.values()) - {port}:
                 self.assertNotIn(f"tcp dport {other} accept", rules)
 
-    def test_control_has_no_listener_except_management_ssh(self):
+    def test_control_exposes_checkers_only_to_anvil_and_ssh_only_to_operations(self):
         rules = MODULE.render("control")
+        self.assertIn("ip saddr 10.60.200.10 tcp dport 9001-9006 accept", rules)
+        self.assertIn("ip saddr 10.60.200.10 ct status dnat ct original proto-dst 9001-9006 accept", rules)
         self.assertIn("ip saddr 10.60.200.5 tcp dport 22 accept", rules)
+        self.assertNotIn("10.60.0.0/16 tcp dport 9001-9006", rules)
+        self.assertNotIn("10.60.250.121-10.60.250.135 tcp dport 9001-9006", rules)
         self.assertNotIn("ct status dnat accept", rules)
         self.assertNotIn("tcp dport 9300 accept", rules)
 

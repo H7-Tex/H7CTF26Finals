@@ -26,9 +26,11 @@ else
 fi
 
 install_relay_sudoers() {
-  local bundle=$1 temporary
+  local temporary bundle
   temporary=$(mktemp /etc/sudoers.d/.finals-secret-relay.XXXXXX)
-  printf 'ubuntu ALL=(root) NOPASSWD: /usr/local/sbin/finals-install-secret-bundle %s\n' "$bundle" > "$temporary"
+  for bundle in "$@"; do
+    printf 'ubuntu ALL=(root) NOPASSWD: /usr/local/sbin/finals-install-secret-bundle %s\n' "$bundle"
+  done > "$temporary"
   chmod 0440 "$temporary"
   visudo -cf "$temporary" >/dev/null
   mv "$temporary" /etc/sudoers.d/finals-secret-relay
@@ -60,9 +62,9 @@ case "$role" in
     systemctl disable finals-mirror.service apt-cacher-ng.service >/dev/null 2>&1 || true
     ;;
   control)
-    install_relay_sudoers control-reconciler
+    install_relay_sudoers control-reconciler control-checkers
     grep -Eq '^10\.60\.200\.10[[:space:]]+finals\.h7tex\.com([[:space:]]|$)' /etc/hosts || printf '10.60.200.10 finals.h7tex.com\n' >> /etc/hosts
-    systemctl disable peer-reconciler.timer finals-checkers-ready.service >/dev/null 2>&1 || true
+    systemctl disable peer-reconciler.timer checker-runtime.service finals-checkers-ready.service >/dev/null 2>&1 || true
     ;;
 esac
 systemctl daemon-reload

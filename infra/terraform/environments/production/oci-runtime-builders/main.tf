@@ -25,6 +25,7 @@ locals {
     toset(["build-image", "install.sh", "runtime-image-seal.service", "seal-image"])
   )
   auxiliary_sources = {
+    checkers         = "${path.module}/../../../../checkers"
     deployment       = "${path.module}/../../../../deployment"
     platform         = "${path.module}/../../../../platform"
     reconciler       = "${path.module}/../../../../reconciler"
@@ -39,6 +40,10 @@ locals {
     "tests/static.sh",
     "deployment/install.sh",
     "deployment/tests/run.sh",
+    "checkers/install.sh",
+    "checkers/rootfs/usr/local/libexec/checker-runtime/runtime.py",
+    "checkers/rootfs/usr/local/sbin/checker-runtime-commission",
+    "checkers/tests/run.sh",
     "platform/install.sh",
     "platform/prepare-anvil.sh",
     "platform/rootfs/usr/local/libexec/finals-platform/checker-preflight",

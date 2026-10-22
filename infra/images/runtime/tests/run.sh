@@ -37,6 +37,19 @@ if [[ $role == platform-x86 || $role == platform-arm ]]; then
   test -x /usr/local/sbin/finals-platform-activate
 fi
 
+if [[ $role == platform-x86 ]]; then
+  test -x /usr/local/libexec/checker-runtime/runtime.py
+  test -x /usr/local/sbin/checker-runtime-commission
+  test -f /etc/systemd/system/checker-runtime.service
+  docker image inspect 'mongo@sha256:c53852c00c23ca9f23fc39690350ffa9a80e3642fe8f96879726d8da0abe80a7' >/dev/null
+  [[ $(systemctl is-enabled checker-runtime.service 2>/dev/null) == disabled ]]
+  ! systemctl is-active --quiet checker-runtime.service
+  [[ ! -e /etc/checker-runtime/enabled ]]
+  [[ ! -e /etc/finals-platform/checkers/artifact-manifest.json ]]
+  [[ ! -e /etc/checker-runtime/anvil-admin.token ]]
+  [[ -z $(find /opt/finals-checkers -mindepth 1 -print -quit) ]]
+fi
+
 if [[ $role == production ]]; then
   command -v mkfs.xfs >/dev/null
   command -v xfs_quota >/dev/null

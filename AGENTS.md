@@ -26,4 +26,4 @@ These rules apply to every directory in this repository unless a more specific `
 
 ## Commit style
 
-Follow the existing H7CTF versioned style: `v0.0.N - <concise outcome>`, with additional outcomes in the commit body when useful. Keep commits scoped and independently testable.
+Use only `v0.0.N` as the commit subject. Put each outcome in the body as a bullet such as `- build production platform services`. Keep commits scoped and independently testable.

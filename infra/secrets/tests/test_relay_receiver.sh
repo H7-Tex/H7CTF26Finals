@@ -9,6 +9,7 @@ source "$secret_dir/finals-secret-relay-receive"
 [[ $(requested_bundle gateway 'install gateway-reconciler') == gateway-reconciler ]]
 [[ $(requested_bundle platform 'install anvil') == anvil ]]
 [[ $(requested_bundle control 'install control-reconciler') == control-reconciler ]]
+[[ $(requested_bundle control 'install control-checkers') == control-checkers ]]
 [[ $(requested_bundle repository 'install repository') == repository ]]
 
 ! requested_bundle platform 'install repository'

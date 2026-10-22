@@ -1,0 +1,126 @@
+{
+  "version": 2,
+  "database_image": "mongo@sha256:c53852c00c23ca9f23fc39690350ffa9a80e3642fe8f96879726d8da0abe80a7",
+  "services": [
+    {
+      "slot": "AD1",
+      "name": "Sign Me In",
+      "slug": "sign-me-in",
+      "category": "web",
+      "target_port": 7001,
+      "checker_port": 9001,
+      "flag_stores": 2,
+      "noise_variants": 1,
+      "havoc_variants": 5,
+      "timeout_ms": 15000,
+      "artifact": {
+        "path": "sign-me-in/checker-image.tar",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "size": 1,
+        "executable": false,
+        "image": "finals/checkers/sign-me-in:REPLACE_WITH_SOURCE_REVISION",
+        "image_id": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    },
+    {
+      "slot": "AD2",
+      "name": "Can We Settle This?",
+      "slug": "can-we-settle-this",
+      "category": "web",
+      "target_port": 7002,
+      "checker_port": 9002,
+      "flag_stores": 2,
+      "noise_variants": 1,
+      "havoc_variants": 3,
+      "timeout_ms": 12000,
+      "artifact": {
+        "path": "can-we-settle-this/checker-image.tar",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "size": 1,
+        "executable": false,
+        "image": "finals/checkers/can-we-settle-this:REPLACE_WITH_SOURCE_REVISION",
+        "image_id": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    },
+    {
+      "slot": "AD3",
+      "name": "Update Pending",
+      "slug": "update-pending",
+      "category": "pwn",
+      "target_port": 7003,
+      "checker_port": 9003,
+      "flag_stores": 2,
+      "noise_variants": 1,
+      "havoc_variants": 3,
+      "timeout_ms": 10000,
+      "artifact": {
+        "path": "update-pending/checker-image.tar",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "size": 1,
+        "executable": false,
+        "image": "finals/checkers/update-pending:REPLACE_WITH_SOURCE_REVISION",
+        "image_id": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    },
+    {
+      "slot": "AD4",
+      "name": "Book Me If You Can",
+      "slug": "book-me-if-you-can",
+      "category": "web",
+      "target_port": 7004,
+      "checker_port": 9004,
+      "flag_stores": 2,
+      "noise_variants": 1,
+      "havoc_variants": 2,
+      "timeout_ms": 12000,
+      "artifact": {
+        "path": "book-me-if-you-can/checker-image.tar",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "size": 1,
+        "executable": false,
+        "image": "finals/checkers/book-me-if-you-can:REPLACE_WITH_SOURCE_REVISION",
+        "image_id": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    },
+    {
+      "slot": "AD5",
+      "name": "Ship It",
+      "slug": "ship-it",
+      "category": "web",
+      "target_port": 7005,
+      "checker_port": 9005,
+      "flag_stores": 2,
+      "noise_variants": 1,
+      "havoc_variants": 4,
+      "timeout_ms": 12000,
+      "artifact": {
+        "path": "ship-it/checker-image.tar",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "size": 1,
+        "executable": false,
+        "image": "finals/checkers/ship-it:REPLACE_WITH_SOURCE_REVISION",
+        "image_id": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    },
+    {
+      "slot": "AD6",
+      "name": "Terms May Apply",
+      "slug": "terms-may-apply",
+      "category": "pwn",
+      "target_port": 7006,
+      "checker_port": 9006,
+      "flag_stores": 2,
+      "noise_variants": 2,
+      "havoc_variants": 4,
+      "timeout_ms": 18000,
+      "artifact": {
+        "path": "terms-may-apply/checker-image.tar",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "size": 1,
+        "executable": false,
+        "image": "finals/checkers/terms-may-apply:REPLACE_WITH_SOURCE_REVISION",
+        "image_id": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    }
+  ]
+}

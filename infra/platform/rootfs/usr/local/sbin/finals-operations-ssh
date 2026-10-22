@@ -13,7 +13,7 @@ case "$target:$bundle" in
     address=10.60.250.11; port=22 ;;
   platform:anvil)
     address=10.60.200.10; port=22 ;;
-  control:control-reconciler)
+  control:control-reconciler | control:control-checkers)
     address=10.60.201.20; port=22 ;;
   repository:repository)
     address=10.60.201.30; port=2222 ;;

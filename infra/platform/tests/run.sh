@@ -11,12 +11,12 @@ bash -n \
   "$platform_dir/rootfs/usr/local/sbin/finals-operations-ssh" \
   "$platform_dir/rootfs/usr/local/sbin/finals-platform-activate" \
   "$platform_dir/rootfs/usr/local/sbin/finals-repository-commission" \
+  "$platform_dir/rootfs/usr/local/libexec/finals-platform/checker-preflight" \
   "$platform_dir/rootfs/usr/local/libexec/finals-platform/repository-preflight" \
   "$platform_dir/rootfs/usr/local/libexec/finals-platform/mirror-runtime-verify" \
   "$platform_dir/tests/run.sh"
 python3 -m unittest discover -s "$platform_dir/tests" -p 'test_*.py'
 python3 -c 'import ast, pathlib, sys; [ast.parse(pathlib.Path(path).read_text()) for path in sys.argv[1:]]' \
-  "$platform_dir/rootfs/usr/local/libexec/finals-platform/checker-preflight" \
   "$platform_dir/rootfs/usr/local/sbin/finals-mirror-manifest" \
   "$platform_dir/rootfs/usr/local/libexec/finals-platform/firewall" \
   "$platform_dir/rootfs/usr/local/libexec/finals-platform/mirror-preflight"
@@ -46,11 +46,15 @@ grep -Fq 'FINALS_REGISTRY_MODE=offline' "$platform_dir/rootfs/usr/local/libexec/
 grep -Fq 'readonly:' "$platform_dir/rootfs/etc/finals-platform/mirror/registry-offline.yaml"
 ! grep -Fq 'readonly:' "$platform_dir/rootfs/etc/finals-platform/mirror/registry-warmup.yaml"
 grep -Fq 'ConditionPathExists=/etc/finals-platform/checkers/artifact-manifest.json' "$platform_dir/rootfs/etc/systemd/system/finals-checkers-ready.service"
+grep -Fq '/usr/local/libexec/checker-runtime/runtime.py validate-artifacts' "$platform_dir/rootfs/usr/local/libexec/finals-platform/checker-preflight"
 grep -Fq 'SSH_SERVER_HOST_KEYS = /var/lib/gitea/ssh/gitea_ed25519' "$platform_dir/rootfs/usr/local/sbin/finals-repository-commission"
 grep -Fq 'repository:repository)' "$platform_dir/rootfs/usr/local/sbin/finals-operations-ssh"
+grep -Fq 'control:control-reconciler | control:control-checkers)' "$platform_dir/rootfs/usr/local/sbin/finals-operations-ssh"
 grep -Fq 'address=10.60.201.30; port=2222' "$platform_dir/rootfs/usr/local/sbin/finals-operations-ssh"
 grep -Fq 'StrictHostKeyChecking=yes' "$platform_dir/rootfs/usr/local/sbin/finals-operations-ssh"
 grep -Fq '[[ $# -eq 2 ]]' "$platform_dir/rootfs/usr/local/sbin/finals-operations-ssh"
 grep -Fq '"install $bundle"' "$platform_dir/rootfs/usr/local/sbin/finals-operations-ssh"
 ! grep -Fq '"$@"' "$platform_dir/rootfs/usr/local/sbin/finals-operations-ssh"
 ! grep -Eq 'mirror\)|hill-0[123]\)' "$platform_dir/rootfs/usr/local/sbin/finals-operations-ssh"
+grep -Fq 'install_relay_sudoers control-reconciler control-checkers' "$platform_dir/rootfs/usr/local/sbin/finals-platform-activate"
+grep -Fq 'systemctl disable peer-reconciler.timer checker-runtime.service finals-checkers-ready.service' "$platform_dir/rootfs/usr/local/sbin/finals-platform-activate"

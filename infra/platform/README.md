@@ -6,7 +6,7 @@ The shared hosts are built from two reviewed immutable images. Cloud-init regene
 | --- | --- | --- | --- | --- |
 | platform | `10.60.200.10` | `platform-x86` | `/srv/anvil` | TCP 443 and 4141 |
 | operations | `10.60.200.5` | `platform-arm` | none | management SSH only |
-| control | `10.60.201.20` | `platform-x86` | none | management SSH only |
+| control | `10.60.201.20` | `platform-x86` | none | management SSH plus checker TCP 9001-9006 from Anvil only |
 | repository | `10.60.201.30` | `platform-arm` | `/srv/gitea` | Gitea SSH 22, HTTPS 443, management SSH 2222 |
 | mirror | `10.60.202.10` | `platform-arm` | `/srv/cache` | TCP 3141, 3142, 4873 and 5000 |
 | hill-01 | `10.60.210.11` | `platform-x86` | none | TCP 7101 |
@@ -84,7 +84,7 @@ Offline mode atomically reloads and verifies a host firewall with no public web 
 
 Control activation fixes `finals.h7tex.com` to `10.60.200.10` in `/etc/hosts`. The peer-reconciler timer remains disabled until its token, dedicated SSH identity and exact two-gateway known-hosts bundle are installed and an end-to-end reconciliation succeeds. Follow `infra/reconciler/README.md`; do not enable the timer on a partial result.
 
-Checker artifacts live below `/opt/finals-checkers`. A reviewed `artifact-manifest.json` records each relative path, size, executable marker and SHA-256. `finals-checkers-ready.service` is disabled and refuses activation on any missing, changed, linked or escaping artifact. This is an integrity gate only; it does not invent a checker API or scheduler.
+Checker artifacts live below `/opt/finals-checkers`; private bytes and credentials are never included in Git or a golden image. The default-off runtime validates a locked six-service manifest, imports exact image IDs, preserves checker database state, exposes private listeners only to Anvil and recovers its containers after restart. Anvil remains the sole tick scheduler. Follow `infra/checkers/README.md` for artifact preparation, one-shot registration, commissioning and recovery. The legacy `finals-checkers-ready.service` remains disabled; the production supervisor is `checker-runtime.service`.
 
 Production host firewalls accept challenge ports `7001-7006` only from the router's normalized private identity `10.60.250.120`; they do not admit control or team identities directly. The router preserves original sources only in pre-NAT telemetry and adds no application or transport marker. Each hill host firewall drops all sibling-hill traffic in input, forward and output paths. It exposes only its assigned 7101, 7102 or 7103 listener to team identities and control. Before opening play, prove the assigned port works from one team and control, every unassigned hill port fails, and no hill container or host can connect to either sibling address.
 

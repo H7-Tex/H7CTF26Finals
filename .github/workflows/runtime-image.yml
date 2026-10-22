@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "infra/images/runtime/**"
+      - "infra/checkers/**"
       - "infra/deployment/**"
       - "infra/platform/**"
       - "infra/reconciler/**"
@@ -17,6 +18,7 @@ on:
       - main
     paths:
       - "infra/images/runtime/**"
+      - "infra/checkers/**"
       - "infra/deployment/**"
       - "infra/platform/**"
       - "infra/reconciler/**"
@@ -39,6 +41,7 @@ jobs:
           go-version-file: infra/deployment/go.mod
           cache-dependency-path: infra/deployment/go.mod
       - run: infra/deployment/tests/run.sh
+      - run: infra/checkers/tests/run.sh
       - run: infra/images/runtime/tests/static.sh
       - run: infra/secrets/tests/run.sh
       - run: infra/volumes/tests/run.sh

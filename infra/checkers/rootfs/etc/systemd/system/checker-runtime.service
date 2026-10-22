@@ -1,0 +1,37 @@
+[Unit]
+Description=Private checker runtime supervisor
+After=docker.service network-online.target finals-host-firewall.service
+Requires=docker.service
+Wants=network-online.target
+ConditionPathExists=/etc/checker-runtime/enabled
+ConditionPathExists=/etc/finals-platform/checkers/artifact-manifest.json
+ConditionPathIsDirectory=/opt/finals-checkers
+
+[Service]
+Type=simple
+ExecStartPre=/usr/local/libexec/checker-runtime/runtime.py import
+ExecStart=/usr/local/libexec/checker-runtime/runtime.py serve
+ExecStop=/usr/local/libexec/checker-runtime/runtime.py stop
+Restart=on-failure
+RestartSec=5s
+TimeoutStartSec=180s
+TimeoutStopSec=45s
+UMask=0077
+Environment=HOME=/run/checker-runtime
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHome=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/checker-runtime /run/checker-runtime /run/docker.sock
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictRealtime=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

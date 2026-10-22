@@ -41,6 +41,9 @@ fi
 if [[ $role == platform-x86 ]]; then
   [[ $anvil_revision =~ ^[0-9a-f]{40}$ ]] || { echo "exact 40-character Anvil revision is required" >&2; exit 1; }
   "$source_dir/prepare-anvil.sh" "$anvil_revision"
+  # shellcheck disable=SC1091
+  source /etc/finals-platform/images.env
+  docker pull "$MONGO_IMAGE"
 fi
 
 systemctl daemon-reload

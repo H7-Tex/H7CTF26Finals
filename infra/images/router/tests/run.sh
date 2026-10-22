@@ -30,6 +30,7 @@ grep -Fq '[[ ! $inventory -ef $active_inventory ]]' "$ROUTER_DIR/rootfs/usr/loca
 grep -Fq 'RequiresMountsFor=/srv/captures' "$ROUTER_DIR/rootfs/etc/systemd/system/event-router-flow-log.service"
 grep -Fq 'ExecStart=/usr/local/sbin/event-router-capture stream' "$ROUTER_DIR/rootfs/etc/systemd/system/event-router-flow-log.service"
 grep -Fq 'ip saddr { 10.60.200.10, 10.60.201.20, 10.60.201.30 } ip daddr @production_addresses tcp dport 9300 ct state new accept' "$ROUTER_DIR/rootfs/etc/nftables.conf"
+grep -Fq 'ip saddr 10.60.200.10 ip daddr 10.60.201.20 tcp dport 9001-9006 ct state new accept' "$ROUTER_DIR/rootfs/etc/nftables.conf"
 grep -Fq 'ip daddr @released_production_addresses tcp dport @service_ports' "$ROUTER_DIR/rootfs/etc/nftables.conf"
 grep -Fq 'ip daddr . tcp dport @released_hill_services' "$ROUTER_DIR/rootfs/etc/nftables.conf"
 grep -Fq 'ip saddr @workbench_addresses ip daddr @production_addresses tcp dport @service_ports jump released_production_guard' "$ROUTER_DIR/rootfs/etc/nftables.conf"

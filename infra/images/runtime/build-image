@@ -50,10 +50,16 @@ if [[ $role == platform-x86 || $role == platform-arm ]]; then
   install -D -m 0755 "$source_dir/volumes/initialize-volume.py" /usr/local/sbin/finals-initialize-volume
   install -D -m 0644 "$source_dir/volumes/finals-volume@.service" /etc/systemd/system/finals-volume@.service
   "$source_dir/reconciler/install.sh"
+  if [[ $role == platform-x86 ]]; then
+    "$source_dir/checkers/install.sh"
+  fi
   "$source_dir/platform/install.sh" "$role" "$anvil_revision"
   "$source_dir/secret-bootstrap/tests/run.sh"
   "$source_dir/volumes/tests/run.sh"
   "$source_dir/platform/tests/run.sh"
+  if [[ $role == platform-x86 ]]; then
+    "$source_dir/checkers/tests/run.sh"
+  fi
 fi
 "$source_dir/tests/run.sh" "$role"
 install -D -m 0644 "$source_dir/runtime-image-seal.service" /etc/systemd/system/runtime-image-seal.service

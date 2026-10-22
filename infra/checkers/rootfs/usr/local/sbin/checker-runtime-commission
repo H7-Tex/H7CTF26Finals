@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+[[ $EUID -eq 0 ]] || { echo "checker commissioning must run as root" >&2; exit 1; }
+[[ $(cat /etc/finals-platform/role 2>/dev/null) == '{"role":"control"}' ]] || { echo "checker commissioning is restricted to the control host" >&2; exit 1; }
+[[ ! -e /etc/checker-runtime/enabled ]] || { echo "checker runtime is already commissioned" >&2; exit 1; }
+
+runtime=/usr/local/libexec/checker-runtime/runtime.py
+cleanup() {
+  systemctl disable --now checker-runtime.service >/dev/null 2>&1 || true
+  rm -f /etc/checker-runtime/enabled
+  "$runtime" stop >/dev/null 2>&1 || true
+}
+trap cleanup ERR INT TERM
+
+/usr/local/libexec/finals-platform/checker-preflight
+"$runtime" import
+"$runtime" reconcile --wait 180
+"$runtime" register
+
+temporary=$(mktemp /etc/checker-runtime/.enabled.XXXXXX)
+printf 'enabled\n' > "$temporary"
+chmod 0600 "$temporary"
+mv "$temporary" /etc/checker-runtime/enabled
+systemctl enable --now checker-runtime.service
+ready=false
+for _ in $(seq 1 30); do
+  if curl --fail --silent --max-time 3 http://127.0.0.1:9160/readyz >/dev/null; then
+    ready=true
+    break
+  fi
+  sleep 1
+done
+[[ $ready == true ]] || { echo "checker runtime did not become ready" >&2; exit 1; }
+rm -f /etc/checker-runtime/anvil-admin.token
+trap - ERR INT TERM
+echo "checker runtime commissioned"

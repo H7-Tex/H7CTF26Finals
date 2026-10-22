@@ -48,8 +48,10 @@ def role_rules(role, mirror_warmup=False):
         )
     if role == "control":
         return (
-            "ip saddr 10.60.200.5 tcp dport 22 accept",
-            "iifname \"br-*\" ip daddr 10.60.0.0/16 accept",
+            "ip saddr 10.60.200.10 tcp dport 9001-9006 accept\n"
+            "    ip saddr 10.60.200.5 tcp dport 22 accept",
+            "ip saddr 10.60.200.10 ct status dnat ct original proto-dst 9001-9006 accept\n"
+            "    iifname \"br-*\" ip daddr 10.60.0.0/16 accept",
             "ip daddr 10.60.0.0/16 accept",
         )
     if role == "repository":

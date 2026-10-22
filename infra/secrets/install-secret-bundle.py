@@ -14,6 +14,7 @@ from pathlib import Path
 MAX_CIPHERTEXT = 2 * 1024 * 1024
 ENV_LINE = re.compile(r"^[A-Z][A-Z0-9_]*=[A-Za-z0-9_./:@+,=-]+$")
 WIREGUARD_KEY = re.compile(rb"^[A-Za-z0-9+/]{43}=$")
+JWT = re.compile(rb"^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$")
 
 ANVIL_ENV = {
     "ANVIL_PRIVATE_ADDRESS",
@@ -58,6 +59,9 @@ BUNDLES = {
         "token": ("etc/peer-reconciler/anvil.token", 0o600, "peer-reconciler"),
         "ssh_private_key": ("etc/peer-reconciler/id_ed25519", 0o600, "peer-reconciler"),
         "known_hosts": ("etc/peer-reconciler/known_hosts", 0o600, "peer-reconciler"),
+    },
+    "control-checkers": {
+        "admin_token": ("etc/checker-runtime/anvil-admin.token", 0o600, "root"),
     },
     "repository": {
         "environment": ("etc/finals-platform/repository/repository.env", 0o600, "root"),
@@ -252,6 +256,10 @@ def validate_bundle(bundle_type, files):
             raise BundleError("reconciler token is malformed")
         validate_ssh_private_key(files["ssh_private_key"])
         validate_known_hosts(files["known_hosts"], GATEWAY_HOSTS)
+    elif bundle_type == "control-checkers":
+        token = files["admin_token"].strip()
+        if not 32 <= len(token) <= 4096 or not JWT.fullmatch(token):
+            raise BundleError("checker commissioning token is malformed")
     elif bundle_type == "repository":
         values = parse_environment(files["environment"], REPOSITORY_ENV)
         if any(len(value) < 32 for value in values.values()) or len(set(values.values())) != 2:

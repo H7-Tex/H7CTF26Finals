@@ -74,6 +74,23 @@ class SecretBundleTests(unittest.TestCase):
         with self.assertRaisesRegex(MODULE.BundleError, "token"):
             MODULE.decode_bundle(document("control-reconciler", values), "control-reconciler")
 
+    def test_checker_commissioning_token_has_one_fixed_root_only_path(self):
+        token = b"headersegment.payloadsegment.signaturesegment\n"
+        files = MODULE.decode_bundle(document("control-checkers", {"admin_token": token}), "control-checkers")
+        with tempfile.TemporaryDirectory() as directory:
+            MODULE.install_bundle(
+                "control-checkers",
+                files,
+                Path(directory),
+                ownership=lambda _: (os.getuid(), os.getgid()),
+            )
+            target = Path(directory) / "etc/checker-runtime/anvil-admin.token"
+            self.assertEqual(target.read_bytes(), token)
+            self.assertEqual(target.stat().st_mode & 0o777, 0o600)
+            self.assertEqual([path for path in Path(directory).rglob("*") if path.is_file()], [target])
+        with self.assertRaisesRegex(MODULE.BundleError, "commissioning token"):
+            MODULE.decode_bundle(document("control-checkers", {"admin_token": b"not-a-jwt"}), "control-checkers")
+
     def test_operations_relay_has_only_fixed_root_paths(self):
         original_private = MODULE.validate_ssh_private_key
         original_hosts = MODULE.validate_known_hosts
