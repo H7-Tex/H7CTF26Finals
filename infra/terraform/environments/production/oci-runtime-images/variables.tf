@@ -44,6 +44,10 @@ variable "builder_instance_ids" {
         "ocid1.instance.oc1.ap-hyderabad-1.anuhsljrgek2goacvrelektlztb5cteimjrwgh7pyhmaq4l7ypidzc56keba",
         "ocid1.instance.oc1.ap-hyderabad-1.anuhsljrgek2goacu557jrdvhaatuy7a7p26cdtycqu5davfwyuzg42mpydq",
         "ocid1.instance.oc1.ap-hyderabad-1.anuhsljrgek2goac3rmjwwqmeyyegkvttjo3xd3otk3iuqqzhjxydvkxxy4q",
+        "ocid1.instance.oc1.ap-hyderabad-1.anuhsljrgek2goacfbmkqbiqcv4x4burzsh7djqaaf5fwowq6tnicxhv7hsq",
+        "ocid1.instance.oc1.ap-hyderabad-1.anuhsljrgek2goacb2cecuii5lffcdcmrdjnogltisl4kkfwyoytmn7am3vq",
+        "ocid1.instance.oc1.ap-hyderabad-1.anuhsljrgek2goac2v6jda73ov6673juwhkdi44eccufocd3cdiyjhkd6cha",
+        "ocid1.instance.oc1.ap-hyderabad-1.anuhsljrgek2goac5uoa7i5sjqkp62kwyhn6mlr7opfvm6otptrfy5vj7ahq",
       ], lookup(var.builder_instance_ids, role, ""))
     ])
     error_message = "builder_instance_ids must contain Hyderabad instance OCIDs for all four roles."

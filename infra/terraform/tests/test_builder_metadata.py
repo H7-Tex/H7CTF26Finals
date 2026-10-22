@@ -2,6 +2,7 @@ import base64
 import gzip
 import json
 import re
+import stat
 import unittest
 from pathlib import Path
 
@@ -164,6 +165,29 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn('"hills/install.sh"', source)
         self.assertIn('"hills/tests/run.sh"', source)
         self.assertIn("infra/archive infra/checkers infra/deployment infra/hills infra/images/runtime", package_script)
+
+    def test_runtime_builder_preserves_every_source_executable(self):
+        source = (ROOT / "terraform/environments/production/oci-runtime-builders/main.tf").read_text(encoding="utf-8")
+        block = source[source.index("executable_files = toset(["):]
+        block = block[:block.index("])")]
+        declared = set(re.findall(r'"([^"]+)"', block))
+        roots = {
+            ROOT / "archive": "archive",
+            ROOT / "checkers": "checkers",
+            ROOT / "deployment": "deployment",
+            ROOT / "hills": "hills",
+            ROOT / "images/runtime": "",
+            ROOT / "platform": "platform",
+            ROOT / "reconciler": "reconciler",
+            ROOT / "secrets": "secret-bootstrap",
+            ROOT / "volumes": "volumes",
+        }
+        expected = set()
+        for root, prefix in roots.items():
+            for path in root.rglob("*"):
+                if path.is_file() and path.stat().st_mode & stat.S_IXUSR:
+                    expected.add("/".join(filter(None, (prefix, path.relative_to(root).as_posix()))))
+        self.assertEqual(expected, declared)
 
     def test_builder_packages_include_the_archive_client(self):
         package_script = (ROOT / "terraform/scripts/package-oci-stack.sh").read_text(encoding="utf-8")
