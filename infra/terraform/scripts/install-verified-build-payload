@@ -60,7 +60,7 @@ mv "$temporary" "$destination"
 record_phase passed
 phase=execute
 record_phase started
-"$destination"
+/bin/bash "$destination"
 record_phase passed
 rm -f -- "$destination" "$url_file"
 trap - EXIT

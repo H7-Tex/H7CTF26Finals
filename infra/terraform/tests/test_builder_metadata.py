@@ -50,6 +50,7 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn("--connect-timeout 10", installer)
         self.assertIn("--max-time 120", installer)
         self.assertIn('sha256sum --check --status', installer)
+        self.assertIn('/bin/bash "$destination"', installer)
         self.assertIn("trap record_failure ERR", installer)
         for phase in ("download", "verify", "execute"):
             self.assertIn(f"phase={phase}", installer)
