@@ -6,6 +6,10 @@ output "vcn_id" {
   value = module.network.vcn_id
 }
 
+output "service_gateway_id" {
+  value = module.network.service_gateway_id
+}
+
 output "subnet_ids" {
   value = module.network.subnet_ids
 }

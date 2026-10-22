@@ -309,6 +309,15 @@ class BuilderMetadataTests(unittest.TestCase):
             variables = (ROOT / relative).read_text(encoding="utf-8")
             self.assertIn("var.routing_private_ip_id == null ? true : startswith", variables)
 
+    def test_private_oci_management_route_is_fixed_and_guarded(self):
+        network = (ROOT / "terraform/modules/oci-network/main.tf").read_text(encoding="utf-8")
+        self.assertIn('resource "oci_core_service_gateway" "management"', network)
+        self.assertIn('values = ["All HYD Services In Oracle Services Network"]', network)
+        self.assertEqual(network.count('destination_type  = "SERVICE_CIDR_BLOCK"'), 2)
+        gateway = network[network.index('resource "oci_core_service_gateway" "management"'):]
+        self.assertIn("prevent_destroy = true", gateway)
+        self.assertIn("length(data.oci_core_services.regional.services) == 1", gateway)
+
     def test_fleet_can_expand_without_targeting_resources(self):
         module = ROOT / "terraform/modules/oci-compute-fleet"
         source = (module / "main.tf").read_text(encoding="utf-8")

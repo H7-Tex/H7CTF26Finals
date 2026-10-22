@@ -99,6 +99,33 @@ resource "oci_core_nat_gateway" "warmup" {
   freeform_tags  = local.tags
 }
 
+data "oci_core_services" "regional" {
+  filter {
+    name   = "name"
+    values = ["All HYD Services In Oracle Services Network"]
+  }
+}
+
+resource "oci_core_service_gateway" "management" {
+  compartment_id = var.compartment_id
+  vcn_id         = oci_core_vcn.finals.id
+  display_name   = "management"
+  freeform_tags  = local.tags
+
+  services {
+    service_id = data.oci_core_services.regional.services[0].id
+  }
+
+  lifecycle {
+    prevent_destroy = true
+
+    precondition {
+      condition     = length(data.oci_core_services.regional.services) == 1
+      error_message = "The Hyderabad regional OCI service network must resolve exactly once."
+    }
+  }
+}
+
 resource "oci_core_security_list" "empty" {
   compartment_id = var.compartment_id
   vcn_id         = oci_core_vcn.finals.id
@@ -124,6 +151,12 @@ resource "oci_core_route_table" "service" {
   vcn_id         = oci_core_vcn.finals.id
   display_name   = "services"
   freeform_tags  = local.tags
+
+  route_rules {
+    destination       = data.oci_core_services.regional.services[0].cidr_block
+    destination_type  = "SERVICE_CIDR_BLOCK"
+    network_entity_id = oci_core_service_gateway.management.id
+  }
 
   dynamic "route_rules" {
     for_each = var.routing_private_ip_id == null ? [] : var.vcn_cidrs
@@ -178,6 +211,12 @@ resource "oci_core_route_table" "isolated" {
   vcn_id         = oci_core_vcn.finals.id
   display_name   = "isolated"
   freeform_tags  = local.tags
+
+  route_rules {
+    destination       = data.oci_core_services.regional.services[0].cidr_block
+    destination_type  = "SERVICE_CIDR_BLOCK"
+    network_entity_id = oci_core_service_gateway.management.id
+  }
 
   dynamic "route_rules" {
     for_each = var.routing_private_ip_id == null ? [] : var.vcn_cidrs

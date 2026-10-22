@@ -23,6 +23,7 @@ COMMON_OUTPUT = """
     udp sport 68 udp dport 67 accept
     ip daddr 169.254.169.254 udp dport { 53, 123 } accept
     ip daddr 169.254.169.254 tcp dport 53 accept
+    ip daddr 169.254.169.254 tcp dport 80 accept
     ip daddr { 169.254.0.2, 169.254.2.0/24 } tcp dport 3260 accept
     ip daddr 10.60.0.0/16 icmp type echo-request accept
 """
@@ -30,7 +31,7 @@ COMMON_OUTPUT = """
 
 def role_rules(role, mirror_warmup=False, archive_egress=False):
     if role == "platform":
-        public_egress = "\n    ip daddr 169.254.169.254 tcp dport 80 accept\n    tcp dport 443 accept" if archive_egress else ""
+        public_egress = "\n    tcp dport 443 accept" if archive_egress else ""
         return (
             "ip saddr 10.60.0.0/16 tcp dport 443 accept\n"
             "    ip saddr 10.60.250.121-10.60.250.135 tcp dport 4141 accept\n"
@@ -40,13 +41,12 @@ def role_rules(role, mirror_warmup=False, archive_egress=False):
             f"ip daddr 10.60.0.0/16 accept{public_egress}",
         )
     if role == "operations":
-        identity_egress = "\n    ip daddr 169.254.169.254 tcp dport 80 accept" if archive_egress else ""
         return (
             "ip saddr { 10.60.250.10, 10.60.250.11, 10.60.201.20 } tcp dport 22 accept",
             "counter drop",
             "ip daddr 10.60.0.0/16 tcp dport { 22, 2222, 443 } accept\n"
             "    ip daddr 10.60.0.0/16 icmp type echo-request accept\n"
-            f"    tcp dport 443 accept{identity_egress}",
+            "    tcp dport 443 accept",
         )
     if role == "control":
         return (
@@ -57,7 +57,7 @@ def role_rules(role, mirror_warmup=False, archive_egress=False):
             "ip daddr 10.60.0.0/16 accept",
         )
     if role == "repository":
-        public_egress = "\n    ip daddr 169.254.169.254 tcp dport 80 accept\n    tcp dport 443 accept" if archive_egress else ""
+        public_egress = "\n    tcp dport 443 accept" if archive_egress else ""
         return (
             "ip saddr 10.60.200.5 tcp dport 2222 accept",
             "ip saddr 10.60.0.0/16 ct status dnat ct original proto-dst { 22, 443 } accept\n"
@@ -99,7 +99,8 @@ def role_rules(role, mirror_warmup=False, archive_egress=False):
         "    iifname \"br-*\" ip daddr 10.60.210.0/24 counter drop\n"
         "    iifname \"br-*\" ip daddr { 10.60.200.10, 10.60.201.20 } accept",
         "ip daddr 10.60.210.0/24 counter drop\n"
-        "    ip daddr { 10.60.200.10, 10.60.201.20 } accept",
+        "    ip daddr { 10.60.200.10, 10.60.201.20 } accept\n"
+        "    ip daddr != 10.60.0.0/15 tcp dport 443 accept",
     )
 
 

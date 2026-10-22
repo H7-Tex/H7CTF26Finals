@@ -52,17 +52,17 @@ class FirewallTests(unittest.TestCase):
     def test_archive_public_egress_is_explicit_and_role_limited(self):
         for role in ("platform", "repository"):
             self.assertNotIn("\n    tcp dport 443 accept", MODULE.render(role))
-            self.assertNotIn("ip daddr 169.254.169.254 tcp dport 80 accept", MODULE.render(role))
             self.assertIn("\n    tcp dport 443 accept", MODULE.render(role, archive_egress=True))
-            self.assertIn(
-                "ip daddr 169.254.169.254 tcp dport 80 accept", MODULE.render(role, archive_egress=True)
-            )
-        self.assertNotIn("ip daddr 169.254.169.254 tcp dport 80 accept", MODULE.render("operations"))
-        self.assertIn(
-            "ip daddr 169.254.169.254 tcp dport 80 accept", MODULE.render("operations", archive_egress=True)
-        )
         for role in MODULE.ROLES - {"operations", "platform", "repository"}:
             self.assertEqual(MODULE.render(role), MODULE.render(role, archive_egress=False))
+
+    def test_host_management_has_imds_and_hills_have_only_private_service_https(self):
+        for role in MODULE.ROLES:
+            self.assertIn("ip daddr 169.254.169.254 tcp dport 80 accept", MODULE.render(role), role)
+        for role in MODULE.HILL_PORTS:
+            rules = MODULE.render(role)
+            self.assertIn("ip daddr != 10.60.0.0/15 tcp dport 443 accept", rules)
+            self.assertNotIn("\n    tcp dport 443 accept", rules)
 
     def test_production_orchestrator_has_three_exact_callers(self):
         rules = MODULE.render("production")

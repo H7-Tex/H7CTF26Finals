@@ -10,6 +10,10 @@ output "nat_gateway_id" {
   value = oci_core_nat_gateway.warmup.id
 }
 
+output "service_gateway_id" {
+  value = oci_core_service_gateway.management.id
+}
+
 output "subnet_ids" {
   value = { for name, subnet in oci_core_subnet.finals : name => subnet.id }
 }
