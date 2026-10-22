@@ -24,6 +24,7 @@ locals {
     "rootfs/usr/local/sbin/event-router-receive-inventory",
     "rootfs/usr/local/sbin/event-router-restore",
     "seal-image",
+    "tests/challenge_access.sh",
     "tests/network_namespace.sh",
     "tests/restore.sh",
     "tests/run.sh",
