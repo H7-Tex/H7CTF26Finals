@@ -49,6 +49,21 @@ class FirewallTests(unittest.TestCase):
         self.assertIn("tcp dport { 80, 443 } accept", warmup)
         self.assertIn("ip daddr 10.60.0.0/16 accept", offline)
 
+    def test_archive_public_egress_is_explicit_and_role_limited(self):
+        for role in ("platform", "repository"):
+            self.assertNotIn("\n    tcp dport 443 accept", MODULE.render(role))
+            self.assertNotIn("ip daddr 169.254.169.254 tcp dport 80 accept", MODULE.render(role))
+            self.assertIn("\n    tcp dport 443 accept", MODULE.render(role, archive_egress=True))
+            self.assertIn(
+                "ip daddr 169.254.169.254 tcp dport 80 accept", MODULE.render(role, archive_egress=True)
+            )
+        self.assertNotIn("ip daddr 169.254.169.254 tcp dport 80 accept", MODULE.render("operations"))
+        self.assertIn(
+            "ip daddr 169.254.169.254 tcp dport 80 accept", MODULE.render("operations", archive_egress=True)
+        )
+        for role in MODULE.ROLES - {"operations", "platform", "repository"}:
+            self.assertEqual(MODULE.render(role), MODULE.render(role, archive_egress=False))
+
     def test_production_orchestrator_has_three_exact_callers(self):
         rules = MODULE.render("production")
         self.assertIn(

@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+[[ $EUID -eq 0 && $# -eq 1 ]] || { echo "usage: finals-archive-egress {enable|disable}" >&2; exit 2; }
+mode=$1
+[[ $mode == enable || $mode == disable ]] || { echo "usage: finals-archive-egress {enable|disable}" >&2; exit 2; }
+
+platform_role=$(python3 -c 'import json; print(json.load(open("/etc/finals-platform/role"))["role"])' 2>/dev/null || true)
+router_role=$(cat /etc/event-router/role 2>/dev/null || true)
+case "$platform_role:$router_role" in
+  platform:)
+    role=platform
+    service=anvil-finals.service
+    ;;
+  repository:)
+    role=repository
+    service=finals-repository.service
+    ;;
+  operations:)
+    role=operations
+    service=
+    ;;
+  :active)
+    role=gateway
+    service=event-router.target
+    ;;
+  *)
+    echo "archive egress is restricted to operations, platform, repository and the active gateway" >&2
+    exit 1
+    ;;
+esac
+
+marker=/run/finals-archive/egress-enabled
+gateway_interface() {
+  ip -o route show default | awk 'NR == 1 { print $5 }'
+}
+close_gateway_egress() {
+  nft flush set inet event_router archive_https_ports
+  nft flush set inet event_router archive_imds_ports
+  event-router-addresses standby
+}
+rollback_enable() {
+  rm -f -- "$marker"
+  if [[ $role == gateway ]]; then
+    close_gateway_egress
+  else
+    systemctl restart finals-host-firewall.service >/dev/null 2>&1 || true
+  fi
+}
+if [[ $mode == enable ]]; then
+  trap 'rollback_enable; exit 1' ERR INT TERM
+  [[ -z $service ]] || ! systemctl is-active --quiet "$service" || { echo "$service must be stopped before archive egress is enabled" >&2; exit 1; }
+  if [[ $role == gateway ]]; then
+    for unit in event-router-flow-log.service event-router-activate.service event-router-inventory.path; do
+      ! systemctl is-active --quiet "$unit" || { echo "$unit must be stopped before archive egress is enabled" >&2; exit 1; }
+    done
+    event-router-addresses standby
+    interface=$(gateway_interface)
+    [[ -n $interface ]] || { echo "cannot determine the gateway interface" >&2; exit 1; }
+    ip address replace 10.60.250.101/24 dev "$interface"
+  fi
+  install -d -o root -g root -m 0700 "${marker%/*}"
+  printf 'enabled\n' > "$marker"
+  chmod 0600 "$marker"
+else
+  rm -f -- "$marker"
+fi
+
+if [[ $role == gateway ]]; then
+  if [[ $mode == enable ]]; then
+    nft add element inet event_router archive_imds_ports '{ 80 }'
+    nft add element inet event_router archive_https_ports '{ 443 }'
+  else
+    close_gateway_egress
+  fi
+else
+  systemctl restart finals-host-firewall.service
+fi
+
+if [[ $mode == enable ]]; then
+  trap - ERR INT TERM
+  echo "post-event archive HTTPS egress enabled for $role"
+else
+  echo "archive HTTPS egress disabled for $role"
+fi

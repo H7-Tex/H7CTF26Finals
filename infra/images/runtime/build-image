@@ -45,6 +45,7 @@ if [[ $role == production ]]; then
   rm -rf /root/.cache/go-build /root/go
 fi
 if [[ $role == platform-x86 || $role == platform-arm ]]; then
+  "$source_dir/archive/install.sh"
   install -D -m 0755 "$source_dir/secret-bootstrap/install-secret-bundle.py" /usr/local/sbin/finals-install-secret-bundle
   install -D -m 0755 "$source_dir/secret-bootstrap/finals-secret-relay-receive" /usr/local/sbin/finals-secret-relay-receive
   install -D -m 0755 "$source_dir/volumes/initialize-volume.py" /usr/local/sbin/finals-initialize-volume
@@ -57,6 +58,7 @@ if [[ $role == platform-x86 || $role == platform-arm ]]; then
   "$source_dir/secret-bootstrap/tests/run.sh"
   "$source_dir/volumes/tests/run.sh"
   "$source_dir/platform/tests/run.sh"
+  "$source_dir/archive/tests/run.sh"
   if [[ $role == platform-x86 ]]; then
     "$source_dir/checkers/tests/run.sh"
   fi

@@ -28,23 +28,25 @@ COMMON_OUTPUT = """
 """
 
 
-def role_rules(role, mirror_warmup=False):
+def role_rules(role, mirror_warmup=False, archive_egress=False):
     if role == "platform":
+        public_egress = "\n    ip daddr 169.254.169.254 tcp dport 80 accept\n    tcp dport 443 accept" if archive_egress else ""
         return (
             "ip saddr 10.60.0.0/16 tcp dport 443 accept\n"
             "    ip saddr 10.60.250.121-10.60.250.135 tcp dport 4141 accept\n"
             "    ip saddr 10.60.200.5 tcp dport 22 accept",
             "ip saddr 10.60.0.0/16 ct status dnat ct original proto-dst { 443, 4141 } accept\n"
             "    iifname \"br-*\" ip daddr 10.60.0.0/16 accept",
-            "ip daddr 10.60.0.0/16 accept",
+            f"ip daddr 10.60.0.0/16 accept{public_egress}",
         )
     if role == "operations":
+        identity_egress = "\n    ip daddr 169.254.169.254 tcp dport 80 accept" if archive_egress else ""
         return (
             "ip saddr { 10.60.250.10, 10.60.250.11, 10.60.201.20 } tcp dport 22 accept",
             "counter drop",
             "ip daddr 10.60.0.0/16 tcp dport { 22, 2222, 443 } accept\n"
             "    ip daddr 10.60.0.0/16 icmp type echo-request accept\n"
-            "    tcp dport 443 accept",
+            f"    tcp dport 443 accept{identity_egress}",
         )
     if role == "control":
         return (
@@ -55,11 +57,12 @@ def role_rules(role, mirror_warmup=False):
             "ip daddr 10.60.0.0/16 accept",
         )
     if role == "repository":
+        public_egress = "\n    ip daddr 169.254.169.254 tcp dport 80 accept\n    tcp dport 443 accept" if archive_egress else ""
         return (
             "ip saddr 10.60.200.5 tcp dport 2222 accept",
             "ip saddr 10.60.0.0/16 ct status dnat ct original proto-dst { 22, 443 } accept\n"
             "    iifname \"br-*\" ip daddr 10.60.0.0/16 tcp dport 9300 accept",
-            "ip daddr 10.60.0.0/16 accept",
+            f"ip daddr 10.60.0.0/16 accept{public_egress}",
         )
     if role == "mirror":
         public_egress = "\n    tcp dport { 80, 443 } accept" if mirror_warmup else ""
@@ -100,8 +103,8 @@ def role_rules(role, mirror_warmup=False):
     )
 
 
-def render(role, mirror_warmup=False):
-    input_rules, forward_rules, output_rules = role_rules(role, mirror_warmup)
+def render(role, mirror_warmup=False, archive_egress=False):
+    input_rules, forward_rules, output_rules = role_rules(role, mirror_warmup, archive_egress)
     return f"""table inet finals_host {{
   chain input {{
     type filter hook input priority -10; policy drop;
@@ -146,6 +149,21 @@ def mirror_warmup_enabled():
     return value == "warmup\n"
 
 
+def archive_egress_enabled(role):
+    path = Path("/run/finals-archive/egress-enabled")
+    if not path.exists():
+        return False
+    if role not in {"operations", "platform", "repository"}:
+        raise SystemExit("host firewall: archive egress is invalid for this role")
+    try:
+        value = path.read_text(encoding="ascii")
+    except (OSError, UnicodeDecodeError) as error:
+        raise SystemExit(f"host firewall: cannot read archive egress mode: {error}")
+    if value != "enabled\n":
+        raise SystemExit("host firewall: archive egress mode is invalid")
+    return True
+
+
 def public_web_egress_loaded():
     try:
         output = subprocess.run(
@@ -180,20 +198,22 @@ def public_web_egress_loaded():
 def main():
     if len(sys.argv) in {3, 4} and sys.argv[1] == "--render" and sys.argv[2] in ROLES:
         warmup = len(sys.argv) == 4 and sys.argv[3] == "warmup" and sys.argv[2] == "mirror"
-        if len(sys.argv) == 4 and not warmup:
-            raise SystemExit("host firewall: warmup rendering is valid only for the mirror")
-        print(render(sys.argv[2], warmup), end="")
+        archive = len(sys.argv) == 4 and sys.argv[3] == "archive" and sys.argv[2] in {"operations", "platform", "repository"}
+        if len(sys.argv) == 4 and not (warmup or archive):
+            raise SystemExit("host firewall: invalid role-specific egress rendering")
+        print(render(sys.argv[2], warmup, archive), end="")
         return
     if len(sys.argv) != 1 or subprocess.run(["id", "-u"], check=True, capture_output=True, text=True).stdout.strip() != "0":
         raise SystemExit("host firewall: must run as root")
     role = configured_role()
     warmup = role == "mirror" and mirror_warmup_enabled()
+    archive = archive_egress_enabled(role)
     exists = subprocess.run(
         ["nft", "list", "table", "inet", "finals_host"],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     ).returncode == 0
-    batch = ("delete table inet finals_host\n" if exists else "") + render(role, warmup)
+    batch = ("delete table inet finals_host\n" if exists else "") + render(role, warmup, archive)
     subprocess.run(["nft", "-f", "-"], input=batch, text=True, check=True)
     if role == "mirror" and public_web_egress_loaded() != warmup:
         raise SystemExit("host firewall: loaded mirror egress state does not match the fixed mode")

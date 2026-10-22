@@ -15,6 +15,7 @@ bash -n \
   "$platform_dir/rootfs/usr/local/libexec/finals-platform/repository-preflight" \
   "$platform_dir/rootfs/usr/local/libexec/finals-platform/mirror-runtime-verify" \
   "$platform_dir/tests/run.sh"
+grep -Fq 'archive_egress_enabled(role)' "$platform_dir/rootfs/usr/local/libexec/finals-platform/firewall"
 python3 -m unittest discover -s "$platform_dir/tests" -p 'test_*.py'
 python3 -c 'import ast, pathlib, sys; [ast.parse(pathlib.Path(path).read_text()) for path in sys.argv[1:]]' \
   "$platform_dir/rootfs/usr/local/sbin/finals-mirror-manifest" \

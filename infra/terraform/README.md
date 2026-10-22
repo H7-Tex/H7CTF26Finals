@@ -17,6 +17,7 @@ The current authoritative deployment design is `/home/abu/Main/Projects/CTF26/ha
 ## Layout
 
 - `bootstrap/gcp-state`: one-time private GCS state bucket bootstrap.
+- `environments/production/gcp-backup`: private retained archives with OCI X.509 workload federation; no service-account key and no scoring dependency.
 - `modules`: reusable cloud-specific resources.
 - `environments/production`: production roots with independent state.
 - `scripts/check.sh`: credential-free formatting and static validation.

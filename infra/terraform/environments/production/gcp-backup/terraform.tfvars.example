@@ -1,3 +1,19 @@
 project_id     = "ctf26-512405"
 project_number = "1049039378581"
 location       = "asia-south1"
+
+oci_identity_root_ca_pems = [<<-PEM
+-----BEGIN CERTIFICATE-----
+replace-with-current-oci-hyderabad-instance-identity-root
+-----END CERTIFICATE-----
+PEM
+]
+
+writer_instance_ids = {
+  database = "ocid1.instance.oc1.ap-hyderabad-1.replace-platform"
+  gitea    = "ocid1.instance.oc1.ap-hyderabad-1.replace-repository"
+  pcaps    = "ocid1.instance.oc1.ap-hyderabad-1.replace-active-gateway"
+  scores   = "ocid1.instance.oc1.ap-hyderabad-1.replace-platform"
+}
+
+verifier_instance_id = "ocid1.instance.oc1.ap-hyderabad-1.replace-operations"

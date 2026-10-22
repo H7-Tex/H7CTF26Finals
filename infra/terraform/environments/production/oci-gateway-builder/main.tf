@@ -7,6 +7,7 @@ locals {
     toset(["build-image", "gateway-image-seal.service", "install.sh", "seal-image"])
   )
   auxiliary_sources = {
+    archive          = "${path.module}/../../../../archive"
     secret-bootstrap = "${path.module}/../../../../secrets"
     volumes          = "${path.module}/../../../../volumes"
   }
@@ -26,6 +27,10 @@ locals {
     "tests/network_namespace.sh",
     "tests/restore.sh",
     "tests/run.sh",
+    "archive/finals-archive.py",
+    "archive/finals-archive-egress",
+    "archive/install.sh",
+    "archive/tests/run.sh",
     "secret-bootstrap/finals-secret-relay-receive",
     "secret-bootstrap/install-secret-bundle.py",
     "secret-bootstrap/tests/run.sh",

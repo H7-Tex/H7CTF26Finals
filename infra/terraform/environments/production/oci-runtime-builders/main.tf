@@ -25,6 +25,7 @@ locals {
     toset(["build-image", "install.sh", "runtime-image-seal.service", "seal-image"])
   )
   auxiliary_sources = {
+    archive          = "${path.module}/../../../../archive"
     checkers         = "${path.module}/../../../../checkers"
     deployment       = "${path.module}/../../../../deployment"
     platform         = "${path.module}/../../../../platform"
@@ -38,6 +39,10 @@ locals {
     "seal-image",
     "tests/run.sh",
     "tests/static.sh",
+    "archive/finals-archive.py",
+    "archive/finals-archive-egress",
+    "archive/install.sh",
+    "archive/tests/run.sh",
     "deployment/install.sh",
     "deployment/tests/run.sh",
     "checkers/install.sh",

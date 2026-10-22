@@ -5,6 +5,7 @@ set -euo pipefail
 source_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 "$source_dir/install.sh"
+"$source_dir/archive/install.sh"
 install -D -m 0755 "$source_dir/secret-bootstrap/install-secret-bundle.py" /usr/local/sbin/finals-install-secret-bundle
 install -D -m 0755 "$source_dir/secret-bootstrap/finals-secret-relay-receive" /usr/local/sbin/finals-secret-relay-receive
 install -D -m 0755 "$source_dir/volumes/initialize-volume.py" /usr/local/sbin/finals-initialize-volume
@@ -12,6 +13,7 @@ install -D -m 0644 "$source_dir/volumes/finals-volume@.service" /etc/systemd/sys
 install -D -m 0755 "$source_dir/platform/finals-host-recipient" /usr/local/sbin/finals-host-recipient
 "$source_dir/secret-bootstrap/tests/run.sh"
 "$source_dir/volumes/tests/run.sh"
+"$source_dir/archive/tests/run.sh"
 "$source_dir/tests/run.sh"
 install -D -m 0644 "$source_dir/gateway-image-seal.service" /etc/systemd/system/gateway-image-seal.service
 touch /run/gateway-image-ready

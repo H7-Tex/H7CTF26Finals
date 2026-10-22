@@ -25,3 +25,18 @@ variable "location" {
   type        = string
   default     = "asia-south1"
 }
+
+variable "oci_identity_root_ca_pems" {
+  description = "Current OCI Hyderabad instance-identity root CA certificates from the authenticated OCI endpoint."
+  type        = list(string)
+}
+
+variable "writer_instance_ids" {
+  description = "Exact OCI instance OCIDs keyed by database, gitea, pcaps and scores."
+  type        = map(string)
+}
+
+variable "verifier_instance_id" {
+  description = "Exact OCI operations-host instance OCID used for read-only recovery."
+  type        = string
+}
