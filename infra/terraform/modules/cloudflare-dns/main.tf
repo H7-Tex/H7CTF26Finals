@@ -3,8 +3,8 @@ resource "cloudflare_dns_record" "finals" {
   name    = "finals.h7tex.com"
   type    = "A"
   content = var.web_ipv4
-  ttl     = 1
-  proxied = true
+  ttl     = var.ttl
+  proxied = false
   comment = "H7CTF'26 Finals web ingress; managed by Terraform"
 }
 
