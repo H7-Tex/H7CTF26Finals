@@ -51,3 +51,32 @@ resource "oci_core_volume_attachment" "data" {
     prevent_destroy = true
   }
 }
+
+resource "oci_core_volume_backup_policy" "database" {
+  compartment_id = var.compartment_id
+  display_name   = "database-hourly"
+
+  schedules {
+    backup_type       = "INCREMENTAL"
+    offset_seconds    = 900
+    offset_type       = "NUMERIC_SECONDS"
+    period            = "ONE_HOUR"
+    retention_seconds = 604800
+    time_zone         = "UTC"
+  }
+
+  freeform_tags = merge(local.tags, { role = "database-backup" })
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "oci_core_volume_backup_policy_assignment" "database" {
+  asset_id  = oci_core_volume.data["database"].id
+  policy_id = oci_core_volume_backup_policy.database.id
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}

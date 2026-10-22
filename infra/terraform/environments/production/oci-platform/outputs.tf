@@ -9,3 +9,7 @@ output "private_ips" {
 output "volume_ids" {
   value = module.storage.volume_ids
 }
+
+output "database_backup_policy_id" {
+  value = module.storage.database_backup_policy_id
+}
