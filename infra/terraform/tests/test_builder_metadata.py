@@ -149,6 +149,10 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn('variable "budget_alert_recipients"', variables)
         self.assertIn("sensitive   = true", variables)
 
+    def test_foundation_null_routing_default_is_plan_safe(self):
+        variables = (ROOT / "terraform/environments/production/oci-foundation/variables.tf").read_text(encoding="utf-8")
+        self.assertIn("var.routing_private_ip_id == null ? true : startswith", variables)
+
     def test_fleet_can_expand_without_targeting_resources(self):
         module = ROOT / "terraform/modules/oci-compute-fleet"
         source = (module / "main.tf").read_text(encoding="utf-8")
