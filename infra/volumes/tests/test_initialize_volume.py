@@ -36,6 +36,35 @@ def disk(path, size, *, root=False, fstype=None, label=None, children=None):
     return value
 
 
+def volume_policy(mount):
+    services = []
+    quota_by_port = {
+        7001: (1073741824, 65536),
+        7002: (1073741824, 65536),
+        7003: (536870912, 32768),
+        7004: (1073741824, 65536),
+        7005: (2147483648, 131072),
+        7006: (1073741824, 65536),
+    }
+    slugs = ("sign-me-in", "can-we-settle-this", "update-pending", "book-me-if-you-can", "ship-it", "terms-may-apply")
+    for index, (port, quota) in enumerate(quota_by_port.items()):
+        services.append({
+            "slug": slugs[index],
+            "port": port,
+            "uid": 10001 + index,
+            "quota": {"bytes": quota[0], "inodes": quota[1]},
+            "generations": {
+                name: {
+                    "path": str(mount / str(port) / name),
+                    "project_name": f"finals-{port}-{name}",
+                    "project_id": port + offset,
+                }
+                for name, offset in (("live", 0), ("gate", 10000), ("recovery", 20000))
+            },
+        })
+    return {"schema_version": 1, "mount": str(mount), "services": services}
+
+
 class VolumeSelectionTests(unittest.TestCase):
     def test_selects_only_blank_non_root_disk_in_role_range(self):
         document = {"blockdevices": [
@@ -115,22 +144,45 @@ class VolumeSelectionTests(unittest.TestCase):
             projects = root / "projects"
             projid = root / "projid"
             commands = []
-            MODULE.configure_service_quotas(mount, projects, projid, commands.append)
-            MODULE.configure_service_quotas(mount, projects, projid, commands.append)
+            ownership = []
+            policy = volume_policy(mount)
+            MODULE.configure_service_quotas(policy, mount, projects, projid, commands.append, lambda path, uid, gid: ownership.append((path, uid, gid)))
+            MODULE.configure_service_quotas(policy, mount, projects, projid, commands.append, lambda path, uid, gid: ownership.append((path, uid, gid)))
             project_lines = projects.read_text(encoding="utf-8").splitlines()
             projid_lines = projid.read_text(encoding="utf-8").splitlines()
-            self.assertEqual(len(project_lines), 6)
-            self.assertEqual(len(projid_lines), 6)
-            self.assertIn(f"7005:{mount / '7005'}", project_lines)
-            self.assertIn("finals-7005:7005", projid_lines)
-            for port in MODULE.SERVICE_QUOTAS:
+            self.assertEqual(len(project_lines), 18)
+            self.assertEqual(len(projid_lines), 18)
+            self.assertIn(f"7005:{mount / '7005' / 'live'}", project_lines)
+            self.assertIn(f"17005:{mount / '7005' / 'gate'}", project_lines)
+            self.assertIn(f"27005:{mount / '7005' / 'recovery'}", project_lines)
+            self.assertIn("finals-7005-live:7005", projid_lines)
+            self.assertIn("finals-7005-gate:17005", projid_lines)
+            self.assertIn("finals-7005-recovery:27005", projid_lines)
+            for port in range(7001, 7007):
                 for generation in ("live", "gate", "recovery"):
                     self.assertTrue((mount / str(port) / generation).is_dir())
-            self.assertEqual(len(commands), 24)
+            self.assertEqual(len(commands), 72)
+            self.assertEqual(len(ownership), 36)
             self.assertIn(
-                ["xfs_quota", "-x", "-c", "limit -p bhard=2147483648b ihard=131072 finals-7005", str(mount)],
+                ["xfs_quota", "-x", "-c", "limit -p bhard=2147483648b ihard=131072 finals-7005-recovery", str(mount)],
                 commands,
             )
+
+    def test_volume_policy_is_private_strict_and_generation_isolated(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / "policy.json"
+            policy = volume_policy(Path("/srv/finals/service-data"))
+            path.write_text(json.dumps(policy), encoding="utf-8")
+            path.chmod(0o600)
+            self.assertEqual(MODULE.load_volume_policy(path), policy)
+            policy["services"][0]["generations"]["gate"] = policy["services"][0]["generations"]["live"]
+            path.write_text(json.dumps(policy), encoding="utf-8")
+            with self.assertRaisesRegex(MODULE.VolumeError, "non-fixed"):
+                MODULE.load_volume_policy(path)
+            path.chmod(0o666)
+            with self.assertRaisesRegex(MODULE.VolumeError, "private"):
+                MODULE.load_volume_policy(path)
 
     def test_conflicting_project_mapping_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:

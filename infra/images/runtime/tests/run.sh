@@ -51,10 +51,13 @@ if [[ $role == platform-x86 ]]; then
 fi
 
 if [[ $role == production ]]; then
+  command -v haproxy >/dev/null
   command -v mkfs.xfs >/dev/null
   command -v xfs_quota >/dev/null
   command -v finals-initialize-volume >/dev/null
   command -v finals-rehearse-production-quota >/dev/null
+  command -v finals-compile-release >/dev/null
+  test -x /usr/local/libexec/finals-service-proxy-smoke
   systemctl is-enabled finals-volume@production.service >/dev/null
   grep -Fq 'ExecStartPre=/usr/local/sbin/finals-initialize-volume production' /etc/systemd/system/docker.service.d/90-production-volume.conf
   getent passwd deploy-orchestrator | grep -Fq '/usr/sbin/nologin'
@@ -67,6 +70,7 @@ if [[ $role == production ]]; then
   [[ $(stat -c '%U:%G:%a' /var/lib/deployment-executor/operations) == root:root:700 ]]
   [[ $(stat -c '%U:%G:%a' /var/lib/deployment-executor/offline.lock) == root:root:600 ]]
   [[ $(stat -c '%U:%G:%a' /usr/local/libexec/deployment-executor/commands) == root:root:700 ]]
+  [[ $(stat -c '%U:%G:%a' /etc/finals-release) == root:root:700 ]]
   [[ -z $(find /usr/local/libexec/deployment-executor/commands -mindepth 1 -print -quit) ]]
   test -x /usr/local/bin/deployment-orchestrator
   test -x /usr/local/libexec/deployment-orchestrator/runner
@@ -81,9 +85,15 @@ if [[ $role == production ]]; then
   [[ $(systemctl is-enabled deployment-executor.socket 2>/dev/null) == disabled ]]
   ! systemctl is-active --quiet deployment-executor.socket
   ! systemctl is-active --quiet deployment-executor.service
+  [[ $(systemctl is-enabled finals-service-proxy.service 2>/dev/null) == disabled ]]
+  ! systemctl is-active --quiet finals-service-proxy.service
+  [[ $(systemctl is-enabled haproxy.service 2>/dev/null) == masked ]]
+  ! systemctl is-active --quiet haproxy.service
   ! systemctl is-active --quiet deployment-orchestrator-backup.service
   [[ ! -e /etc/deployment-orchestrator/config.json ]]
   [[ ! -e /etc/deployment-executor/policy.json ]]
+  [[ ! -e /etc/finals-release/haproxy.cfg ]]
+  /usr/local/libexec/finals-service-proxy-smoke
   [[ ! -e /var/backups/deployment-orchestrator ]]
   [[ ! -e /var/lib/deployment-orchestrator/state.json ]]
   [[ $(cat /etc/finals-platform/role) == '{"role":"production"}' ]]

@@ -1,0 +1,46 @@
+[Unit]
+Description=Finals service traffic switch
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/etc/finals-release/haproxy.cfg
+
+[Service]
+Type=notify
+User=root
+Group=root
+UMask=0077
+RuntimeDirectory=finals-service-proxy
+RuntimeDirectoryMode=0700
+ExecStartPre=/usr/sbin/haproxy -c -f /etc/finals-release/haproxy.cfg
+ExecStart=/usr/sbin/haproxy -Ws -f /etc/finals-release/haproxy.cfg -p /run/finals-service-proxy/haproxy.pid
+ExecReload=/usr/sbin/haproxy -c -f /etc/finals-release/haproxy.cfg
+ExecReload=/bin/kill -USR2 $MAINPID
+Restart=on-failure
+RestartSec=2s
+NoNewPrivileges=yes
+CapabilityBoundingSet=CAP_SETGID CAP_SETUID
+AmbientCapabilities=
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHome=yes
+ProtectHostname=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectProc=invisible
+ProtectSystem=strict
+RestrictAddressFamilies=AF_INET AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+TimeoutStopSec=15s
+
+[Install]
+WantedBy=multi-user.target

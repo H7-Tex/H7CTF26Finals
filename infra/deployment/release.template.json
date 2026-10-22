@@ -1,0 +1,246 @@
+{
+  "schema_version": 1,
+  "policy_version": "finals-1",
+  "services": [
+    {
+      "slot": "AD1",
+      "slug": "sign-me-in",
+      "protocol": "http",
+      "port": 7001,
+      "base_commit": "",
+      "bundle_sha256": "",
+      "factory_image": "",
+      "private_gate_artifact": "",
+      "build": {
+        "context": "service",
+        "dockerfile": "service/Dockerfile",
+        "base_images": ["python@sha256:f77ac9e44ae96ef2c90b8053ea08c31f8be030f824196b0ae4db6d462c84e51f"],
+        "allowed_paths": ["service/idp/src/", "service/portal/src/"],
+        "maximum_context_bytes": 52428800
+      },
+      "runtime": {
+        "uid": 10001,
+        "container_data_path": "/data",
+        "environment": {"SIGN_DATA": "/data", "SIGN_PORT": "7001"},
+        "health_command": ["python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:7001/healthz', timeout=2).read()"],
+        "read_only": true,
+        "no_new_privileges": true,
+        "drop_all_capabilities": true,
+        "outbound_network": false,
+        "tmpfs_bytes": 33554432,
+        "memory_bytes": 805306368,
+        "cpu_millis": 1000,
+        "pids": 128
+      },
+      "quota": {"bytes": 1073741824, "inodes": 65536},
+      "generations": {
+        "live": {"path": "/srv/finals/service-data/7001/live", "project_name": "finals-7001-live", "project_id": 7001},
+        "gate": {"path": "/srv/finals/service-data/7001/gate", "project_name": "finals-7001-gate", "project_id": 17001},
+        "recovery": {"path": "/srv/finals/service-data/7001/recovery", "project_name": "finals-7001-recovery", "project_id": 27001}
+      },
+      "backends": {"live_a_port": 17001, "live_b_port": 18001, "gate_port": 19001},
+      "timeouts": {"build_seconds": 180, "gate_seconds": 300, "deploy_seconds": 60, "health_seconds": 15},
+      "previous_flag_ticks": 5
+    },
+    {
+      "slot": "AD2",
+      "slug": "can-we-settle-this",
+      "protocol": "http",
+      "port": 7002,
+      "base_commit": "",
+      "bundle_sha256": "",
+      "factory_image": "",
+      "private_gate_artifact": "",
+      "build": {
+        "context": "service",
+        "dockerfile": "service/Dockerfile",
+        "base_images": ["python@sha256:f77ac9e44ae96ef2c90b8053ea08c31f8be030f824196b0ae4db6d462c84e51f"],
+        "allowed_paths": ["service/src/"],
+        "maximum_context_bytes": 52428800
+      },
+      "runtime": {
+        "uid": 10002,
+        "container_data_path": "/data",
+        "environment": {"SETTLE_DATA": "/data", "SETTLE_PORT": "7002"},
+        "health_command": ["python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:7002/healthz', timeout=2).read()"],
+        "read_only": true,
+        "no_new_privileges": true,
+        "drop_all_capabilities": true,
+        "outbound_network": false,
+        "tmpfs_bytes": 33554432,
+        "memory_bytes": 536870912,
+        "cpu_millis": 1000,
+        "pids": 96
+      },
+      "quota": {"bytes": 1073741824, "inodes": 65536},
+      "generations": {
+        "live": {"path": "/srv/finals/service-data/7002/live", "project_name": "finals-7002-live", "project_id": 7002},
+        "gate": {"path": "/srv/finals/service-data/7002/gate", "project_name": "finals-7002-gate", "project_id": 17002},
+        "recovery": {"path": "/srv/finals/service-data/7002/recovery", "project_name": "finals-7002-recovery", "project_id": 27002}
+      },
+      "backends": {"live_a_port": 17002, "live_b_port": 18002, "gate_port": 19002},
+      "timeouts": {"build_seconds": 180, "gate_seconds": 300, "deploy_seconds": 60, "health_seconds": 15},
+      "previous_flag_ticks": 5
+    },
+    {
+      "slot": "AD3",
+      "slug": "update-pending",
+      "protocol": "tcp",
+      "port": 7003,
+      "base_commit": "",
+      "bundle_sha256": "",
+      "factory_image": "",
+      "private_gate_artifact": "",
+      "build": {
+        "context": "service",
+        "dockerfile": "service/Dockerfile",
+        "base_images": ["gcc@sha256:9ca91b05c7b07d2979f16413e8b2cd6ec8a7c80ffca4121ccab0aeba33f90460", "debian@sha256:6ebd97fa83deb272194a2cf015b3d26a4d538e9ad3a7a79d544c8af5b0a01443"],
+        "allowed_paths": ["service/src/"],
+        "maximum_context_bytes": 52428800
+      },
+      "runtime": {
+        "uid": 10003,
+        "container_data_path": "/data",
+        "environment": {"UPDATE_DATA": "/data", "UPDATE_PORT": "7003"},
+        "health_command": ["/app/gateway", "health"],
+        "read_only": true,
+        "no_new_privileges": true,
+        "drop_all_capabilities": true,
+        "outbound_network": false,
+        "tmpfs_bytes": 16777216,
+        "memory_bytes": 268435456,
+        "cpu_millis": 750,
+        "pids": 128
+      },
+      "quota": {"bytes": 536870912, "inodes": 32768},
+      "generations": {
+        "live": {"path": "/srv/finals/service-data/7003/live", "project_name": "finals-7003-live", "project_id": 7003},
+        "gate": {"path": "/srv/finals/service-data/7003/gate", "project_name": "finals-7003-gate", "project_id": 17003},
+        "recovery": {"path": "/srv/finals/service-data/7003/recovery", "project_name": "finals-7003-recovery", "project_id": 27003}
+      },
+      "backends": {"live_a_port": 17003, "live_b_port": 18003, "gate_port": 19003},
+      "timeouts": {"build_seconds": 180, "gate_seconds": 300, "deploy_seconds": 60, "health_seconds": 15},
+      "previous_flag_ticks": 5
+    },
+    {
+      "slot": "AD4",
+      "slug": "book-me-if-you-can",
+      "protocol": "http",
+      "port": 7004,
+      "base_commit": "",
+      "bundle_sha256": "",
+      "factory_image": "",
+      "private_gate_artifact": "",
+      "build": {
+        "context": "service/app",
+        "dockerfile": "service/app/Dockerfile",
+        "base_images": ["python@sha256:f77ac9e44ae96ef2c90b8053ea08c31f8be030f824196b0ae4db6d462c84e51f"],
+        "allowed_paths": ["service/app/app.py"],
+        "maximum_context_bytes": 52428800
+      },
+      "runtime": {
+        "uid": 10004,
+        "container_data_path": "/data",
+        "environment": {"BOOK_DATA": "/data", "BOOK_PORT": "7004"},
+        "health_command": ["python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:7004/healthz', timeout=2).read()"],
+        "read_only": true,
+        "no_new_privileges": true,
+        "drop_all_capabilities": true,
+        "outbound_network": false,
+        "tmpfs_bytes": 33554432,
+        "memory_bytes": 536870912,
+        "cpu_millis": 750,
+        "pids": 96
+      },
+      "quota": {"bytes": 1073741824, "inodes": 65536},
+      "generations": {
+        "live": {"path": "/srv/finals/service-data/7004/live", "project_name": "finals-7004-live", "project_id": 7004},
+        "gate": {"path": "/srv/finals/service-data/7004/gate", "project_name": "finals-7004-gate", "project_id": 17004},
+        "recovery": {"path": "/srv/finals/service-data/7004/recovery", "project_name": "finals-7004-recovery", "project_id": 27004}
+      },
+      "backends": {"live_a_port": 17004, "live_b_port": 18004, "gate_port": 19004},
+      "timeouts": {"build_seconds": 180, "gate_seconds": 300, "deploy_seconds": 60, "health_seconds": 15},
+      "previous_flag_ticks": 5
+    },
+    {
+      "slot": "AD5",
+      "slug": "ship-it",
+      "protocol": "http",
+      "port": 7005,
+      "base_commit": "",
+      "bundle_sha256": "",
+      "factory_image": "",
+      "private_gate_artifact": "",
+      "build": {
+        "context": "service",
+        "dockerfile": "service/Dockerfile",
+        "base_images": ["golang@sha256:972b4110ba0f47539a975c31e52c64765e1ff19f2d74469ae4a595c6676e80a5", "debian@sha256:6ebd97fa83deb272194a2cf015b3d26a4d538e9ad3a7a79d544c8af5b0a01443"],
+        "allowed_paths": ["service/internal/"],
+        "maximum_context_bytes": 52428800
+      },
+      "runtime": {
+        "uid": 10005,
+        "container_data_path": "/data",
+        "environment": {"SHIP_DATA": "/data", "SHIP_PORT": "7005"},
+        "health_command": ["/usr/local/bin/ship-it", "health"],
+        "read_only": true,
+        "no_new_privileges": true,
+        "drop_all_capabilities": true,
+        "outbound_network": false,
+        "tmpfs_bytes": 33554432,
+        "memory_bytes": 805306368,
+        "cpu_millis": 1000,
+        "pids": 128
+      },
+      "quota": {"bytes": 2147483648, "inodes": 131072},
+      "generations": {
+        "live": {"path": "/srv/finals/service-data/7005/live", "project_name": "finals-7005-live", "project_id": 7005},
+        "gate": {"path": "/srv/finals/service-data/7005/gate", "project_name": "finals-7005-gate", "project_id": 17005},
+        "recovery": {"path": "/srv/finals/service-data/7005/recovery", "project_name": "finals-7005-recovery", "project_id": 27005}
+      },
+      "backends": {"live_a_port": 17005, "live_b_port": 18005, "gate_port": 19005},
+      "timeouts": {"build_seconds": 180, "gate_seconds": 300, "deploy_seconds": 60, "health_seconds": 15},
+      "previous_flag_ticks": 5
+    },
+    {
+      "slot": "AD6",
+      "slug": "terms-may-apply",
+      "protocol": "http",
+      "port": 7006,
+      "base_commit": "",
+      "bundle_sha256": "",
+      "factory_image": "",
+      "private_gate_artifact": "",
+      "build": {
+        "context": "service/app",
+        "dockerfile": "service/app/Dockerfile",
+        "base_images": ["mcr.microsoft.com/dotnet/sdk@sha256:747cbade5bfd918a175ac32f8f1d931edec2c7d0d5397a3de72eaef1ac1f66d2", "mcr.microsoft.com/dotnet/aspnet@sha256:8af87eba5e7cdafb1514d7388be287365da97c132509e84dfe252ffd552398ca"],
+        "allowed_paths": ["service/app/Program.cs"],
+        "maximum_context_bytes": 104857600
+      },
+      "runtime": {
+        "uid": 10006,
+        "container_data_path": "/data",
+        "environment": {},
+        "health_command": ["dotnet", "TermsMayApply.dll", "--probe"],
+        "read_only": true,
+        "no_new_privileges": true,
+        "drop_all_capabilities": true,
+        "outbound_network": false,
+        "tmpfs_bytes": 33554432,
+        "memory_bytes": 1073741824,
+        "cpu_millis": 1250,
+        "pids": 128
+      },
+      "quota": {"bytes": 1073741824, "inodes": 65536},
+      "generations": {
+        "live": {"path": "/srv/finals/service-data/7006/live", "project_name": "finals-7006-live", "project_id": 7006},
+        "gate": {"path": "/srv/finals/service-data/7006/gate", "project_name": "finals-7006-gate", "project_id": 17006},
+        "recovery": {"path": "/srv/finals/service-data/7006/recovery", "project_name": "finals-7006-recovery", "project_id": 27006}
+      },
+      "backends": {"live_a_port": 17006, "live_b_port": 18006, "gate_port": 19006},
+      "timeouts": {"build_seconds": 180, "gate_seconds": 300, "deploy_seconds": 60, "health_seconds": 15},
+      "previous_flag_ticks": 5
+    }
+  ]
+}

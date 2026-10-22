@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import json
 import os
+import re
 import stat
 import subprocess
 import sys
@@ -17,14 +18,7 @@ ROLES = {
     "production": {"label": "service-data", "mount": "/srv/finals/service-data", "minimum": 40 * GIB, "maximum": 60 * GIB, "filesystem": "xfs", "options": "defaults,nodev,nosuid,prjquota"},
 }
 
-SERVICE_QUOTAS = {
-    7001: {"bytes": 1024 * 1024 ** 2, "inodes": 65536},
-    7002: {"bytes": 1024 * 1024 ** 2, "inodes": 65536},
-    7003: {"bytes": 512 * 1024 ** 2, "inodes": 32768},
-    7004: {"bytes": 1024 * 1024 ** 2, "inodes": 65536},
-    7005: {"bytes": 2048 * 1024 ** 2, "inodes": 131072},
-    7006: {"bytes": 1024 * 1024 ** 2, "inodes": 65536},
-}
+VOLUME_POLICY = Path("/etc/finals-release/volume-policy.json")
 
 
 class VolumeError(Exception):
@@ -191,39 +185,126 @@ def ensure_mappings(path, desired):
             pass
 
 
+def duplicate_safe_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise VolumeError(f"volume policy repeats {key!r}")
+        result[key] = value
+    return result
+
+
+def exact(value, keys, label):
+    if not isinstance(value, dict) or set(value) != set(keys):
+        raise VolumeError(f"volume policy has invalid {label}")
+
+
+def load_volume_policy(path=VOLUME_POLICY):
+    try:
+        info = path.lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid() or info.st_mode & 0o022 or info.st_size > 1024 * 1024:
+            raise VolumeError("volume policy must be a private regular file owned by the initializer")
+        policy = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=duplicate_safe_object)
+    except VolumeError:
+        raise
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise VolumeError("cannot read the volume policy") from error
+    exact(policy, {"schema_version", "mount", "services"}, "document")
+    if policy["schema_version"] != 1 or policy["mount"] != ROLES["production"]["mount"]:
+        raise VolumeError("volume policy has an invalid identity")
+    services = policy["services"]
+    if not isinstance(services, list) or len(services) != 6:
+        raise VolumeError("volume policy must contain six services")
+    seen_slugs, seen_ports, seen_uids, seen_ids, seen_names, seen_paths = set(), set(), set(), set(), set(), set()
+    quota_bytes = 0
+    quota_inodes = 0
+    for service in services:
+        exact(service, {"slug", "port", "uid", "quota", "generations"}, "service")
+        slug, port, uid = service["slug"], service["port"], service["uid"]
+        if not isinstance(slug, str) or not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", slug):
+            raise VolumeError("volume policy has an invalid service slug")
+        if isinstance(port, bool) or not isinstance(port, int) or port not in range(7001, 7007):
+            raise VolumeError(f"volume policy has an invalid port for {slug}")
+        if isinstance(uid, bool) or not isinstance(uid, int) or not 10000 <= uid <= 65535:
+            raise VolumeError(f"volume policy has an invalid UID for {slug}")
+        if slug in seen_slugs or port in seen_ports or uid in seen_uids:
+            raise VolumeError("volume policy repeats a service identity")
+        seen_slugs.add(slug)
+        seen_ports.add(port)
+        seen_uids.add(uid)
+        quota = service["quota"]
+        exact(quota, {"bytes", "inodes"}, f"quota for {slug}")
+        if any(isinstance(quota[name], bool) or not isinstance(quota[name], int) for name in ("bytes", "inodes")):
+            raise VolumeError(f"volume policy has a malformed quota for {slug}")
+        if not 64 * 1024 * 1024 <= quota["bytes"] <= 4 * GIB or not 1024 <= quota["inodes"] <= 262144:
+            raise VolumeError(f"volume policy has an unsafe quota for {slug}")
+        quota_bytes += quota["bytes"] * 3
+        quota_inodes += quota["inodes"] * 3
+        generations = service["generations"]
+        exact(generations, {"live", "gate", "recovery"}, f"generations for {slug}")
+        for name, offset in (("live", 0), ("gate", 10000), ("recovery", 20000)):
+            generation = generations[name]
+            exact(generation, {"path", "project_name", "project_id"}, f"{name} generation for {slug}")
+            expected = {
+                "path": f"{policy['mount']}/{port}/{name}",
+                "project_name": f"finals-{port}-{name}",
+                "project_id": port + offset,
+            }
+            if generation != expected:
+                raise VolumeError(f"volume policy has a non-fixed {name} generation for {slug}")
+            if generation["project_id"] in seen_ids or generation["project_name"] in seen_names or generation["path"] in seen_paths:
+                raise VolumeError("volume policy repeats a project identity")
+            seen_ids.add(generation["project_id"])
+            seen_names.add(generation["project_name"])
+            seen_paths.add(generation["path"])
+    if seen_ports != set(range(7001, 7007)):
+        raise VolumeError("volume policy has incomplete service ports")
+    if quota_bytes > 32 * GIB or quota_inodes > 2_000_000:
+        raise VolumeError("volume policy exceeds the production volume reserve")
+    return policy
+
+
 def configure_service_quotas(
+    policy,
     mount=Path("/srv/finals/service-data"),
     projects_path=Path("/etc/projects"),
     projid_path=Path("/etc/projid"),
     runner=command,
+    chowner=os.chown,
 ):
+    if policy["mount"] != str(mount):
+        raise VolumeError("volume policy does not match the mounted production volume")
     project_paths = {}
     project_ids = {}
-    for port in SERVICE_QUOTAS:
-        name = f"finals-{port}"
-        project_paths[str(port)] = str(mount / str(port))
-        project_ids[name] = str(port)
+    for service in policy["services"]:
+        for generation in service["generations"].values():
+            project_paths[str(generation["project_id"])] = generation["path"]
+            project_ids[generation["project_name"]] = str(generation["project_id"])
     ensure_mappings(projects_path, project_paths)
     ensure_mappings(projid_path, project_ids)
-    for port, quota in SERVICE_QUOTAS.items():
-        name = f"finals-{port}"
+    for service in policy["services"]:
+        port, quota = service["port"], service["quota"]
         root = mount / str(port)
         root.mkdir(parents=True, exist_ok=True, mode=0o750)
         if root.is_symlink() or not stat.S_ISDIR(root.stat().st_mode):
             raise VolumeError(f"{root} is not a fixed service directory")
-        for generation in ("live", "gate", "recovery"):
-            path = root / generation
+        os.chmod(root, 0o750)
+        for generation in service["generations"].values():
+            name = generation["project_name"]
+            path = Path(generation["path"])
             path.mkdir(exist_ok=True, mode=0o750)
             if path.is_symlink() or not stat.S_ISDIR(path.stat().st_mode):
                 raise VolumeError(f"{path} is not a fixed generation directory")
-        runner(["xfs_quota", "-x", "-c", f"project -s {name}", str(mount)])
-        runner([
-            "xfs_quota",
-            "-x",
-            "-c",
-            f"limit -p bhard={quota['bytes']}b ihard={quota['inodes']} {name}",
-            str(mount),
-        ])
+            os.chmod(path, 0o750)
+            chowner(path, service["uid"], service["uid"])
+            runner(["xfs_quota", "-x", "-c", f"project -s {name}", str(mount)])
+            runner([
+                "xfs_quota",
+                "-x",
+                "-c",
+                f"limit -p bhard={quota['bytes']}b ihard={quota['inodes']} {name}",
+                str(mount),
+            ])
 
 
 def initialize(role):
@@ -254,7 +335,7 @@ def initialize(role):
         options = set(fields[3].split(","))
         if not ({"prjquota", "pquota"} & options):
             raise VolumeError("production data volume is missing project quota enforcement")
-        configure_service_quotas()
+        configure_service_quotas(load_volume_policy())
 
 
 def main():

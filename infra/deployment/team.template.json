@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "team_id": "",
+  "team_number": 0,
+  "allowed_uid": 0,
+  "repository_path": "/var/lib/deployment-orchestrator/repository"
+}

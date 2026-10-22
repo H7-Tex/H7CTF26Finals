@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -27,6 +28,8 @@ const (
 var (
 	operationIDPattern = regexp.MustCompile(`^[0-9a-f]{32}$`)
 	opaqueIDPattern    = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$`)
+	imagePattern       = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:/-]*@sha256:[0-9a-f]{64}$`)
+	environmentPattern = regexp.MustCompile(`^[A-Z][A-Z0-9_]*$`)
 )
 
 type ExecutorCommands struct {
@@ -55,15 +58,70 @@ func (c ExecutorCommands) command(operation string) string {
 }
 
 type ExecutorServicePolicy struct {
-	BaseCommit           string           `json:"base_commit"`
-	BundleSHA256         string           `json:"bundle_sha256"`
-	FactoryDigest        string           `json:"factory_digest"`
-	Resources            ResourceContract `json:"resources"`
-	BuildTimeoutSeconds  int64            `json:"build_timeout_seconds"`
-	GateTimeoutSeconds   int64            `json:"gate_timeout_seconds"`
-	DeployTimeoutSeconds int64            `json:"deploy_timeout_seconds"`
-	HealthTimeoutSeconds int64            `json:"health_timeout_seconds"`
-	PreviousFlagTicks    int              `json:"previous_flag_ticks"`
+	BaseCommit           string              `json:"base_commit"`
+	BundleSHA256         string              `json:"bundle_sha256"`
+	FactoryDigest        string              `json:"factory_digest"`
+	FactoryImage         string              `json:"factory_image"`
+	PrivateGateArtifact  string              `json:"private_gate_artifact"`
+	Protocol             string              `json:"protocol"`
+	Port                 int                 `json:"port"`
+	Build                ExecutorBuild       `json:"build"`
+	Runtime              ExecutorRuntime     `json:"runtime"`
+	Quota                ExecutorQuota       `json:"quota"`
+	Generations          ExecutorGenerations `json:"generations"`
+	Backends             ExecutorBackends    `json:"backends"`
+	Resources            ResourceContract    `json:"resources"`
+	BuildTimeoutSeconds  int64               `json:"build_timeout_seconds"`
+	GateTimeoutSeconds   int64               `json:"gate_timeout_seconds"`
+	DeployTimeoutSeconds int64               `json:"deploy_timeout_seconds"`
+	HealthTimeoutSeconds int64               `json:"health_timeout_seconds"`
+	PreviousFlagTicks    int                 `json:"previous_flag_ticks"`
+}
+
+type ExecutorBuild struct {
+	Context             string   `json:"context"`
+	Dockerfile          string   `json:"dockerfile"`
+	BaseImages          []string `json:"base_images"`
+	AllowedPaths        []string `json:"allowed_paths"`
+	MaximumContextBytes int64    `json:"maximum_context_bytes"`
+}
+
+type ExecutorRuntime struct {
+	UID                 uint32            `json:"uid"`
+	ContainerDataPath   string            `json:"container_data_path"`
+	Environment         map[string]string `json:"environment"`
+	HealthCommand       []string          `json:"health_command"`
+	ReadOnly            bool              `json:"read_only"`
+	NoNewPrivileges     bool              `json:"no_new_privileges"`
+	DropAllCapabilities bool              `json:"drop_all_capabilities"`
+	OutboundNetwork     bool              `json:"outbound_network"`
+	TmpfsBytes          int64             `json:"tmpfs_bytes"`
+	MemoryBytes         int64             `json:"memory_bytes"`
+	CPUMillis           int               `json:"cpu_millis"`
+	PIDs                int               `json:"pids"`
+}
+
+type ExecutorQuota struct {
+	Bytes  int64 `json:"bytes"`
+	Inodes int64 `json:"inodes"`
+}
+
+type ExecutorGeneration struct {
+	Path        string `json:"path"`
+	ProjectName string `json:"project_name"`
+	ProjectID   int    `json:"project_id"`
+}
+
+type ExecutorGenerations struct {
+	Live     ExecutorGeneration `json:"live"`
+	Gate     ExecutorGeneration `json:"gate"`
+	Recovery ExecutorGeneration `json:"recovery"`
+}
+
+type ExecutorBackends struct {
+	LiveAPort int `json:"live_a_port"`
+	LiveBPort int `json:"live_b_port"`
+	GatePort  int `json:"gate_port"`
 }
 
 type ExecutorPolicy struct {
@@ -73,6 +131,9 @@ type ExecutorPolicy struct {
 	TeamNumber     int                              `json:"team_number"`
 	RepositoryPath string                           `json:"repository_path"`
 	PolicyVersion  string                           `json:"policy_version"`
+	LiveAddress    string                           `json:"live_address"`
+	StagingAddress string                           `json:"staging_address"`
+	ProxySocket    string                           `json:"proxy_socket"`
 	Commands       ExecutorCommands                 `json:"commands"`
 	Services       map[string]ExecutorServicePolicy `json:"services"`
 }
@@ -100,21 +161,108 @@ func loadExecutorPolicy(path string, ownerUID, ownerGID uint32, commandDirectory
 }
 
 func (p *ExecutorPolicy) validate(ownerUID, ownerGID uint32, commandDirectory string) error {
-	if p.SchemaVersion != 1 || p.AllowedUID == 0 || !teamIDPattern.MatchString(p.TeamID) || p.TeamNumber < 1 || p.TeamNumber > 15 || !filepath.IsAbs(p.RepositoryPath) || !slugPattern.MatchString(p.PolicyVersion) || len(p.Services) == 0 {
+	if p.SchemaVersion != 2 || p.AllowedUID == 0 || !teamIDPattern.MatchString(p.TeamID) || p.TeamNumber < 1 || p.TeamNumber > 15 || p.RepositoryPath != "/var/lib/deployment-orchestrator/repository" || !slugPattern.MatchString(p.PolicyVersion) || len(p.Services) != 6 {
 		return errors.New("executor policy has invalid identity")
+	}
+	if p.LiveAddress != fmt.Sprintf("10.60.%d.2", p.TeamNumber) || p.StagingAddress != fmt.Sprintf("10.60.%d.3", p.TeamNumber) || p.ProxySocket != "/run/finals-service-proxy/control.sock" {
+		return errors.New("executor policy has invalid fixed traffic endpoints")
 	}
 	for _, operation := range []string{"build", "gate", "promote", "rollback", "health"} {
 		command := p.Commands.command(operation)
-		if !filepath.IsAbs(command) || filepath.Dir(filepath.Clean(command)) != commandDirectory {
-			return fmt.Errorf("executor %s command must be directly below the trusted command directory", operation)
+		if command != filepath.Join(commandDirectory, operation) {
+			return fmt.Errorf("executor %s command does not match the fixed trusted adapter", operation)
 		}
 		if err := validateOwnedFile(command, ownerUID, ownerGID, 0700, true); err != nil {
 			return fmt.Errorf("executor %s command: %w", operation, err)
 		}
 	}
+	ports := make(map[int]struct{}, len(p.Services))
+	uids := make(map[uint32]struct{}, len(p.Services))
+	projectIDs := make(map[int]struct{}, len(p.Services)*3)
+	backendPorts := make(map[int]struct{}, len(p.Services)*3)
+	var quotaBytes, quotaInodes int64
 	for slug, service := range p.Services {
 		if !slugPattern.MatchString(slug) || !commitPattern.MatchString(service.BaseCommit) || !digestPattern.MatchString("sha256:"+service.BundleSHA256) || !digestPattern.MatchString(service.FactoryDigest) || service.PreviousFlagTicks != 5 {
 			return fmt.Errorf("executor service %q has invalid immutable identity", slug)
+		}
+		if !imagePattern.MatchString(service.FactoryImage) || !strings.HasSuffix(service.FactoryImage, "@"+service.FactoryDigest) || !imagePattern.MatchString(service.PrivateGateArtifact) || (service.Protocol != "http" && service.Protocol != "tcp") || service.Port < 7001 || service.Port > 7006 {
+			return fmt.Errorf("executor service %q has invalid release artifacts or endpoint", slug)
+		}
+		if _, exists := ports[service.Port]; exists {
+			return fmt.Errorf("executor service %q repeats a service port", slug)
+		}
+		ports[service.Port] = struct{}{}
+		if _, exists := uids[service.Runtime.UID]; exists {
+			return fmt.Errorf("executor service %q repeats a runtime UID", slug)
+		}
+		uids[service.Runtime.UID] = struct{}{}
+		if !validRelativePath(service.Build.Context) || !validRelativePath(service.Build.Dockerfile) || !strings.HasPrefix(service.Build.Dockerfile, service.Build.Context+"/") || len(service.Build.BaseImages) == 0 || len(service.Build.BaseImages) > 8 || len(service.Build.AllowedPaths) == 0 || service.Build.MaximumContextBytes != service.Resources.MaximumContextBytes {
+			return fmt.Errorf("executor service %q has invalid build policy", slug)
+		}
+		baseImages := make(map[string]struct{}, len(service.Build.BaseImages))
+		for _, image := range service.Build.BaseImages {
+			if !imagePattern.MatchString(image) {
+				return fmt.Errorf("executor service %q has a mutable base image", slug)
+			}
+			if _, exists := baseImages[image]; exists {
+				return fmt.Errorf("executor service %q repeats a base image", slug)
+			}
+			baseImages[image] = struct{}{}
+		}
+		allowedPaths := make(map[string]struct{}, len(service.Build.AllowedPaths))
+		for _, allowed := range service.Build.AllowedPaths {
+			if !validRelativePath(allowed) || !strings.HasPrefix(allowed, service.Build.Context+"/") {
+				return fmt.Errorf("executor service %q has an invalid patch path", slug)
+			}
+			if _, exists := allowedPaths[allowed]; exists {
+				return fmt.Errorf("executor service %q repeats a patch path", slug)
+			}
+			allowedPaths[allowed] = struct{}{}
+		}
+		if service.Runtime.UID < 10000 || service.Runtime.ContainerDataPath != "/data" || !service.Runtime.ReadOnly || !service.Runtime.NoNewPrivileges || !service.Runtime.DropAllCapabilities || service.Runtime.OutboundNetwork || service.Runtime.TmpfsBytes < 1024*1024 || service.Runtime.TmpfsBytes > 64*1024*1024 || service.Runtime.MemoryBytes != service.Resources.MemoryBytes || service.Runtime.CPUMillis != service.Resources.CPUMillis || service.Runtime.PIDs != service.Resources.PIDs || len(service.Runtime.HealthCommand) == 0 || len(service.Runtime.HealthCommand) > 16 || len(service.Runtime.Environment) > 16 {
+			return fmt.Errorf("executor service %q has invalid runtime policy", slug)
+		}
+		for name, value := range service.Runtime.Environment {
+			if !environmentPattern.MatchString(name) || len(value) > 256 {
+				return fmt.Errorf("executor service %q has an invalid environment", slug)
+			}
+		}
+		for _, value := range service.Runtime.HealthCommand {
+			if value == "" || len(value) > 512 {
+				return fmt.Errorf("executor service %q has an invalid health command", slug)
+			}
+		}
+		if service.Quota.Bytes < 64*1024*1024 || service.Quota.Bytes > 4*1024*1024*1024 || service.Quota.Inodes < 1024 || service.Quota.Inodes > 262144 {
+			return fmt.Errorf("executor service %q has invalid storage quota", slug)
+		}
+		quotaBytes += service.Quota.Bytes * 3
+		quotaInodes += service.Quota.Inodes * 3
+		expectedGenerations := []struct {
+			Name       string
+			Generation ExecutorGeneration
+			Offset     int
+		}{
+			{"live", service.Generations.Live, 0},
+			{"gate", service.Generations.Gate, 10000},
+			{"recovery", service.Generations.Recovery, 20000},
+		}
+		for _, expected := range expectedGenerations {
+			if expected.Generation.Path != fmt.Sprintf("/srv/finals/service-data/%d/%s", service.Port, expected.Name) || expected.Generation.ProjectName != fmt.Sprintf("finals-%d-%s", service.Port, expected.Name) || expected.Generation.ProjectID != service.Port+expected.Offset {
+				return fmt.Errorf("executor service %q has invalid %s generation", slug, expected.Name)
+			}
+			if _, exists := projectIDs[expected.Generation.ProjectID]; exists {
+				return fmt.Errorf("executor service %q repeats a project ID", slug)
+			}
+			projectIDs[expected.Generation.ProjectID] = struct{}{}
+		}
+		if service.Backends.LiveAPort != service.Port+10000 || service.Backends.LiveBPort != service.Port+11000 || service.Backends.GatePort != service.Port+12000 {
+			return fmt.Errorf("executor service %q has invalid fixed backend ports", slug)
+		}
+		for _, port := range []int{service.Backends.LiveAPort, service.Backends.LiveBPort, service.Backends.GatePort} {
+			if _, exists := backendPorts[port]; exists {
+				return fmt.Errorf("executor service %q repeats a backend port", slug)
+			}
+			backendPorts[port] = struct{}{}
 		}
 		if service.Resources.NetworkMode != "none" || service.Resources.MaximumContextBytes < 1024 || service.Resources.MaximumContextBytes > 100*1024*1024 || service.Resources.MemoryBytes < 64*1024*1024 || service.Resources.MemoryBytes > maximumServiceMemoryBytes || service.Resources.CPUMillis < 100 || service.Resources.CPUMillis > 4000 || service.Resources.PIDs < 16 || service.Resources.PIDs > 1024 || service.Resources.TimeoutSeconds != 0 {
 			return fmt.Errorf("executor service %q has invalid resources", slug)
@@ -124,6 +272,14 @@ func (p *ExecutorPolicy) validate(ownerUID, ownerGID uint32, commandDirectory st
 				return fmt.Errorf("executor service %q has invalid timeout", slug)
 			}
 		}
+	}
+	for port := 7001; port <= 7006; port++ {
+		if _, exists := ports[port]; !exists {
+			return errors.New("executor policy has incomplete fixed service ports")
+		}
+	}
+	if quotaBytes > 32*1024*1024*1024 || quotaInodes > 2_000_000 {
+		return errors.New("executor policy exceeds the production volume reserve")
 	}
 	return nil
 }

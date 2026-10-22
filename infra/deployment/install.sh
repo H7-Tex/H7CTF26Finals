@@ -19,6 +19,8 @@ for command in install cp systemd-sysusers systemd-tmpfiles systemctl; do
 done
 
 cp -a "$source_dir/rootfs/." "$root/"
+install -D -m 0755 "$source_dir/compile-release.py" "$root/usr/local/sbin/finals-compile-release"
+install -D -m 0755 "$source_dir/tests/service_proxy_smoke.py" "$root/usr/local/libexec/finals-service-proxy-smoke"
 install -D -m 0755 "$orchestrator_binary" "$root/usr/local/bin/deployment-orchestrator"
 install -D -m 0755 "$runner_binary" "$root/usr/local/libexec/deployment-orchestrator/runner"
 install -D -m 0755 "$executor_binary" "$root/usr/local/libexec/deployment-executor/executor"
@@ -29,5 +31,6 @@ systemd-sysusers --root="$root"
 if [[ $root == / ]]; then
   systemd-tmpfiles --create /usr/lib/tmpfiles.d/deployment-orchestrator.conf
   systemd-tmpfiles --create /usr/lib/tmpfiles.d/deployment-executor.conf
+  systemd-tmpfiles --create /usr/lib/tmpfiles.d/finals-release.conf
   systemctl daemon-reload
 fi

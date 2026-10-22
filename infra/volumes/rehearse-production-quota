@@ -3,7 +3,8 @@ set -euo pipefail
 
 [[ $EUID -eq 0 ]] || { echo "must run as root" >&2; exit 1; }
 mount=/srv/finals/service-data
-for command in dd docker find findmnt mv python3 rm systemctl xfs_quota; do
+policy=/etc/finals-release/volume-policy.json
+for command in dd docker find findmnt jq mv python3 rm systemctl xfs_quota; do
   command -v "$command" >/dev/null || { echo "missing dependency: $command" >&2; exit 1; }
 done
 [[ $(findmnt --noheadings --output LABEL,FSTYPE,TARGET --target "$mount") == "service-data xfs $mount" ]] || {
@@ -12,18 +13,28 @@ done
 }
 [[ -z $(docker ps --all --quiet) ]] || { echo "quota rehearsal requires an uncommissioned Docker host" >&2; exit 1; }
 [[ -z $(find "$mount" -mindepth 3 -print -quit) ]] || { echo "quota rehearsal requires empty service generations" >&2; exit 1; }
-for unit in deployment-orchestrator.service deployment-executor.socket deployment-executor.service; do
+[[ -f $policy ]] || { echo "compiled volume policy is missing" >&2; exit 1; }
+for unit in deployment-orchestrator.service deployment-executor.socket deployment-executor.service finals-service-proxy.service; do
   ! systemctl is-active --quiet "$unit" || { echo "quota rehearsal requires inactive deployment services" >&2; exit 1; }
 done
 
 restore() {
-  rm -f "$mount/7003/live/byte-limit" "$mount/7003/live/current" "$mount/7003/live/next" "$mount/7004/live"/inode-* "$mount/7005/live/sibling"
+  rm -f "$mount/7003/live/byte-limit" "$mount/7003/live/current" "$mount/7003/live/next" \
+    "$mount/7003/gate/gate-write" "$mount/7003/recovery/recovery-write" \
+    "$mount/7004/live"/inode-* "$mount/7004/gate/gate-inode" "$mount/7005/live/sibling"
   /usr/local/sbin/finals-initialize-volume production
 }
 trap restore EXIT
 
 docker info >/dev/null
-xfs_quota -x -c 'limit -p bhard=8m ihard=65536 finals-7003' "$mount"
+live_7003=$(jq -er '.services[] | select(.port == 7003) | .generations.live.project_name' "$policy")
+gate_7004=$(jq -er '.services[] | select(.port == 7004) | .generations.gate.project_name' "$policy")
+live_7004=$(jq -er '.services[] | select(.port == 7004) | .generations.live.project_name' "$policy")
+[[ $live_7003 =~ ^finals-7003-live$ && $live_7004 =~ ^finals-7004-live$ && $gate_7004 =~ ^finals-7004-gate$ ]] || {
+  echo "compiled volume policy has unexpected project names" >&2
+  exit 1
+}
+xfs_quota -x -c "limit -p bhard=8m ihard=65536 $live_7003" "$mount"
 python3 - "$mount/7003/live/byte-limit" <<'PY'
 import errno
 import os
@@ -42,12 +53,14 @@ else:
     raise SystemExit("byte quota did not return EDQUOT")
 PY
 rm -f "$mount/7003/live/byte-limit"
-xfs_quota -x -c 'limit -p bhard=16m ihard=65536 finals-7003' "$mount"
+xfs_quota -x -c "limit -p bhard=16m ihard=65536 $live_7003" "$mount"
 dd if=/dev/zero of="$mount/7003/live/current" bs=1M count=6 status=none
 dd if=/dev/zero of="$mount/7003/live/next" bs=1M count=6 status=none
 mv -f "$mount/7003/live/next" "$mount/7003/live/current"
+dd if=/dev/zero of="$mount/7003/gate/gate-write" bs=1M count=1 status=none
+dd if=/dev/zero of="$mount/7003/recovery/recovery-write" bs=1M count=1 status=none
 
-xfs_quota -x -c 'limit -p bhard=128m ihard=64 finals-7004' "$mount"
+xfs_quota -x -c "limit -p bhard=128m ihard=64 $live_7004" "$mount"
 python3 - "$mount/7004/live" <<'PY'
 import errno
 import os
@@ -65,7 +78,8 @@ for number in range(1, 129):
 else:
     raise SystemExit("inode quota did not return EDQUOT")
 PY
+touch "$mount/7004/gate/gate-inode"
 
 dd if=/dev/zero of="$mount/7005/live/sibling" bs=1M count=1 status=none
 docker info >/dev/null
-echo "production byte quota, inode quota, atomic rewrite headroom, sibling isolation and Docker health passed"
+echo "production live, gate and recovery quota isolation, atomic rewrite headroom, sibling isolation and Docker health passed"

@@ -2,6 +2,8 @@
 
 Production enablement requires both rehearsals below with immutable evidence: repository commit, orchestrator binary SHA-256, policy version, runner version, factory/candidate digests, audit sequence range, timing and operator. Synthetic flags must follow the event format and must never be reused in the live game.
 
+Before either rehearsal, run `finals-rehearse-production-quota` on an uncommissioned host and record its output. It must prove byte and inode exhaustion in a live generation does not consume gate or recovery capacity. Run `finals-service-proxy-smoke`; its HTTP-shaped and raw TCP flows must reach the backend from the same normalized source with unchanged payloads. Validate the compiled HAProxy configuration and prove all 18 backends are disabled before commissioning chooses a factory slot.
+
 ## One-team canary
 
 Run the complete path on a disposable team before provisioning all 15 instances:
@@ -26,4 +28,4 @@ From 15 private repositories, push one allowed change to all six services in a c
 
 Then repeat a mixed burst containing valid patches, protected paths, build failures, gate failures, lost webhooks, manual rollbacks and two causal post-promotion failures. No failed candidate may change a live digest or durable data. Do not call the platform production-ready until every audit sequence is accounted for and all 15 factory restores have been exercised.
 
-The current repository has no backup unit or production-host secret-bundle target. The smallest commissioning follow-up is a root-only offline backup/restore helper plus systemd service/timer, encrypted operations storage with retention, a production role in `infra/secrets`, and a restore drill that verifies the state/audit sequence before enabling the orchestrator. Do not schedule live two-file copies: without stopping the writer they are not a consistent backup boundary.
+The repository has a static offline backup/restore helper but no production-host secret-bundle target, encrypted operations mount or retention workflow. Those commissioning inputs and a restore drill remain mandatory. Do not schedule live two-file copies: without stopping the writer they are not a consistent backup boundary.

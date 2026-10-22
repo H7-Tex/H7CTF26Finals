@@ -4,6 +4,11 @@ set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$root"
 
+export PYTHONDONTWRITEBYTECODE=1
+python3 -m unittest discover -s tests -p 'test_*.py'
+python3 -m json.tool release.template.json >/dev/null
+python3 -m json.tool team.template.json >/dev/null
+
 gofmt -d . | tee /tmp/deployment-orchestrator-gofmt.$$
 [[ ! -s /tmp/deployment-orchestrator-gofmt.$$ ]]
 rm -f /tmp/deployment-orchestrator-gofmt.$$
@@ -30,6 +35,7 @@ grep -Fxq 'UMask=0027' rootfs/usr/lib/systemd/system/deployment-orchestrator.ser
 ! grep -Eq 'IPAddressAllow=10\.6[01]\.[0-9]+\.0/' rootfs/usr/lib/systemd/system/deployment-orchestrator.service
 ! grep -Eq 'systemctl[[:space:]].*enable.*deployment-orchestrator' install.sh
 ! grep -Eq 'systemctl[[:space:]].*enable.*deployment-executor' install.sh
+! grep -Eq 'systemctl[[:space:]].*enable.*finals-service-proxy' install.sh
 grep -Fq 'SocketMode=0660' rootfs/usr/lib/systemd/system/deployment-executor.socket
 grep -Fq 'SocketGroup=deploy-orchestrator' rootfs/usr/lib/systemd/system/deployment-executor.socket
 grep -Fq 'ExecStartPre=/usr/local/libexec/deployment-executor/executor validate' rootfs/usr/lib/systemd/system/deployment-executor.socket
@@ -44,19 +50,33 @@ grep -Fxq 'CapabilityBoundingSet=' rootfs/usr/lib/systemd/system/deployment-exec
 ! grep -Fq '[Install]' rootfs/usr/lib/systemd/system/deployment-orchestrator-backup.service
 grep -Fq 'Conflicts=deployment-orchestrator.service' rootfs/usr/lib/systemd/system/deployment-orchestrator-backup.service
 grep -Fq 'ConditionPathIsMountPoint=/var/backups/deployment-orchestrator' rootfs/usr/lib/systemd/system/deployment-orchestrator-backup.service
+grep -Fq 'ConditionPathExists=/etc/finals-release/haproxy.cfg' rootfs/usr/lib/systemd/system/finals-service-proxy.service
+grep -Fq 'stats socket /run/finals-service-proxy/control.sock user root group root mode 600 level admin' compile-release.py
+grep -Fq 'server slot_a 127.0.0.1:' compile-release.py
+grep -Fq 'server slot_b 127.0.0.1:' compile-release.py
+grep -Fq 'server gate 127.0.0.1:' compile-release.py
+! grep -Eq 'send-proxy|forwardfor|mode http' compile-release.py
 
 verify_dir=$(mktemp -d)
 cp rootfs/usr/lib/systemd/system/deployment-orchestrator.service "$verify_dir/"
 cp rootfs/usr/lib/systemd/system/deployment-executor.service "$verify_dir/"
 cp rootfs/usr/lib/systemd/system/deployment-executor.socket "$verify_dir/"
 cp rootfs/usr/lib/systemd/system/deployment-orchestrator-backup.service "$verify_dir/"
+cp rootfs/usr/lib/systemd/system/finals-service-proxy.service "$verify_dir/"
 cp ../volumes/finals-volume@.service "$verify_dir/"
 sed -i 's#/usr/local/bin/deployment-orchestrator#/bin/true#g' "$verify_dir/deployment-orchestrator.service"
 sed -i 's#/usr/local/libexec/deployment-executor/executor#/bin/true#g' "$verify_dir/deployment-executor.service" "$verify_dir/deployment-executor.socket"
 sed -i 's#/usr/local/sbin/deployment-orchestrator-state#/bin/true#g' "$verify_dir/deployment-orchestrator-backup.service"
+sed -i 's#/usr/sbin/haproxy#/bin/true#g' "$verify_dir/finals-service-proxy.service"
 sed -i 's#/usr/local/sbin/finals-initialize-volume#/bin/true#g' "$verify_dir/finals-volume@.service"
 systemd-analyze verify "$verify_dir"/*.service "$verify_dir"/*.socket
 rm -rf "$verify_dir"
+
+if command -v haproxy >/dev/null; then
+  python3 tests/service_proxy_smoke.py
+else
+  echo "haproxy unavailable: runtime source-equivalence smoke deferred to the production image gate" >&2
+fi
 
 if grep -RniE 'h7d|:latest|docker[[:space:]]+tag|exec\.Command\([^,]+,[[:space:]]*"(sh|bash)"' --include='*.go' --include='*.service' --include='*.md' .; then
   echo "legacy branding, mutable tags or shell execution found" >&2

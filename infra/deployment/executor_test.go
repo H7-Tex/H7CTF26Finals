@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -16,12 +17,53 @@ import (
 )
 
 const (
-	testCommit  = "1111111111111111111111111111111111111111"
-	testBase    = "2222222222222222222222222222222222222222"
-	testBundle  = "3333333333333333333333333333333333333333333333333333333333333333"
-	testFactory = "sha256:4444444444444444444444444444444444444444444444444444444444444444"
-	testBuilt   = "sha256:5555555555555555555555555555555555555555555555555555555555555555"
+	testCommit       = "1111111111111111111111111111111111111111"
+	testBase         = "2222222222222222222222222222222222222222"
+	testBundle       = "3333333333333333333333333333333333333333333333333333333333333333"
+	testFactory      = "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+	testBuilt        = "sha256:5555555555555555555555555555555555555555555555555555555555555555"
+	testFactoryImage = "registry.invalid/finals/sign-me-in@" + testFactory
+	testPrivateGate  = "registry.invalid/finals/sign-me-in-gate@sha256:6666666666666666666666666666666666666666666666666666666666666666"
 )
+
+func testExecutorServiceAt(port int) ExecutorServicePolicy {
+	return ExecutorServicePolicy{
+		BaseCommit: testBase, BundleSHA256: testBundle, FactoryDigest: testFactory,
+		FactoryImage: testFactoryImage, PrivateGateArtifact: testPrivateGate, Protocol: "http", Port: port,
+		Build: ExecutorBuild{
+			Context: "service", Dockerfile: "service/Dockerfile",
+			BaseImages:   []string{"python@sha256:7777777777777777777777777777777777777777777777777777777777777777"},
+			AllowedPaths: []string{"service/src/"}, MaximumContextBytes: 1024,
+		},
+		Runtime: ExecutorRuntime{
+			UID: uint32(3000 + port), ContainerDataPath: "/data", Environment: map[string]string{"PORT": strconv.Itoa(port)},
+			HealthCommand: []string{"/app/service", "health"}, ReadOnly: true, NoNewPrivileges: true,
+			DropAllCapabilities: true, TmpfsBytes: 1024 * 1024, MemoryBytes: 64 * 1024 * 1024,
+			CPUMillis: 100, PIDs: 16,
+		},
+		Quota: ExecutorQuota{Bytes: 64 * 1024 * 1024, Inodes: 1024},
+		Generations: ExecutorGenerations{
+			Live:     ExecutorGeneration{Path: fmt.Sprintf("/srv/finals/service-data/%d/live", port), ProjectName: fmt.Sprintf("finals-%d-live", port), ProjectID: port},
+			Gate:     ExecutorGeneration{Path: fmt.Sprintf("/srv/finals/service-data/%d/gate", port), ProjectName: fmt.Sprintf("finals-%d-gate", port), ProjectID: port + 10000},
+			Recovery: ExecutorGeneration{Path: fmt.Sprintf("/srv/finals/service-data/%d/recovery", port), ProjectName: fmt.Sprintf("finals-%d-recovery", port), ProjectID: port + 20000},
+		},
+		Backends:            ExecutorBackends{LiveAPort: port + 10000, LiveBPort: port + 11000, GatePort: port + 12000},
+		Resources:           ResourceContract{NetworkMode: "none", MaximumContextBytes: 1024, MemoryBytes: 64 * 1024 * 1024, CPUMillis: 100, PIDs: 16},
+		BuildTimeoutSeconds: 5, GateTimeoutSeconds: 5, DeployTimeoutSeconds: 5, HealthTimeoutSeconds: 5, PreviousFlagTicks: 5,
+	}
+}
+
+func testExecutorService() ExecutorServicePolicy {
+	return testExecutorServiceAt(7001)
+}
+
+func testExecutorServices() map[string]ExecutorServicePolicy {
+	services := make(map[string]ExecutorServicePolicy, 6)
+	for index, slug := range []string{"sign-me-in", "can-we-settle-this", "update-pending", "book-me-if-you-can", "ship-it", "terms-may-apply"} {
+		services[slug] = testExecutorServiceAt(7001 + index)
+	}
+	return services
+}
 
 func executorFixture(t *testing.T) (*Executor, RunRequest, string) {
 	t.Helper()
@@ -36,14 +78,11 @@ func executorFixture(t *testing.T) (*Executor, RunRequest, string) {
 		t.Fatal(err)
 	}
 	policy := &ExecutorPolicy{
-		SchemaVersion: 1, AllowedUID: uint32(os.Getuid()), TeamID: "11111111-1111-4111-8111-111111111111", TeamNumber: 1,
+		SchemaVersion: 2, AllowedUID: uint32(os.Getuid()), TeamID: "11111111-1111-4111-8111-111111111111", TeamNumber: 1,
 		RepositoryPath: "/var/lib/deployment-orchestrator/repository", PolicyVersion: "finals-1",
+		LiveAddress: "10.60.1.2", StagingAddress: "10.60.1.3", ProxySocket: "/run/finals-service-proxy/control.sock",
 		Commands: ExecutorCommands{Build: backend, Gate: backend, Promote: backend, Rollback: backend, Health: backend},
-		Services: map[string]ExecutorServicePolicy{"sign-me-in": {
-			BaseCommit: testBase, BundleSHA256: testBundle, FactoryDigest: testFactory,
-			Resources:           ResourceContract{NetworkMode: "none", MaximumContextBytes: 1024, MemoryBytes: 64 * 1024 * 1024, CPUMillis: 100, PIDs: 16},
-			BuildTimeoutSeconds: 5, GateTimeoutSeconds: 5, DeployTimeoutSeconds: 5, HealthTimeoutSeconds: 5, PreviousFlagTicks: 5,
-		}},
+		Services: map[string]ExecutorServicePolicy{"sign-me-in": testExecutorService()},
 	}
 	executor, err := newExecutor(policy, directory, uint32(os.Getuid()), uint32(os.Getgid()))
 	if err != nil {
@@ -223,19 +262,31 @@ func TestExecutorPolicyRequiresPrivatePolicyAndRootOnlyCommands(t *testing.T) {
 	if err := os.Chmod(directory, 0700); err != nil {
 		t.Fatal(err)
 	}
-	backend := filepath.Join(directory, "backend")
-	if err := os.WriteFile(backend, []byte("#!/bin/sh\nexit 1\n"), 0700); err != nil {
-		t.Fatal(err)
+	commands := ExecutorCommands{}
+	for _, operation := range []string{"build", "gate", "promote", "rollback", "health"} {
+		command := filepath.Join(directory, operation)
+		if err := os.WriteFile(command, []byte("#!/bin/sh\nexit 1\n"), 0700); err != nil {
+			t.Fatal(err)
+		}
+		switch operation {
+		case "build":
+			commands.Build = command
+		case "gate":
+			commands.Gate = command
+		case "promote":
+			commands.Promote = command
+		case "rollback":
+			commands.Rollback = command
+		case "health":
+			commands.Health = command
+		}
 	}
 	policy := ExecutorPolicy{
-		SchemaVersion: 1, AllowedUID: 1234, TeamID: "11111111-1111-4111-8111-111111111111", TeamNumber: 1,
+		SchemaVersion: 2, AllowedUID: 1234, TeamID: "11111111-1111-4111-8111-111111111111", TeamNumber: 1,
 		RepositoryPath: "/var/lib/deployment-orchestrator/repository", PolicyVersion: "finals-1",
-		Commands: ExecutorCommands{Build: backend, Gate: backend, Promote: backend, Rollback: backend, Health: backend},
-		Services: map[string]ExecutorServicePolicy{"sign-me-in": {
-			BaseCommit: testBase, BundleSHA256: testBundle, FactoryDigest: testFactory,
-			Resources:           ResourceContract{NetworkMode: "none", MaximumContextBytes: 1024, MemoryBytes: 64 * 1024 * 1024, CPUMillis: 100, PIDs: 16},
-			BuildTimeoutSeconds: 5, GateTimeoutSeconds: 5, DeployTimeoutSeconds: 5, HealthTimeoutSeconds: 5, PreviousFlagTicks: 5,
-		}},
+		LiveAddress: "10.60.1.2", StagingAddress: "10.60.1.3", ProxySocket: "/run/finals-service-proxy/control.sock",
+		Commands: commands,
+		Services: testExecutorServices(),
 	}
 	data, err := json.Marshal(policy)
 	if err != nil {
@@ -290,13 +341,13 @@ func TestExecutorPolicyRequiresPrivatePolicyAndRootOnlyCommands(t *testing.T) {
 	if err := os.Chmod(policyPath, 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Chmod(backend, 0755); err != nil {
+	if err := os.Chmod(commands.Build, 0755); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := loadExecutorPolicy(policyPath, uid, gid, directory); err == nil {
 		t.Fatal("non-private backend command was accepted")
 	}
-	if err := os.Chmod(backend, 0700); err != nil {
+	if err := os.Chmod(commands.Build, 0700); err != nil {
 		t.Fatal(err)
 	}
 	data = append(data[:len(data)-1], []byte(`,"unknown":true}`)...)
