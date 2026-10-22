@@ -4,4 +4,4 @@ This OCI Resource Manager root consumes reviewed `oci-foundation` outputs and cr
 
 Do not plan or apply it until the immutable router image and checked-in cloud-init pass the destination-IP separation tests in `../../../modules/oci-ingress/README.md`.
 
-After creation, the routing stack must point the game routes at the active router's VPN secondary private IP. Mid-event failover moves both ingress pairs and the 15 team identities together, runs the four positive/negative protocol probes, and then updates `active_router` so the next plan does not move them back.
+After creation, the routing stack must point the game routes at the active gateway's VPN secondary private IP. Mid-event failover moves both ingress private addresses and the 15 team identities together, runs the four positive/negative protocol probes, and then updates `active_router` so the next plan does not move them back.
