@@ -1,7 +1,7 @@
 resource "google_storage_bucket" "archive" {
   for_each = var.bucket_purposes
 
-  name                        = "h7ctf26-finals-${each.key}-${var.project_number}"
+  name                        = "finals-${each.key}-${var.project_number}"
   project                     = var.project_id
   location                    = var.location
   storage_class               = "STANDARD"
@@ -14,7 +14,7 @@ resource "google_storage_bucket" "archive" {
   }
 
   labels = {
-    event      = "h7ctf26-finals"
+    event      = "finals-2026"
     managed_by = "terraform"
     purpose    = each.key
   }

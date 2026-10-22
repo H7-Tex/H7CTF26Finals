@@ -12,7 +12,7 @@ variable "project_id" {
 variable "bucket_name" {
   description = "Globally unique state bucket name. Use the GCP project number as the suffix."
   type        = string
-  default     = "h7ctf26-finals-tfstate-1049039378581"
+  default     = "finals-terraform-state-1049039378581"
 
   validation {
     condition     = can(regex("^[a-z0-9][a-z0-9._-]{1,61}[a-z0-9]$", var.bucket_name))

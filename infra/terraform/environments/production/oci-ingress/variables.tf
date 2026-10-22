@@ -46,5 +46,5 @@ variable "router_cloud_init" {
 variable "active_router" {
   description = "Router that owns both ingress IP pairs."
   type        = string
-  default     = "r1"
+  default     = "primary"
 }

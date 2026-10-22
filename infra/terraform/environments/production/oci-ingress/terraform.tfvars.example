@@ -5,7 +5,7 @@ edge_subnet_id          = "ocid1.subnet.oc1.ap-hyderabad-1.replace-me"
 router_nsg_id           = "ocid1.networksecuritygroup.oc1.ap-hyderabad-1.replace-me"
 router_image_id         = "ocid1.image.oc1.ap-hyderabad-1.replace-with-reviewed-image"
 ssh_authorized_keys     = "ssh-ed25519 replace-with-organizer-public-key"
-active_router           = "r1"
+active_router           = "primary"
 router_cloud_init       = <<-YAML
   #cloud-config
   # This example is intentionally non-runnable. Supply the reviewed router

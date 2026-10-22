@@ -1,2 +1,2 @@
-bucket = "h7ctf26-finals-tfstate-1049039378581"
-prefix = "h7ctf26/finals/gcp-backup"
+bucket = "finals-terraform-state-1049039378581"
+prefix = "finals/2026/gcp-backup"

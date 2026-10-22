@@ -6,10 +6,6 @@ output "ingress_private_ip_ids" {
   value = { for name, address in oci_core_private_ip.ingress : name => address.id }
 }
 
-output "web_public_ip" {
-  value = oci_core_public_ip.ingress["web"].ip_address
-}
-
-output "vpn_public_ip" {
-  value = oci_core_public_ip.ingress["vpn"].ip_address
+output "ingress_private_ips" {
+  value = { for name, address in oci_core_private_ip.ingress : name => address.ip_address }
 }

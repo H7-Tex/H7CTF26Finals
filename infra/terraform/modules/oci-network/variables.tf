@@ -1,5 +1,5 @@
 variable "compartment_id" {
-  description = "OCID of the dedicated h7-finals compartment."
+  description = "OCID of the dedicated finals compartment."
   type        = string
 }
 

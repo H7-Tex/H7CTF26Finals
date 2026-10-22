@@ -5,7 +5,7 @@ resource "oci_identity_compartment" "finals" {
   enable_delete  = false
 
   freeform_tags = {
-    event      = "h7ctf26-finals"
+    event      = "finals-2026"
     managed_by = "terraform"
   }
 

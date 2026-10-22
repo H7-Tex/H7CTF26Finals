@@ -40,10 +40,10 @@ variable "cloud_init" {
 variable "active_router" {
   description = "Router that owns both stable ingress private/public IP pairs."
   type        = string
-  default     = "r1"
+  default     = "primary"
 
   validation {
-    condition     = contains(["r1", "r2"], var.active_router)
-    error_message = "active_router must be r1 or r2."
+    condition     = contains(["primary", "standby"], var.active_router)
+    error_message = "active_router must be primary or standby."
   }
 }

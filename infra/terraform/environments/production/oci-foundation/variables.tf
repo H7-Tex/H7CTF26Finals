@@ -16,7 +16,7 @@ variable "region" {
 
 variable "compartment_name" {
   type    = string
-  default = "h7-finals"
+  default = "finals"
 }
 
 variable "enable_mirror_warmup_egress" {

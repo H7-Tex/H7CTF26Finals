@@ -1,52 +1,59 @@
 locals {
   fixed_subnets = {
     edge = {
-      cidr        = "10.60.250.0/24"
-      dns_label   = "edge"
-      route_class = "edge"
-      public      = true
+      cidr         = "10.60.250.0/24"
+      dns_label    = "edge"
+      display_name = "edge"
+      route_class  = "edge"
+      public       = true
     }
     services = {
-      cidr        = "10.60.200.0/24"
-      dns_label   = "services"
-      route_class = "service"
-      public      = false
+      cidr         = "10.60.200.0/24"
+      dns_label    = "services"
+      display_name = "services"
+      route_class  = "service"
+      public       = false
     }
     core = {
-      cidr        = "10.60.201.0/24"
-      dns_label   = "core"
-      route_class = "isolated"
-      public      = false
+      cidr         = "10.60.201.0/24"
+      dns_label    = "core"
+      display_name = "core"
+      route_class  = "isolated"
+      public       = false
     }
     mirror = {
-      cidr        = "10.60.202.0/24"
-      dns_label   = "mirror"
-      route_class = "mirror"
-      public      = false
+      cidr         = "10.60.202.0/24"
+      dns_label    = "mirror"
+      display_name = "mirror"
+      route_class  = "mirror"
+      public       = false
     }
     hills = {
-      cidr        = "10.60.210.0/24"
-      dns_label   = "hills"
-      route_class = "isolated"
-      public      = false
+      cidr         = "10.60.210.0/24"
+      dns_label    = "hills"
+      display_name = "hills"
+      route_class  = "isolated"
+      public       = false
     }
   }
 
   production_subnets = {
     for team in range(1, var.team_count + 2) : format("p%02d", team) => {
-      cidr        = format("10.60.%d.0/24", team)
-      dns_label   = format("p%02d", team)
-      route_class = "isolated"
-      public      = false
+      cidr         = format("10.60.%d.0/24", team)
+      dns_label    = format("production%02d", team)
+      display_name = format("production-%02d", team)
+      route_class  = "isolated"
+      public       = false
     }
   }
 
   workbench_subnets = {
     for team in range(1, var.team_count + 1) : format("w%02d", team) => {
-      cidr        = format("10.61.%d.0/24", team)
-      dns_label   = format("w%02d", team)
-      route_class = "isolated"
-      public      = false
+      cidr         = format("10.61.%d.0/24", team)
+      dns_label    = format("workbench%02d", team)
+      display_name = format("workbench-%02d", team)
+      route_class  = "isolated"
+      public       = false
     }
   }
 
@@ -60,7 +67,7 @@ locals {
   }
 
   tags = {
-    event      = "h7ctf26-finals"
+    event      = "finals-2026"
     managed_by = "terraform"
   }
 }
@@ -68,8 +75,8 @@ locals {
 resource "oci_core_vcn" "finals" {
   compartment_id = var.compartment_id
   cidr_blocks    = var.vcn_cidrs
-  display_name   = "h7f-vcn"
-  dns_label      = "h7f"
+  display_name   = "arena"
+  dns_label      = "arena"
   freeform_tags  = local.tags
 
   lifecycle {
@@ -80,7 +87,7 @@ resource "oci_core_vcn" "finals" {
 resource "oci_core_internet_gateway" "edge" {
   compartment_id = var.compartment_id
   vcn_id         = oci_core_vcn.finals.id
-  display_name   = "h7f-igw"
+  display_name   = "internet"
   enabled        = true
   freeform_tags  = local.tags
 }
@@ -88,21 +95,21 @@ resource "oci_core_internet_gateway" "edge" {
 resource "oci_core_nat_gateway" "warmup" {
   compartment_id = var.compartment_id
   vcn_id         = oci_core_vcn.finals.id
-  display_name   = "h7f-warmup-nat"
+  display_name   = "egress"
   freeform_tags  = local.tags
 }
 
 resource "oci_core_security_list" "empty" {
   compartment_id = var.compartment_id
   vcn_id         = oci_core_vcn.finals.id
-  display_name   = "h7f-empty"
+  display_name   = "deny-all"
   freeform_tags  = local.tags
 }
 
 resource "oci_core_route_table" "edge" {
   compartment_id = var.compartment_id
   vcn_id         = oci_core_vcn.finals.id
-  display_name   = "h7f-edge"
+  display_name   = "edge"
   freeform_tags  = local.tags
 
   route_rules {
@@ -115,7 +122,7 @@ resource "oci_core_route_table" "edge" {
 resource "oci_core_route_table" "service" {
   compartment_id = var.compartment_id
   vcn_id         = oci_core_vcn.finals.id
-  display_name   = "h7f-service"
+  display_name   = "services"
   freeform_tags  = local.tags
 
   dynamic "route_rules" {
@@ -132,7 +139,7 @@ resource "oci_core_route_table" "service" {
 resource "oci_core_route_table" "mirror" {
   compartment_id = var.compartment_id
   vcn_id         = oci_core_vcn.finals.id
-  display_name   = "h7f-mirror"
+  display_name   = "mirror"
   freeform_tags  = local.tags
 
   dynamic "route_rules" {
@@ -149,28 +156,28 @@ resource "oci_core_route_table" "mirror" {
 resource "oci_core_route_table" "isolated" {
   compartment_id = var.compartment_id
   vcn_id         = oci_core_vcn.finals.id
-  display_name   = "h7f-isolated"
+  display_name   = "isolated"
   freeform_tags  = local.tags
 }
 
 resource "oci_core_network_security_group" "router" {
   compartment_id = var.compartment_id
   vcn_id         = oci_core_vcn.finals.id
-  display_name   = "h7f-router"
+  display_name   = "ingress"
   freeform_tags  = local.tags
 }
 
 resource "oci_core_network_security_group" "game" {
   compartment_id = var.compartment_id
   vcn_id         = oci_core_vcn.finals.id
-  display_name   = "h7f-game"
+  display_name   = "workloads"
   freeform_tags  = local.tags
 }
 
 resource "oci_core_network_security_group" "infra" {
   compartment_id = var.compartment_id
   vcn_id         = oci_core_vcn.finals.id
-  display_name   = "h7f-infra"
+  display_name   = "platform"
   freeform_tags  = local.tags
 }
 
@@ -282,7 +289,7 @@ resource "oci_core_subnet" "finals" {
   compartment_id             = var.compartment_id
   vcn_id                     = oci_core_vcn.finals.id
   cidr_block                 = each.value.cidr
-  display_name               = "h7f-${each.key}"
+  display_name               = each.value.display_name
   dns_label                  = each.value.dns_label
   route_table_id             = local.route_tables[each.value.route_class]
   security_list_ids          = [oci_core_security_list.empty.id]

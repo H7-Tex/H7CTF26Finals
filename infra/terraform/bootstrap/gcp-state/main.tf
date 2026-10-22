@@ -12,7 +12,7 @@ resource "google_storage_bucket" "terraform_state" {
   }
 
   labels = {
-    event      = "h7ctf26-finals"
+    event      = "finals-2026"
     managed_by = "terraform"
     purpose    = "terraform-state"
   }
