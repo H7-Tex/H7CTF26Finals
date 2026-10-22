@@ -21,9 +21,9 @@ For a gateway failover, first stop `event-router-flow-log.service` and record th
 
 ## Image and DNS gates
 
-The runtime builder accepts only Anvil v0.353.0 commit `3aabb7f10714bf378ef9a1922242641a8b532252`. It clones that public revision during the outbound-only build, runs its finals checks, prebuilds the API and web layers, pulls every pinned compose image and installs the exact tree at `/opt/anvil/current`. No service, certificate or secret is embedded in the image.
+The runtime builder accepts only Anvil v0.354.0 commit `c879ebf6c9a583416edf141830fbc1e606e0eb1c`. It clones that public revision during the outbound-only build, runs its finals checks, prebuilds the API and web layers, pulls every pinned compose image and installs the exact tree at `/opt/anvil/current`. No service, certificate or secret is embedded in the image.
 
-Builder source is stored as fixed-path executable payloads in a private transient OCI Object Storage bucket. Per-role object-read PARs use an explicit reviewed expiry no more than 24 hours away. Tiny cloud-init runs a bounded downloader that verifies exact byte length and SHA-256 before executing the payload; it does not recursively invoke cloud-init. Capture only stopped, tested builders. Destroy the builder stack after capture to revoke the PARs and delete the source objects. The production image capture must use the final repository revision containing the reviewed Deployment Orchestrator binary and fixed runner; the base image only supplies its locked account and state directories.
+Builder source is stored as fixed-path executable payloads in a private transient OCI Object Storage bucket. Per-role object-read PARs use an explicit reviewed expiry no more than 24 hours away. Tiny cloud-init runs a bounded downloader that verifies exact byte length and SHA-256 before executing the payload; it does not recursively invoke cloud-init. Capture only stopped, tested builders. Destroy the builder stack after capture to revoke the PARs and delete the source objects. The production image capture must use the final repository revision containing the reviewed Deployment Orchestrator binary and disabled hardened unit. The fixed runner, manifests, credentials and initialized state are separate commissioning artifacts and are never embedded in the generic image.
 
 Cloudflare must hold these DNS-only records:
 
@@ -86,7 +86,7 @@ Control activation fixes `finals.h7tex.com` to `10.60.200.10` in `/etc/hosts`. T
 
 Checker artifacts live below `/opt/finals-checkers`. A reviewed `artifact-manifest.json` records each relative path, size, executable marker and SHA-256. `finals-checkers-ready.service` is disabled and refuses activation on any missing, changed, linked or escaping artifact. This is an integrity gate only; it does not invent a checker API or scheduler.
 
-Each hill host firewall drops all sibling-hill traffic in input, forward and output paths. It exposes only its assigned 7101, 7102 or 7103 listener to team identities and control. Before opening play, prove the assigned port works from one team and control, every unassigned hill port fails, and no hill container or host can connect to either sibling address.
+Production host firewalls accept challenge ports `7001-7006` only from the router's normalized private identity `10.60.250.120`; they do not admit control or team identities directly. The router preserves original sources only in pre-NAT telemetry and adds no application or transport marker. Each hill host firewall drops all sibling-hill traffic in input, forward and output paths. It exposes only its assigned 7101, 7102 or 7103 listener to team identities and control. Before opening play, prove the assigned port works from one team and control, every unassigned hill port fails, and no hill container or host can connect to either sibling address.
 
 ## Final acceptance
 

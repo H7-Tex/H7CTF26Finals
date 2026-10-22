@@ -45,6 +45,35 @@ class FirewallTests(unittest.TestCase):
         self.assertIn("tcp dport { 80, 443 } accept", warmup)
         self.assertIn("ip daddr 10.60.0.0/16 accept", offline)
 
+    def test_production_orchestrator_has_three_exact_callers(self):
+        rules = MODULE.render("production")
+        self.assertIn(
+            "ip saddr { 10.60.200.10, 10.60.201.20, 10.60.201.30 } tcp dport 9300 accept",
+            rules,
+        )
+        self.assertNotIn("10.60.0.0/16 tcp dport 9300 accept", rules)
+        self.assertNotIn("10.60.200.0/24 tcp dport 9300 accept", rules)
+        self.assertNotIn("10.60.201.0/24 tcp dport 9300 accept", rules)
+        self.assertNotIn("10.60.250.121-10.60.250.135 tcp dport 9300", rules)
+
+    def test_production_service_ingress_has_one_normalized_source(self):
+        rules = MODULE.render("production")
+        self.assertIn("ip saddr 10.60.250.120 tcp dport 7001-7006 accept", rules)
+        self.assertIn(
+            "ip saddr 10.60.250.120 ct status dnat ct original proto-dst 7001-7006 accept",
+            rules,
+        )
+        self.assertNotIn("10.60.201.20 tcp dport 7001-7006", rules)
+        self.assertNotIn("10.60.250.121-10.60.250.135 tcp dport 7001-7006", rules)
+
+    def test_production_egress_is_limited_to_fixed_dependencies(self):
+        rules = MODULE.render("production")
+        self.assertIn("ip daddr 10.60.200.10 tcp dport 443 accept", rules)
+        self.assertIn("ip daddr 10.60.201.20 tcp dport 9300 accept", rules)
+        self.assertIn("ip daddr 10.60.201.30 tcp dport { 22, 443 } accept", rules)
+        self.assertIn("ip daddr 10.60.202.10 tcp dport { 3141, 3142, 4873, 5000 } accept", rules)
+        self.assertNotIn("tcp dport { 80, 443 } accept", rules)
+
 
 if __name__ == "__main__":
     unittest.main()

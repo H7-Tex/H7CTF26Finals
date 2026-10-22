@@ -1,0 +1,182 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+production_addresses=(
+  10.60.1.2 10.60.2.2 10.60.3.2 10.60.4.2
+  10.60.5.2 10.60.6.2 10.60.7.2 10.60.8.2
+  10.60.9.2 10.60.10.2 10.60.11.2 10.60.12.2
+  10.60.13.2 10.60.14.2 10.60.15.2 10.60.16.2
+)
+hill_services=(
+  "10.60.210.11 . 7101"
+  "10.60.210.12 . 7102"
+  "10.60.210.13 . 7103"
+)
+
+persist_challenge_access() {
+  local state=$1 state_file=$2 state_dir temporary
+  state_dir=$(dirname "$state_file")
+  install -d -m 0700 "$state_dir" || return 1
+  temporary=$(mktemp "$state_dir/.challenge-access.XXXXXX") || return 1
+  if ! chmod 0600 "$temporary" || ! printf '%s\n' "$state" > "$temporary" || ! sync -f "$temporary"; then
+    rm -f -- "$temporary"
+    return 1
+  fi
+  if ! mv -f -- "$temporary" "$state_file"; then
+    rm -f -- "$temporary"
+    return 1
+  fi
+  sync -f "$state_dir"
+}
+
+apply_challenge_access() {
+  local state=$1 nft_tool=$2 production hill
+  production=$(IFS=,; printf '%s' "${production_addresses[*]}")
+  hill=$(IFS=,; printf '%s' "${hill_services[*]}")
+  case "$state" in
+    closed)
+      "$nft_tool" -f - <<'EOF'
+flush set inet event_router released_production_addresses
+flush set inet event_router released_hill_services
+EOF
+      ;;
+    open)
+      "$nft_tool" -f - <<EOF
+flush set inet event_router released_production_addresses
+flush set inet event_router released_hill_services
+add element inet event_router released_production_addresses { $production }
+add element inet event_router released_hill_services { $hill }
+EOF
+      ;;
+    *)
+      echo "challenge access state must be open or closed" >&2
+      return 2
+      ;;
+  esac
+}
+
+verify_challenge_access() {
+  local expected=$1 nft_tool=$2 temporary production_json hill_json status=0
+  temporary=$(mktemp -d)
+  production_json="$temporary/production.json"
+  hill_json="$temporary/hills.json"
+  if ! "$nft_tool" -j list set inet event_router released_production_addresses > "$production_json" ||
+     ! "$nft_tool" -j list set inet event_router released_hill_services > "$hill_json"; then
+    rm -rf -- "$temporary"
+    return 1
+  fi
+  python3 - "$expected" "$production_json" "$hill_json" <<'PY' || status=$?
+import json
+import sys
+
+expected = sys.argv[1]
+production_document = json.loads(open(sys.argv[2], encoding="utf-8").read())
+hill_document = json.loads(open(sys.argv[3], encoding="utf-8").read())
+
+def set_elements(document, name):
+    entries = [entry["set"] for entry in document.get("nftables", []) if "set" in entry and entry["set"].get("name") == name]
+    if len(entries) != 1:
+        raise SystemExit(1)
+    return entries[0].get("elem", [])
+
+production = set_elements(production_document, "released_production_addresses")
+hills = set_elements(hill_document, "released_hill_services")
+expected_production = [f"10.60.{team}.2" for team in range(1, 17)]
+expected_hills = [{"concat": [f"10.60.210.{10 + index}", 7100 + index]} for index in range(1, 4)]
+if expected == "closed":
+    valid = production == [] and hills == []
+elif expected == "open":
+    valid = sorted(production) == sorted(expected_production) and sorted(hills, key=str) == sorted(expected_hills, key=str)
+else:
+    valid = False
+raise SystemExit(0 if valid else 1)
+PY
+  rm -rf -- "$temporary"
+  return "$status"
+}
+
+force_kernel_closed() {
+  local nft_tool=$1
+  apply_challenge_access closed "$nft_tool" && verify_challenge_access closed "$nft_tool"
+}
+
+invalidate_persisted_challenge_access() {
+  local state_file=$1 state_dir
+  state_dir=$(dirname "$state_file")
+  if [[ -e $state_file || -L $state_file ]]; then
+    unlink -- "$state_file" || return 1
+    sync -f "$state_dir" || return 1
+  fi
+}
+
+set_challenge_access() {
+  local state=$1 state_file=$2 nft_tool=$3
+  if ! apply_challenge_access "$state" "$nft_tool" || ! verify_challenge_access "$state" "$nft_tool"; then
+    force_kernel_closed "$nft_tool" || echo "failed to force challenge access closed" >&2
+    return 1
+  fi
+  if ! persist_challenge_access "$state" "$state_file"; then
+    force_kernel_closed "$nft_tool" || echo "failed to force challenge access closed after persistence failure" >&2
+    if ! persist_challenge_access closed "$state_file"; then
+      invalidate_persisted_challenge_access "$state_file" || echo "failed to invalidate stale challenge access state" >&2
+    fi
+    return 1
+  fi
+}
+
+restore_challenge_access() {
+  local state_file=$1 nft_tool=$2
+  if ! set_challenge_access closed "$state_file" "$nft_tool"; then
+    force_kernel_closed "$nft_tool" || echo "failed to force challenge access closed during restore" >&2
+    return 1
+  fi
+}
+
+status_challenge_access() {
+  local state_file=$1 nft_tool=$2 expected_uid=${3:-0} state mode owner
+  state=$(cat "$state_file" 2>/dev/null || true)
+  mode=$(stat -c '%a' "$state_file" 2>/dev/null || true)
+  owner=$(stat -c '%u' "$state_file" 2>/dev/null || true)
+  if [[ ($state == open || $state == closed) && $mode == 600 && $owner == "$expected_uid" ]] && verify_challenge_access "$state" "$nft_tool"; then
+    printf '%s\n' "$state"
+    return
+  fi
+  if set_challenge_access closed "$state_file" "$nft_tool"; then
+    printf 'closed\n'
+    echo "challenge access state drifted; kernel access was forced closed" >&2
+  else
+    printf 'unknown\n'
+    echo "challenge access state drifted and could not be reconciled" >&2
+  fi
+  return 1
+}
+
+main() {
+  [[ $EUID -eq 0 ]] || { echo "must run as root" >&2; return 1; }
+  [[ $# -eq 1 ]] || { echo "usage: event-router-challenge-access {open|close|status|restore}" >&2; return 2; }
+  local action=$1 state_file=/var/lib/event-router/challenge-access nft_tool=/usr/sbin/nft state
+  case "$action" in
+    open)
+      set_challenge_access open "$state_file" "$nft_tool"
+      logger --tag event-router-challenge-access -- '{"event":"challenge_access","state":"open"}'
+      ;;
+    close)
+      set_challenge_access closed "$state_file" "$nft_tool"
+      logger --tag event-router-challenge-access -- '{"event":"challenge_access","state":"closed"}'
+      ;;
+    restore)
+      restore_challenge_access "$state_file" "$nft_tool"
+      ;;
+    status)
+      status_challenge_access "$state_file" "$nft_tool"
+      ;;
+    *)
+      echo "usage: event-router-challenge-access {open|close|status|restore}" >&2
+      return 2
+      ;;
+  esac
+}
+
+if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
+  main "$@"
+fi

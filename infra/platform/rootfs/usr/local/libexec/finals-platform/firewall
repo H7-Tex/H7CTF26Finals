@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 
-ROLES = {"platform", "operations", "control", "repository", "mirror", "hill-01", "hill-02", "hill-03"}
+ROLES = {"platform", "operations", "control", "repository", "mirror", "production", "hill-01", "hill-02", "hill-03"}
 HILL_PORTS = {"hill-01": 7101, "hill-02": 7102, "hill-03": 7103}
 
 
@@ -66,6 +66,21 @@ def role_rules(role, mirror_warmup=False):
             "    ip saddr 10.60.200.5 tcp dport 22 accept",
             "ip saddr 10.60.0.0/16 ct status dnat ct original proto-dst { 3141, 4873, 5000 } accept",
             f"ip daddr 10.60.0.0/16 accept{public_egress}",
+        )
+    if role == "production":
+        return (
+            "ip saddr 10.60.250.120 tcp dport 7001-7006 accept\n"
+            "    ip saddr { 10.60.200.10, 10.60.201.20, 10.60.201.30 } tcp dport 9300 accept\n"
+            "    ip saddr 10.60.200.5 tcp dport 22 accept",
+            "ip saddr 10.60.250.120 ct status dnat ct original proto-dst 7001-7006 accept\n"
+            "    iifname \"br-*\" ip daddr 10.60.200.10 tcp dport 443 accept\n"
+            "    iifname \"br-*\" ip daddr 10.60.201.20 tcp dport 9300 accept\n"
+            "    iifname \"br-*\" ip daddr 10.60.201.30 tcp dport { 22, 443 } accept\n"
+            "    iifname \"br-*\" ip daddr 10.60.202.10 tcp dport { 3141, 3142, 4873, 5000 } accept",
+            "ip daddr 10.60.200.10 tcp dport 443 accept\n"
+            "    ip daddr 10.60.201.20 tcp dport 9300 accept\n"
+            "    ip daddr 10.60.201.30 tcp dport { 22, 443 } accept\n"
+            "    ip daddr 10.60.202.10 tcp dport { 3141, 3142, 4873, 5000 } accept",
         )
     port = HILL_PORTS[role]
     return (

@@ -25,7 +25,7 @@ PATHS=(infra/terraform)
 
 case "$STACK" in
   oci-gateway-builder) PATHS+=(infra/images/router infra/platform infra/secrets infra/volumes) ;;
-  oci-runtime-builders) PATHS+=(infra/images/runtime infra/platform infra/reconciler infra/secrets infra/volumes) ;;
+  oci-runtime-builders) PATHS+=(infra/deployment infra/images/runtime infra/platform infra/reconciler infra/secrets infra/volumes) ;;
 esac
 
 mkdir -p "$OUTPUT_DIR"

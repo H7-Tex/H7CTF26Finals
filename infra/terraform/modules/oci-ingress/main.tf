@@ -109,6 +109,16 @@ resource "oci_core_private_ip" "ingress" {
   }
 }
 
+resource "oci_core_private_ip" "service_ingress" {
+  vnic_id      = data.oci_core_vnic_attachments.router[var.active_router].vnic_attachments[0].vnic_id
+  display_name = "service-ingress"
+  ip_address   = "10.60.250.120"
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
 resource "oci_core_private_ip" "team_egress" {
   for_each = local.team_egress
 

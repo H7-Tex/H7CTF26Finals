@@ -2,11 +2,12 @@
 set -euo pipefail
 
 restore_state() {
-  local role_file=$1 private_key=$2 active_inventory=$3 address_tool=$4 apply_tool=$5 role
+  local role_file=$1 private_key=$2 active_inventory=$3 address_tool=$4 apply_tool=$5 access_tool=$6 role
   role=$(cat "$role_file" 2>/dev/null || true)
   [[ $role == active || $role == standby ]] || { echo "router restore: fixed role is missing or invalid" >&2; return 1; }
 
   "$address_tool" standby
+  "$access_tool" restore
   if [[ -f $private_key && -f $active_inventory ]]; then
     "$apply_tool" "$active_inventory"
   elif [[ -e $private_key || -e $active_inventory ]]; then
@@ -24,7 +25,8 @@ main() {
     /etc/wireguard/private.key \
     /var/lib/event-router/active-peers.json \
     /usr/local/sbin/event-router-addresses \
-    /usr/local/sbin/event-router-apply-inventory
+    /usr/local/sbin/event-router-apply-inventory \
+    /usr/local/sbin/event-router-challenge-access
 }
 
 if [[ ${BASH_SOURCE[0]} == "$0" ]]; then

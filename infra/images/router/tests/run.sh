@@ -12,9 +12,11 @@ bash -n \
   "$ROUTER_DIR/rootfs/usr/local/sbin/event-router-apply-inventory" \
   "$ROUTER_DIR/rootfs/usr/local/sbin/event-router-authorize-reconciler" \
   "$ROUTER_DIR/rootfs/usr/local/sbin/event-router-capture" \
+  "$ROUTER_DIR/rootfs/usr/local/sbin/event-router-challenge-access" \
   "$ROUTER_DIR/rootfs/usr/local/sbin/event-router-initialize" \
   "$ROUTER_DIR/rootfs/usr/local/sbin/event-router-restore" \
   "$ROUTER_DIR/seal-image" \
+  "$ROUTER_DIR/tests/challenge_access.sh" \
   "$ROUTER_DIR/tests/restore.sh" \
   "$ROUTER_DIR/tests/network_namespace.sh"
 python3 -m unittest discover -s "$ROUTER_DIR/tests" -p 'test_*.py'
@@ -27,5 +29,14 @@ grep -Fq 'Requires=event-router-restore.service event-router-flow-log.service' "
 grep -Fq '[[ ! $inventory -ef $active_inventory ]]' "$ROUTER_DIR/rootfs/usr/local/sbin/event-router-apply-inventory"
 grep -Fq 'RequiresMountsFor=/srv/captures' "$ROUTER_DIR/rootfs/etc/systemd/system/event-router-flow-log.service"
 grep -Fq 'ExecStart=/usr/local/sbin/event-router-capture stream' "$ROUTER_DIR/rootfs/etc/systemd/system/event-router-flow-log.service"
+grep -Fq 'ip saddr { 10.60.200.10, 10.60.201.20, 10.60.201.30 } ip daddr @production_addresses tcp dport 9300 ct state new accept' "$ROUTER_DIR/rootfs/etc/nftables.conf"
+grep -Fq 'ip daddr @released_production_addresses tcp dport @service_ports' "$ROUTER_DIR/rootfs/etc/nftables.conf"
+grep -Fq 'ip daddr . tcp dport @released_hill_services' "$ROUTER_DIR/rootfs/etc/nftables.conf"
+grep -Fq 'ip saddr @workbench_addresses ip daddr @production_addresses tcp dport @service_ports jump released_production_guard' "$ROUTER_DIR/rootfs/etc/nftables.conf"
+grep -Fq 'iifname "wg0" ip saddr @peer_addresses ip daddr @production_addresses tcp dport @service_ports jump released_production_guard' "$ROUTER_DIR/rootfs/etc/nftables.conf"
+grep -Fq 'ip saddr @production_addresses tcp sport @service_ports ip daddr @workbench_addresses jump released_production_reply_guard' "$ROUTER_DIR/rootfs/etc/nftables.conf"
+grep -Fq 'ip daddr @production_addresses tcp dport @service_ports snat to 10.60.250.120' "$ROUTER_DIR/rootfs/etc/nftables.conf"
+grep -Fq 'ip daddr @staging_addresses tcp dport @service_ports snat to 10.60.250.120' "$ROUTER_DIR/rootfs/etc/nftables.conf"
+"$ROUTER_DIR/tests/challenge_access.sh"
 "$ROUTER_DIR/tests/restore.sh"
 "$ROUTER_DIR/tests/network_namespace.sh"

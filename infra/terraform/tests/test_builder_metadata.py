@@ -54,6 +54,29 @@ class BuilderMetadataTests(unittest.TestCase):
         ):
             self.assertIn(f"  - {package}\n", template)
 
+    def test_runtime_builder_packages_the_deployment_orchestrator(self):
+        source = (ROOT / "terraform/environments/production/oci-runtime-builders/main.tf").read_text(encoding="utf-8")
+        package_script = (ROOT / "terraform/scripts/package-oci-stack.sh").read_text(encoding="utf-8")
+        self.assertIn('deployment       = "${path.module}/../../../../deployment"', source)
+        self.assertIn('"deployment/install.sh"', source)
+        self.assertIn('"deployment/tests/run.sh"', source)
+        self.assertIn("infra/deployment infra/images/runtime", package_script)
+
+    def test_runtime_builder_replaces_for_par_and_user_data_changes(self):
+        source = (ROOT / "terraform/environments/production/oci-runtime-builders/main.tf").read_text(encoding="utf-8")
+        self.assertIn('resource "terraform_data" "builder_generation"', source)
+        self.assertIn("oci_objectstorage_preauthrequest.source[each.key].id", source)
+        self.assertIn("sha256(local.bootstrap_user_data[each.key])", source)
+        self.assertIn("terraform_data.builder_generation[each.key]", source)
+
+    def test_runtime_builder_pins_reviewed_anvil(self):
+        root = ROOT / "terraform/environments/production/oci-runtime-builders"
+        variables = (root / "variables.tf").read_text(encoding="utf-8")
+        example = (root / "terraform.tfvars.example").read_text(encoding="utf-8")
+        revision = "c879ebf6c9a583416edf141830fbc1e606e0eb1c"
+        self.assertIn(f'var.anvil_revision == "{revision}"', variables)
+        self.assertIn(f'anvil_revision      = "{revision}"', example)
+
     def test_builder_provenance_and_hard_metadata_gates_exist(self):
         package_script = (ROOT / "terraform/scripts/package-oci-stack.sh").read_text(encoding="utf-8")
         self.assertIn("status --porcelain --untracked-files=normal", package_script)
@@ -83,6 +106,8 @@ class BuilderMetadataTests(unittest.TestCase):
 
         ingress = (ROOT / "terraform/modules/oci-ingress/main.tf").read_text(encoding="utf-8")
         self.assertGreaterEqual(ingress.count("prevent_destroy = true"), 3)
+        self.assertIn('resource "oci_core_private_ip" "service_ingress"', ingress)
+        self.assertIn('ip_address   = "10.60.250.120"', ingress)
         fleet = (ROOT / "terraform/modules/oci-compute-fleet/main.tf").read_text(encoding="utf-8")
         self.assertGreaterEqual(fleet.count("prevent_destroy = true"), 3)
 

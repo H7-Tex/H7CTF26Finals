@@ -2,6 +2,7 @@
 set -euo pipefail
 
 runtime_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+deployment_dir=$(cd "$runtime_dir/../../deployment" && pwd)
 
 bash -n \
   "$runtime_dir/build-image" \
@@ -19,3 +20,13 @@ grep -Fq 'certbot' "$runtime_dir/install.sh"
 grep -Fq 'deploy-orchestrator' "$runtime_dir/rootfs/usr/lib/sysusers.d/deployment-orchestrator.conf"
 grep -Fq "dpkg-query -W" "$runtime_dir/seal-image"
 grep -Fq 'package_manifest_sha256' "$runtime_dir/seal-image"
+grep -Fq 'CGO_ENABLED=0 go build' "$runtime_dir/build-image"
+grep -Fq 'apt-get purge --yes --auto-remove build-essential golang-go' "$runtime_dir/build-image"
+grep -Fq 'deployment/install.sh' "$runtime_dir/build-image"
+grep -Fq 'systemctl enable finals-host-firewall.service' "$runtime_dir/build-image"
+grep -Fq '10.60.200.10 finals.h7tex.com' "$runtime_dir/build-image"
+grep -Fq 'find "$source_dir" -mindepth 1 -delete' "$runtime_dir/seal-image"
+grep -Fq 'ConditionPathExists=/etc/deployment-orchestrator/config.json' "$deployment_dir/rootfs/usr/lib/systemd/system/deployment-orchestrator.service"
+grep -Fq 'ConditionPathExists=/var/lib/deployment-orchestrator/state.json' "$deployment_dir/rootfs/usr/lib/systemd/system/deployment-orchestrator.service"
+grep -Fq 'ConditionFileIsExecutable=/usr/local/libexec/deployment-orchestrator/runner' "$deployment_dir/rootfs/usr/lib/systemd/system/deployment-orchestrator.service"
+! grep -Eq 'systemctl[[:space:]].*enable.*deployment-orchestrator' "$deployment_dir/install.sh" "$runtime_dir/build-image"

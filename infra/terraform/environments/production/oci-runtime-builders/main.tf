@@ -25,6 +25,7 @@ locals {
     toset(["build-image", "install.sh", "runtime-image-seal.service", "seal-image"])
   )
   auxiliary_sources = {
+    deployment       = "${path.module}/../../../../deployment"
     platform         = "${path.module}/../../../../platform"
     reconciler       = "${path.module}/../../../../reconciler"
     secret-bootstrap = "${path.module}/../../../../secrets"
@@ -36,6 +37,8 @@ locals {
     "seal-image",
     "tests/run.sh",
     "tests/static.sh",
+    "deployment/install.sh",
+    "deployment/tests/run.sh",
     "platform/install.sh",
     "platform/prepare-anvil.sh",
     "platform/rootfs/usr/local/libexec/finals-platform/checker-preflight",
@@ -193,6 +196,15 @@ resource "oci_core_network_security_group_security_rule" "builder_egress" {
   description               = "Package installation during image build"
 }
 
+resource "terraform_data" "builder_generation" {
+  for_each = local.profiles
+
+  triggers_replace = [
+    oci_objectstorage_preauthrequest.source[each.key].id,
+    sha256(local.bootstrap_user_data[each.key]),
+  ]
+}
+
 resource "oci_core_instance" "builder" {
   for_each = local.profiles
 
@@ -242,7 +254,10 @@ resource "oci_core_instance" "builder" {
   }
 
   lifecycle {
-    replace_triggered_by = [oci_objectstorage_object.source[each.key]]
+    replace_triggered_by = [
+      oci_objectstorage_object.source[each.key],
+      terraform_data.builder_generation[each.key],
+    ]
 
     precondition {
       condition     = length(local.bootstrap_user_data[each.key]) < 16384

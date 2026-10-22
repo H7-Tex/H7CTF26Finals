@@ -16,6 +16,7 @@ chmod 0755 \
   "$root/usr/local/sbin/event-router-apply-inventory" \
   "$root/usr/local/sbin/event-router-authorize-reconciler" \
   "$root/usr/local/sbin/event-router-capture" \
+  "$root/usr/local/sbin/event-router-challenge-access" \
   "$root/usr/local/sbin/event-router-receive-inventory" \
   "$root/usr/local/sbin/event-router-initialize" \
   "$root/usr/local/sbin/event-router-restore" \

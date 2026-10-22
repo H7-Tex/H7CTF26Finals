@@ -41,4 +41,17 @@ if [[ $role == production ]]; then
   getent passwd deploy-orchestrator | grep -Fq '/usr/sbin/nologin'
   [[ $(stat -c '%U:%G:%a' /etc/deployment-orchestrator) == root:deploy-orchestrator:700 ]]
   [[ $(stat -c '%U:%G:%a' /var/lib/deployment-orchestrator) == deploy-orchestrator:deploy-orchestrator:700 ]]
+  test -x /usr/local/bin/deployment-orchestrator
+  ! ldd /usr/local/bin/deployment-orchestrator >/dev/null 2>&1
+  [[ $(systemctl is-enabled deployment-orchestrator.service 2>/dev/null) == disabled ]]
+  ! systemctl is-active --quiet deployment-orchestrator.service
+  [[ ! -e /usr/local/libexec/deployment-orchestrator/runner ]]
+  [[ ! -e /etc/deployment-orchestrator/config.json ]]
+  [[ ! -e /var/lib/deployment-orchestrator/state.json ]]
+  [[ $(cat /etc/finals-platform/role) == '{"role":"production"}' ]]
+  [[ $(grep -Ec '^10\.60\.200\.10[[:space:]]+finals\.h7tex\.com([[:space:]]|$)' /etc/hosts) == 1 ]]
+  systemctl is-enabled finals-host-firewall.service >/dev/null
+  /usr/local/libexec/finals-platform/firewall --render production | nft --check --file -
+  ! command -v go >/dev/null
+  ! command -v gcc >/dev/null
 fi

@@ -16,6 +16,7 @@ calls="$test_dir/calls"
 
 address_tool="$test_dir/addresses"
 apply_tool="$test_dir/apply"
+access_tool="$test_dir/access"
 cat > "$address_tool" <<EOF
 #!/usr/bin/env bash
 printf 'addresses %s\n' "\$1" >> '$calls'
@@ -24,25 +25,30 @@ cat > "$apply_tool" <<EOF
 #!/usr/bin/env bash
 printf 'inventory %s\n' "\$1" >> '$calls'
 EOF
-chmod 0755 "$address_tool" "$apply_tool"
+cat > "$access_tool" <<EOF
+#!/usr/bin/env bash
+printf 'access %s\n' "\$1" >> '$calls'
+EOF
+chmod 0755 "$address_tool" "$apply_tool" "$access_tool"
 
 printf 'active\n' > "$role_file"
-restore_state "$role_file" "$private_key" "$active_inventory" "$address_tool" "$apply_tool"
+restore_state "$role_file" "$private_key" "$active_inventory" "$address_tool" "$apply_tool" "$access_tool"
 grep -Fxq 'addresses standby' "$calls"
+grep -Fxq 'access restore' "$calls"
 ! grep -Fq 'inventory ' "$calls"
 ! grep -Fq 'addresses active' "$calls"
 
 printf 'secret\n' > "$private_key"
 printf '{}\n' > "$active_inventory"
-restore_state "$role_file" "$private_key" "$active_inventory" "$address_tool" "$apply_tool"
+restore_state "$role_file" "$private_key" "$active_inventory" "$address_tool" "$apply_tool" "$access_tool"
 grep -Fxq "inventory $active_inventory" "$calls"
 
 printf 'standby\n' > "$role_file"
-restore_state "$role_file" "$private_key" "$active_inventory" "$address_tool" "$apply_tool"
+restore_state "$role_file" "$private_key" "$active_inventory" "$address_tool" "$apply_tool" "$access_tool"
 grep -Fxq 'addresses standby' "$calls"
 
 printf 'unknown\n' > "$role_file"
-! restore_state "$role_file" "$private_key" "$active_inventory" "$address_tool" "$apply_tool"
+! restore_state "$role_file" "$private_key" "$active_inventory" "$address_tool" "$apply_tool" "$access_tool"
 
 printf 'active\n' > "$role_file"
 ready_tool="$test_dir/ready"

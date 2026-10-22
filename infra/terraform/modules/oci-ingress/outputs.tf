@@ -14,6 +14,14 @@ output "routing_private_ip_id" {
   value = oci_core_private_ip.ingress["vpn"].id
 }
 
+output "service_ingress_private_ip_id" {
+  value = oci_core_private_ip.service_ingress.id
+}
+
+output "service_ingress_private_ip" {
+  value = oci_core_private_ip.service_ingress.ip_address
+}
+
 output "team_egress_private_ip_ids" {
   value = { for name, address in oci_core_private_ip.team_egress : name => address.id }
 }

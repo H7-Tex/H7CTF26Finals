@@ -1,0 +1,28 @@
+name: Deployment Orchestrator checks
+
+on:
+  pull_request:
+    paths:
+      - "infra/deployment/**"
+      - ".github/workflows/deployment-orchestrator.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "infra/deployment/**"
+      - ".github/workflows/deployment-orchestrator.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32 # v5.0.2
+        with:
+          go-version-file: infra/deployment/go.mod
+          cache-dependency-path: infra/deployment/go.mod
+      - name: Test Deployment Orchestrator
+        run: infra/deployment/tests/run.sh

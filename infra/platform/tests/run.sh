@@ -26,7 +26,7 @@ while IFS='=' read -r name image; do
   [[ $image =~ @sha256:[0-9a-f]{64}$ ]]
 done < "$platform_dir/images.env"
 
-for role in platform operations control repository mirror hill-01 hill-02 hill-03; do
+for role in platform operations control repository mirror production hill-01 hill-02 hill-03; do
   rules=$(mktemp)
   "$platform_dir/rootfs/usr/local/libexec/finals-platform/firewall" --render "$role" > "$rules"
   if command -v nft >/dev/null && [[ $EUID -eq 0 ]]; then

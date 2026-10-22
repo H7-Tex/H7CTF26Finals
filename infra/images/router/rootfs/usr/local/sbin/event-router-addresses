@@ -8,7 +8,7 @@ state=${1:?usage: event-router-addresses active|standby}
 interface=${EVENT_ROUTER_INTERFACE:-$(ip -o route show default | awk 'NR == 1 { print $5 }')}
 [[ -n $interface ]] || { echo "cannot determine the primary interface" >&2; exit 1; }
 
-addresses=(10.60.250.100 10.60.250.101)
+addresses=(10.60.250.100 10.60.250.101 10.60.250.120)
 for team in $(seq 1 15); do
   addresses+=("10.60.250.$((120 + team))")
 done

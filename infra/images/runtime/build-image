@@ -7,6 +7,29 @@ anvil_revision=${2:-}
 source_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 "$source_dir/install.sh" "$role"
+if [[ $role == production ]]; then
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get install --yes --no-install-recommends build-essential golang-go
+  "$source_dir/deployment/tests/run.sh"
+  deployment_binary=$(mktemp)
+  (
+    cd "$source_dir/deployment"
+    CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o "$deployment_binary" ./cmd/deployment-orchestrator
+  )
+  chmod 0755 "$deployment_binary"
+  "$source_dir/deployment/install.sh" "$deployment_binary"
+  rm -f "$deployment_binary"
+
+  install -D -m 0755 "$source_dir/platform/rootfs/usr/local/libexec/finals-platform/firewall" /usr/local/libexec/finals-platform/firewall
+  install -D -m 0644 "$source_dir/platform/rootfs/etc/systemd/system/finals-host-firewall.service" /etc/systemd/system/finals-host-firewall.service
+  install -D -m 0644 /dev/null /etc/finals-platform/role
+  printf '{"role":"production"}\n' > /etc/finals-platform/role
+  grep -Eq '^10\.60\.200\.10[[:space:]]+finals\.h7tex\.com([[:space:]]|$)' /etc/hosts || printf '10.60.200.10 finals.h7tex.com\n' >> /etc/hosts
+  systemctl enable finals-host-firewall.service
+
+  apt-get purge --yes --auto-remove build-essential golang-go
+  rm -rf /root/.cache/go-build /root/go
+fi
 if [[ $role == platform-x86 || $role == platform-arm ]]; then
   install -D -m 0755 "$source_dir/secret-bootstrap/install-secret-bundle.py" /usr/local/sbin/finals-install-secret-bundle
   install -D -m 0755 "$source_dir/secret-bootstrap/finals-secret-relay-receive" /usr/local/sbin/finals-secret-relay-receive
