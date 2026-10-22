@@ -61,6 +61,7 @@ locals {
     "secret-bootstrap/tests/run.sh",
     "secret-bootstrap/tests/test_relay_receiver.sh",
     "volumes/initialize-volume.py",
+    "volumes/rehearse-production-quota",
     "volumes/tests/run.sh",
   ])
   files = concat([for path in local.runtime_files : {

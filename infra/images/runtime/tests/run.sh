@@ -38,6 +38,12 @@ if [[ $role == platform-x86 || $role == platform-arm ]]; then
 fi
 
 if [[ $role == production ]]; then
+  command -v mkfs.xfs >/dev/null
+  command -v xfs_quota >/dev/null
+  command -v finals-initialize-volume >/dev/null
+  command -v finals-rehearse-production-quota >/dev/null
+  systemctl is-enabled finals-volume@production.service >/dev/null
+  grep -Fq 'ExecStartPre=/usr/local/sbin/finals-initialize-volume production' /etc/systemd/system/docker.service.d/90-production-volume.conf
   getent passwd deploy-orchestrator | grep -Fq '/usr/sbin/nologin'
   [[ $(stat -c '%U:%G:%a' /etc/deployment-orchestrator) == root:deploy-orchestrator:700 ]]
   [[ $(stat -c '%U:%G:%a' /var/lib/deployment-orchestrator) == deploy-orchestrator:deploy-orchestrator:710 ]]

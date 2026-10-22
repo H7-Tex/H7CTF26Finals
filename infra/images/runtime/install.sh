@@ -53,6 +53,10 @@ if [[ $role == workbench ]]; then
     zip
 fi
 
+if [[ $role == production ]]; then
+  apt-get install --yes --no-install-recommends xfsprogs
+fi
+
 cp --archive "$source_dir/rootfs/." /
 chmod 0644 /etc/docker/daemon.json /etc/ssh/sshd_config.d/90-runtime.conf /etc/sysctl.d/90-runtime.conf
 sshd -t

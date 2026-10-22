@@ -27,6 +27,13 @@ if [[ $role == production ]]; then
     "$deployment_build_dir/deployment-orchestrator-state"
   rm -rf "$deployment_build_dir"
 
+  install -D -m 0755 "$source_dir/volumes/initialize-volume.py" /usr/local/sbin/finals-initialize-volume
+  install -D -m 0755 "$source_dir/volumes/rehearse-production-quota" /usr/local/sbin/finals-rehearse-production-quota
+  install -D -m 0644 "$source_dir/volumes/finals-volume@.service" /etc/systemd/system/finals-volume@.service
+  install -D -m 0644 "$source_dir/volumes/docker-production.conf" /etc/systemd/system/docker.service.d/90-production-volume.conf
+  "$source_dir/volumes/tests/run.sh"
+  systemctl enable finals-volume@production.service
+
   install -D -m 0755 "$source_dir/platform/rootfs/usr/local/libexec/finals-platform/firewall" /usr/local/libexec/finals-platform/firewall
   install -D -m 0644 "$source_dir/platform/rootfs/etc/systemd/system/finals-host-firewall.service" /etc/systemd/system/finals-host-firewall.service
   install -D -m 0644 /dev/null /etc/finals-platform/role

@@ -14,6 +14,14 @@ output "staging_private_ips" {
   value = module.fleet.staging_private_ips
 }
 
+output "production_data_volume_ids" {
+  value = module.fleet.production_data_volume_ids
+}
+
+output "production_data_attachment_ids" {
+  value = module.fleet.production_data_attachment_ids
+}
+
 output "workbench_instance_ids" {
   value = module.fleet.workbench_instance_ids
 }

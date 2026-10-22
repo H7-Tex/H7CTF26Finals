@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import json
 import os
+import stat
 import subprocess
 import sys
 import tempfile
@@ -9,10 +10,20 @@ from pathlib import Path
 
 GIB = 1024 ** 3
 ROLES = {
-    "anvil": {"label": "anvil-data", "mount": "/srv/anvil", "minimum": 140 * GIB, "maximum": 160 * GIB},
-    "repository": {"label": "gitea-data", "mount": "/srv/gitea", "minimum": 90 * GIB, "maximum": 110 * GIB},
-    "mirror": {"label": "cache-data", "mount": "/srv/cache", "minimum": 290 * GIB, "maximum": 310 * GIB},
-    "captures": {"label": "captures-data", "mount": "/srv/captures", "minimum": 490 * GIB, "maximum": 510 * GIB},
+    "anvil": {"label": "anvil-data", "mount": "/srv/anvil", "minimum": 140 * GIB, "maximum": 160 * GIB, "filesystem": "ext4", "options": "defaults,nodev,nosuid"},
+    "repository": {"label": "gitea-data", "mount": "/srv/gitea", "minimum": 90 * GIB, "maximum": 110 * GIB, "filesystem": "ext4", "options": "defaults,nodev,nosuid"},
+    "mirror": {"label": "cache-data", "mount": "/srv/cache", "minimum": 290 * GIB, "maximum": 310 * GIB, "filesystem": "ext4", "options": "defaults,nodev,nosuid"},
+    "captures": {"label": "captures-data", "mount": "/srv/captures", "minimum": 490 * GIB, "maximum": 510 * GIB, "filesystem": "ext4", "options": "defaults,nodev,nosuid"},
+    "production": {"label": "service-data", "mount": "/srv/finals/service-data", "minimum": 40 * GIB, "maximum": 60 * GIB, "filesystem": "xfs", "options": "defaults,nodev,nosuid,prjquota"},
+}
+
+SERVICE_QUOTAS = {
+    7001: {"bytes": 1024 * 1024 ** 2, "inodes": 65536},
+    7002: {"bytes": 1024 * 1024 ** 2, "inodes": 65536},
+    7003: {"bytes": 512 * 1024 ** 2, "inodes": 32768},
+    7004: {"bytes": 1024 * 1024 ** 2, "inodes": 65536},
+    7005: {"bytes": 2048 * 1024 ** 2, "inodes": 131072},
+    7006: {"bytes": 1024 * 1024 ** 2, "inodes": 65536},
 }
 
 
@@ -56,7 +67,7 @@ def select_data_disk(document, role):
     mountpoints = [value for value in disk.get("mountpoints") or [] if value]
     if filesystem is None and label is None and not mountpoints:
         return disk["path"], "blank"
-    if filesystem == "ext4" and label == profile["label"] and mountpoints in ([], [profile["mount"]]):
+    if filesystem == profile["filesystem"] and label == profile["label"] and mountpoints in ([], [profile["mount"]]):
         return disk["path"], "initialized"
     raise VolumeError("data disk has an unexpected filesystem, label or mount")
 
@@ -75,7 +86,7 @@ def lsblk():
 
 
 def fstab_entry(profile):
-    return f"LABEL={profile['label']} {profile['mount']} ext4 defaults,nodev,nosuid 0 2"
+    return f"LABEL={profile['label']} {profile['mount']} {profile['filesystem']} {profile['options']} 0 2"
 
 
 def ensure_fstab(profile, path=Path("/etc/fstab")):
@@ -135,26 +146,115 @@ def mount_if_needed(path, is_mount=os.path.ismount, runner=command):
     return True
 
 
+def ensure_mappings(path, desired):
+    if path.is_symlink() or (path.exists() and not stat.S_ISREG(path.stat().st_mode)):
+        raise VolumeError(f"{path} is not a regular mapping file")
+    lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+    existing = {}
+    reverse = {}
+    for line in lines:
+        if not line or line.lstrip().startswith("#"):
+            continue
+        parts = line.split(":", 1)
+        if len(parts) != 2 or not all(parts):
+            raise VolumeError(f"{path} contains a malformed mapping")
+        key, value = parts
+        if key in existing and existing[key] != value:
+            raise VolumeError(f"{path} contains a conflicting mapping")
+        if value in reverse and reverse[value] != key:
+            raise VolumeError(f"{path} contains a conflicting mapping")
+        existing[key] = value
+        reverse[value] = key
+    for key, value in desired.items():
+        if key in existing and existing[key] != value:
+            raise VolumeError(f"{path} contains a conflicting mapping")
+        if value in reverse and reverse[value] != key:
+            raise VolumeError(f"{path} contains a conflicting mapping")
+    missing = [(key, value) for key, value in desired.items() if key not in existing]
+    if not missing:
+        return
+    descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as output:
+            for line in lines:
+                output.write(f"{line}\n")
+            for key, value in missing:
+                output.write(f"{key}:{value}\n")
+            output.flush()
+            os.fsync(output.fileno())
+        os.chmod(temporary, 0o644)
+        os.replace(temporary, path)
+    finally:
+        try:
+            os.unlink(temporary)
+        except FileNotFoundError:
+            pass
+
+
+def configure_service_quotas(
+    mount=Path("/srv/finals/service-data"),
+    projects_path=Path("/etc/projects"),
+    projid_path=Path("/etc/projid"),
+    runner=command,
+):
+    project_paths = {}
+    project_ids = {}
+    for port in SERVICE_QUOTAS:
+        name = f"finals-{port}"
+        project_paths[str(port)] = str(mount / str(port))
+        project_ids[name] = str(port)
+    ensure_mappings(projects_path, project_paths)
+    ensure_mappings(projid_path, project_ids)
+    for port, quota in SERVICE_QUOTAS.items():
+        name = f"finals-{port}"
+        root = mount / str(port)
+        root.mkdir(parents=True, exist_ok=True, mode=0o750)
+        if root.is_symlink() or not stat.S_ISDIR(root.stat().st_mode):
+            raise VolumeError(f"{root} is not a fixed service directory")
+        for generation in ("live", "gate", "recovery"):
+            path = root / generation
+            path.mkdir(exist_ok=True, mode=0o750)
+            if path.is_symlink() or not stat.S_ISDIR(path.stat().st_mode):
+                raise VolumeError(f"{path} is not a fixed generation directory")
+        runner(["xfs_quota", "-x", "-c", f"project -s {name}", str(mount)])
+        runner([
+            "xfs_quota",
+            "-x",
+            "-c",
+            f"limit -p bhard={quota['bytes']}b ihard={quota['inodes']} {name}",
+            str(mount),
+        ])
+
+
 def initialize(role):
     profile = ROLES[role]
     device, state = select_data_disk(lsblk(), role)
     if state == "blank":
         ensure_no_signatures(device)
-        command(["mkfs.ext4", "-F", "-L", profile["label"], device])
+        if profile["filesystem"] == "xfs":
+            command(["mkfs.xfs", "-f", "-L", profile["label"], device])
+        else:
+            command(["mkfs.ext4", "-F", "-L", profile["label"], device])
     ensure_fstab(profile)
     Path(profile["mount"]).mkdir(parents=True, exist_ok=True, mode=0o750)
     mount_if_needed(profile["mount"])
     try:
         result = subprocess.run(
-            ["findmnt", "--noheadings", "--output", "LABEL,FSTYPE,TARGET", "--target", profile["mount"]],
+            ["findmnt", "--noheadings", "--output", "LABEL,FSTYPE,TARGET,OPTIONS", "--target", profile["mount"]],
             check=True,
             capture_output=True,
             text=True,
         )
     except (OSError, subprocess.SubprocessError) as error:
         raise VolumeError("fixed mount verification failed") from error
-    if result.stdout.split() != [profile["label"], "ext4", profile["mount"]]:
+    fields = result.stdout.split()
+    if len(fields) != 4 or fields[:3] != [profile["label"], profile["filesystem"], profile["mount"]]:
         raise VolumeError("mounted filesystem does not match the fixed role")
+    if role == "production":
+        options = set(fields[3].split(","))
+        if not ({"prjquota", "pquota"} & options):
+            raise VolumeError("production data volume is missing project quota enforcement")
+        configure_service_quotas()
 
 
 def main():

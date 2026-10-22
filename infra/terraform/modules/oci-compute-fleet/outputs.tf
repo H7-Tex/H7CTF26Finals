@@ -14,6 +14,14 @@ output "staging_private_ips" {
   value = { for name, host in local.production : name => host.staging_ip }
 }
 
+output "production_data_volume_ids" {
+  value = { for name, volume in oci_core_volume.production_data : name => volume.id }
+}
+
+output "production_data_attachment_ids" {
+  value = { for name, attachment in oci_core_volume_attachment.production_data : name => attachment.id }
+}
+
 output "workbench_instance_ids" {
   value = { for name, instance in oci_core_instance.workbench : name => instance.id }
 }

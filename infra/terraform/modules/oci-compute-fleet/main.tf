@@ -87,6 +87,36 @@ resource "oci_core_private_ip" "staging" {
   }
 }
 
+resource "oci_core_volume" "production_data" {
+  for_each = local.production
+
+  availability_domain = var.availability_domain
+  compartment_id      = var.compartment_id
+  display_name        = "${each.key}-service-data"
+  size_in_gbs         = 50
+  freeform_tags = merge(local.tags, {
+    role = "service-data"
+    team = each.value.team == 16 ? "reference" : format("team-%02d", each.value.team)
+  })
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "oci_core_volume_attachment" "production_data" {
+  for_each = local.production
+
+  attachment_type = "paravirtualized"
+  display_name    = "${each.key}-service-data"
+  instance_id     = oci_core_instance.production[each.key].id
+  volume_id       = oci_core_volume.production_data[each.key].id
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
 resource "oci_core_instance" "workbench" {
   for_each = local.workbenches
 

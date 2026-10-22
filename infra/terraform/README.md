@@ -9,7 +9,7 @@ This tree is the reproducible infrastructure source for H7CTF'26 Finals. It is s
 - GCP project `ctf26-512405` is backup/archive only and is never on the scoring path.
 - Cloudflare publishes `finals.h7tex.com` and `vpn.h7tex.com` as DNS-only records after OCI reserves two stable public IPs. It also publishes the VPN-only private name `git.h7tex.com` at fixed address `10.60.201.30`; this adds no public endpoint. Caddy manages public TLS for the web ingress; WireGuard uses UDP 443 directly.
 - 15 team monorepositories feed 15 team Deployment Orchestrators. Dormant service directories are added only at release.
-- The fleet is 16 production boxes including NOP, 15 workbenches, six Attack-Defense services, and three hills.
+- The fleet is 16 production boxes including NOP, 15 workbenches, six Attack-Defense services, and three hills. Every production host has a separate 50 GiB XFS data volume with hard per-service byte and inode project quotas.
 - Mirror and shared-service internet egress are explicit warm-up switches and default off; production and workbench subnets never receive an internet default route.
 
 The current authoritative deployment design is `/home/abu/Main/Projects/CTF26/handoffs/finals-build/VERIFIED-DEPLOYMENT-MODEL.md`. The Terraform audit and rollout plan is `/home/abu/Main/Projects/CTF26/handoffs/finals-build/TERRAFORM-BUILD-PLAN.md`.
