@@ -59,6 +59,7 @@ fi
 
 cp --archive "$source_dir/rootfs/." /
 chmod 0644 /etc/docker/daemon.json /etc/ssh/sshd_config.d/90-runtime.conf /etc/sysctl.d/90-runtime.conf
+install -d -m 0755 /run/sshd
 sshd -t
 sysctl --system >/dev/null
 

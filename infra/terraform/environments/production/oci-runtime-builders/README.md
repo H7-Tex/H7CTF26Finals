@@ -9,3 +9,5 @@ The expanded build source is too large for OCI instance metadata. Terraform ther
 The first plan is one private bucket, four source objects, four PARs, one NSG, one egress rule and four builder instances. A stopped instance is the success signal. Do not capture a running builder. Destroy this builder stack after successful image capture; dependency ordering stops the instances before revoking PARs and deleting the transient objects.
 
 Each role must stop naturally within its bounded build window. Serial evidence must show verified download and digest checks, every role-applicable install and test phase, seal scheduling and a final `phase=seal status=success` record binding the exact source revision, role and package-manifest SHA-256. Missing, failed or out-of-order evidence keeps that role red.
+
+The v0.0.43 builder generation failed before sealing and is prohibited from capture. Its instance OCIDs are recorded in the `oci-runtime-images` validation and README.

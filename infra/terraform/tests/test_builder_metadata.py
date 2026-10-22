@@ -87,6 +87,27 @@ class BuilderMetadataTests(unittest.TestCase):
         for phase in ("deployment-tests", "platform-tests", "checker-tests", "runtime-tests"):
             self.assertIn(f"run_phase {phase} 10m", runtime)
 
+    def test_runtime_builder_prepares_sshd_runtime_before_validation(self):
+        installer = (ROOT / "images/runtime/install.sh").read_text(encoding="utf-8")
+        self.assertIn("install -d -m 0755 /run/sshd", installer)
+        self.assertLess(installer.index("install -d -m 0755 /run/sshd"), installer.index("sshd -t"))
+
+    def test_failed_runtime_builders_are_prohibited(self):
+        failed_builders = (
+            "ocid1.instance.oc1.ap-hyderabad-1.anuhsljrgek2goacy3dojy463ubuy7ibn5w5qkl2wuaoclhof7q2k54wof2q",
+            "ocid1.instance.oc1.ap-hyderabad-1.anuhsljrgek2goaccomxx6u2gtj4l75e7rmruf3ygrvp2sqy7e3m3ta6x3ia",
+            "ocid1.instance.oc1.ap-hyderabad-1.anuhsljrgek2goacrkckfhkxhedqym7qggptmctcbcg5wrijqg7xhn6v7drq",
+            "ocid1.instance.oc1.ap-hyderabad-1.anuhsljrgek2goacmb2j6gjpf63gphl7xhdc4izh4uakh6nlm5uw2pbwaguq",
+        )
+        variables = (ROOT / "terraform/environments/production/oci-runtime-images/variables.tf").read_text(encoding="utf-8")
+        docs = "\n".join(
+            (ROOT / f"terraform/environments/production/{root}/README.md").read_text(encoding="utf-8")
+            for root in ("oci-runtime-builders", "oci-runtime-images")
+        )
+        for failed_builder in failed_builders:
+            self.assertIn(failed_builder, variables)
+            self.assertIn(failed_builder, docs)
+
     def test_seal_success_binds_revision_and_package_manifest_before_poweroff(self):
         images = (
             (ROOT / "images/router/seal-image", ROOT / "images/router/gateway-image-seal.service"),
