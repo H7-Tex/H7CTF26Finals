@@ -25,6 +25,8 @@ grep -Fq 'apt-get purge --yes --auto-remove build-essential golang-go' "$runtime
 grep -Fq 'export GOCACHE=/var/cache/finals-image-builder/go-build' "$runtime_dir/build-image"
 grep -Fq 'export GOPATH=/var/cache/finals-image-builder/go' "$runtime_dir/build-image"
 grep -Fq 'rm -rf /var/cache/finals-image-builder' "$runtime_dir/build-image"
+grep -Fq '[[ $(systemctl is-enabled apt-daily.timer 2>/dev/null) == masked ]]' "$runtime_dir/tests/run.sh"
+grep -Fq '[[ $(systemctl is-enabled apt-daily-upgrade.timer 2>/dev/null) == masked ]]' "$runtime_dir/tests/run.sh"
 grep -Fq 'deployment/install.sh' "$runtime_dir/build-image"
 grep -Fq 'systemctl enable finals-volume@production.service' "$runtime_dir/build-image"
 grep -Fq 'docker.service.d/90-production-volume.conf' "$runtime_dir/build-image"

@@ -15,7 +15,7 @@ git -C "$temporary" remote add origin https://github.com/AbuCTF/Anvil.git
 git -C "$temporary" fetch --quiet --depth 1 origin "$revision"
 git -C "$temporary" checkout --quiet --detach FETCH_HEAD
 [[ $(git -C "$temporary" rev-parse HEAD) == "$revision" ]] || { echo "Anvil revision mismatch" >&2; exit 1; }
-"$temporary/deployments/finals/test.sh"
+TMPDIR=/run "$temporary/deployments/finals/test.sh"
 docker build --file "$temporary/deployments/docker/Dockerfile.api" --tag "anvil-finals-api:$revision" "$temporary"
 docker build --file "$temporary/deployments/docker/Dockerfile.web" --target production --tag "anvil-finals-web:$revision" "$temporary/web"
 while read -r image; do

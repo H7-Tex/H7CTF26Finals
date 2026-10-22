@@ -6,6 +6,7 @@ case "$role" in
   platform-x86 | platform-arm | production | workbench) ;;
   *) echo "unsupported runtime image role: $role" >&2; exit 2 ;;
 esac
+trap 'status=$?; echo "runtime image test failed: role=$role line=$LINENO exit=$status" >&2; exit "$status"' ERR
 
 for command in auditctl chronyc curl docker git jq nft python3 rsync sshd; do
   command -v "$command" >/dev/null
@@ -18,8 +19,8 @@ grep -Fxq 'PasswordAuthentication no' /etc/ssh/sshd_config.d/90-runtime.conf
 grep -Fxq 'PermitRootLogin no' /etc/ssh/sshd_config.d/90-runtime.conf
 systemctl is-enabled docker.service >/dev/null
 systemctl is-enabled ssh.service >/dev/null
-systemctl is-enabled apt-daily.timer | grep -Fxq masked
-systemctl is-enabled apt-daily-upgrade.timer | grep -Fxq masked
+[[ $(systemctl is-enabled apt-daily.timer 2>/dev/null) == masked ]]
+[[ $(systemctl is-enabled apt-daily-upgrade.timer 2>/dev/null) == masked ]]
 
 if [[ $role == workbench ]]; then
   for command in cargo clang cmake gdb go node npm rg rustc tmux; do
