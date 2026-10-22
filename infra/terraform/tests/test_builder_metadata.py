@@ -114,6 +114,11 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn('"deployment/tests/run.sh"', source)
         self.assertIn("infra/deployment infra/images/runtime", package_script)
 
+    def test_builder_packages_include_the_archive_client(self):
+        package_script = (ROOT / "terraform/scripts/package-oci-stack.sh").read_text(encoding="utf-8")
+        self.assertIn("oci-gateway-builder) PATHS+=(infra/archive infra/images/router", package_script)
+        self.assertIn("oci-runtime-builders) PATHS+=(infra/archive infra/deployment", package_script)
+
     def test_runtime_builder_replaces_for_par_and_user_data_changes(self):
         source = (ROOT / "terraform/environments/production/oci-runtime-builders/main.tf").read_text(encoding="utf-8")
         self.assertIn('resource "terraform_data" "builder_generation"', source)
