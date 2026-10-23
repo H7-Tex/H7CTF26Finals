@@ -150,6 +150,25 @@ class VolumeSelectionTests(unittest.TestCase):
         self.assertTrue(MODULE.mount_if_needed("/srv/cache", is_mount=lambda _: False, runner=commands.append))
         self.assertEqual(commands, [["mount", "/srv/cache"]])
 
+    def test_anvil_layout_is_fixed_and_idempotent(self):
+        with tempfile.TemporaryDirectory() as directory:
+            mount = Path(directory)
+            MODULE.ensure_anvil_layout(mount)
+            MODULE.ensure_anvil_layout(mount)
+            for name in MODULE.ANVIL_DIRECTORIES:
+                path = mount / name
+                self.assertTrue(path.is_dir())
+                self.assertEqual(path.stat().st_mode & 0o777, 0o750)
+
+    def test_anvil_layout_rejects_symlinks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            mount = Path(directory)
+            target = mount / "target"
+            target.mkdir()
+            (mount / "postgres").symlink_to(target)
+            with self.assertRaisesRegex(MODULE.VolumeError, "not a fixed Anvil directory"):
+                MODULE.ensure_anvil_layout(mount)
+
     def test_service_quota_layout_and_commands_are_idempotent(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

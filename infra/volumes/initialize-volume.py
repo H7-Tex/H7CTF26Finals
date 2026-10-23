@@ -19,6 +19,7 @@ ROLES = {
 }
 
 VOLUME_POLICY = Path("/etc/finals-release/volume-policy.json")
+ANVIL_DIRECTORIES = ("postgres", "storage", "backups")
 
 
 class VolumeError(Exception):
@@ -138,6 +139,20 @@ def mount_if_needed(path, is_mount=os.path.ismount, runner=command):
         return False
     runner(["mount", path])
     return True
+
+
+def ensure_anvil_layout(mount):
+    for name in ANVIL_DIRECTORIES:
+        path = mount / name
+        if path.is_symlink():
+            raise VolumeError(f"{path} is not a fixed Anvil directory")
+        try:
+            path.mkdir(mode=0o750, exist_ok=True)
+        except OSError as error:
+            raise VolumeError(f"{path} is not a fixed Anvil directory") from error
+        if not stat.S_ISDIR(path.stat().st_mode):
+            raise VolumeError(f"{path} is not a fixed Anvil directory")
+        path.chmod(0o750)
 
 
 def ensure_mappings(path, desired):
@@ -331,7 +346,9 @@ def initialize(role):
     fields = result.stdout.split()
     if len(fields) != 4 or fields[:3] != [profile["label"], profile["filesystem"], profile["mount"]]:
         raise VolumeError("mounted filesystem does not match the fixed role")
-    if role == "production":
+    if role == "anvil":
+        ensure_anvil_layout(Path(profile["mount"]))
+    elif role == "production":
         options = set(fields[3].split(","))
         if not ({"prjquota", "pquota"} & options):
             raise VolumeError("production data volume is missing project quota enforcement")

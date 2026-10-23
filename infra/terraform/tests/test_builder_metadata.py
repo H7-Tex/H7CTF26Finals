@@ -308,6 +308,9 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn("finals-commission-volume gateway-primary volume-initialize", platform)
         self.assertIn("finals-commission-volume gateway-standby volume-initialize", platform)
         self.assertIn("sudo install -D -m 0755 /dev/stdin /usr/local/sbin/finals-initialize-volume", platform)
+        self.assertIn("sudo /opt/anvil/current/deployments/finals/preflight.sh", platform)
+        self.assertIn("sudo systemctl is-active --quiet anvil-finals.service", platform)
+        self.assertIn("--resolve finals.h7tex.com:443:10.60.200.10", platform)
         standby = platform[platform.index("gateway-standby)"):platform.index("esac", platform.index("gateway-standby)"))]
         self.assertIn("sha256sum -c -", standby)
         self.assertNotIn("finals-volume@captures.service", standby)
