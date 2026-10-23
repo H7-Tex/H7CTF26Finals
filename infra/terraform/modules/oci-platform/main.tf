@@ -82,9 +82,9 @@ locals {
   operations_relay_authorized_key = "restrict,command=\"/usr/local/sbin/finals-secret-relay-receive\" ${var.operations_relay_ssh_public_key}"
   operations_relay_roles          = toset(["platform", "control", "repository"])
 
-  operations_commission_initializer_sha256  = "eaeb4c33d2c94f59dee9b01b2b6dbce8e8f8adf720e4108f713456f7cf4f69ab"
-  operations_commission_anvil_sha256        = "c760f5097b671cfa1423bd30b407cbbc9cb415fe4a82510d84c9120818143a19"
-  operations_commission_script              = <<-SCRIPT
+  operations_commission_initializer_sha256        = "eaeb4c33d2c94f59dee9b01b2b6dbce8e8f8adf720e4108f713456f7cf4f69ab"
+  operations_commission_anvil_sha256              = "c760f5097b671cfa1423bd30b407cbbc9cb415fe4a82510d84c9120818143a19"
+  operations_commission_script                    = <<-SCRIPT
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -121,7 +121,7 @@ locals {
 
     ssh_options=(
       -F /dev/null
-      -i /etc/finals-platform/operations/id_ed25519
+      -i /run/finals-commissioning/central_id_ed25519
       -o BatchMode=yes
       -o ConnectTimeout=10
       -o IdentitiesOnly=yes
@@ -133,7 +133,7 @@ locals {
       'sudo install -D -m 0755 /dev/stdin /usr/local/sbin/finals-initialize-volume' < "$temporary"
     /usr/bin/ssh "$${ssh_options[@]}" -- "ubuntu@$address" "$post_command"
   SCRIPT
-  operations_commission_secret_script       = <<-SCRIPT
+  operations_commission_secret_script             = <<-SCRIPT
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -150,9 +150,9 @@ locals {
     trap 'rm -f -- "$temporary"' EXIT
     cat > "$temporary"
     printf '%s  %s\n' "${local.operations_commission_anvil_sha256}" "$temporary" | sha256sum -c - >/dev/null
-    exec /usr/bin/ssh \
+    /usr/bin/ssh \
       -F /dev/null \
-      -i /etc/finals-platform/operations/id_ed25519 \
+      -i /run/finals-commissioning/central_id_ed25519 \
       -o BatchMode=yes \
       -o ConnectTimeout=10 \
       -o IdentitiesOnly=yes \
@@ -162,42 +162,125 @@ locals {
       -- ubuntu@10.60.200.10 \
       'sudo chmod 0644 /etc/ssh/operations_relay_authorized_keys_ubuntu && sudo /usr/sbin/sshd -t && sudo systemctl reload ssh.service && sudo /usr/local/sbin/finals-install-secret-bundle anvil' < "$temporary"
   SCRIPT
-  operations_commission_inventory_script    = <<-SCRIPT
+  operations_commission_stage_central_script      = <<-SCRIPT
     #!/usr/bin/env bash
     set -euo pipefail
 
-    [[ $EUID -eq 0 ]] || { echo "inventory commissioning wrapper must run as root" >&2; exit 1; }
+    [[ $EUID -eq 0 ]] || { echo "central staging must run as root" >&2; exit 1; }
     [[ $(cat /etc/finals-platform/role 2>/dev/null) == '{"role":"operations"}' ]] || {
-      echo "inventory commissioning wrapper is restricted to the operations host" >&2
+      echo "central staging is restricted to the operations host" >&2
       exit 1
     }
-    [[ $# -eq 1 ]] || { echo "usage: finals-commission-inventory {gateway-primary|gateway-standby}" >&2; exit 2; }
+    [[ $# -eq 0 ]] || { echo "central staging takes no arguments" >&2; exit 2; }
+    event_key=/etc/finals-platform/operations/id_ed25519
+    event_hosts=/etc/finals-platform/operations/known_hosts
+    [[ -f $event_key && ! -L $event_key && -f $event_hosts && ! -L $event_hosts ]] || {
+      echo "persistent event relay identity is not commissioned" >&2
+      exit 1
+    }
+    event_fingerprint=$(ssh-keygen -yf "$event_key" | ssh-keygen -lf - -E sha256 | awk '{print $2}')
+    [[ $event_fingerprint == 'SHA256:cdz/qtyNUAL19bQV2ey1KgT3f6CCYXvML2CWI069bHA' ]] || {
+      echo "persistent event relay fingerprint is not authorized" >&2
+      exit 1
+    }
+    [[ $(findmnt -n -o FSTYPE /run) == tmpfs ]]
+    [[ ! -e /run/finals-commissioning || (-d /run/finals-commissioning && ! -L /run/finals-commissioning) ]]
+    work=$(mktemp -d /run/finals-central-stage.XXXXXX)
+    trap 'find "$work" -depth -delete' EXIT
+    dd bs=65537 count=1 status=none > "$work/bundle.age"
+    [[ -s $work/bundle.age && $(stat -c '%s' "$work/bundle.age") -le 65536 ]] || {
+      echo "central ciphertext has an invalid size" >&2
+      exit 1
+    }
+    age --decrypt --identity /etc/ssh/ssh_host_ed25519_key < "$work/bundle.age" > "$work/bundle.json"
+    python3 - "$work/bundle.json" "$work/key" <<'PY'
+    import base64
+    import json
+    import os
+    import sys
+    document = json.load(open(sys.argv[1], encoding="utf-8"))
+    if set(document) != {"type", "files"} or document["type"] != "operations-relay":
+        raise SystemExit("central bundle has an invalid envelope")
+    files = document["files"]
+    if not isinstance(files, dict) or set(files) != {"ssh_private_key", "known_hosts"}:
+        raise SystemExit("central bundle has an invalid file set")
+    key = base64.b64decode(files["ssh_private_key"], validate=True)
+    if not key.startswith(b"-----BEGIN OPENSSH PRIVATE KEY-----\n") or len(key) > 4096:
+        raise SystemExit("central private key is malformed")
+    descriptor = os.open(sys.argv[2], os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(descriptor, "wb") as output:
+        output.write(key)
+    PY
+    fingerprint=$(ssh-keygen -yf "$work/key" | ssh-keygen -lf - -E sha256 | awk '{print $2}')
+    [[ $fingerprint == 'SHA256:dfPMQE51IWgeI/TQvWs+zgCNU1dyZhpMBnQap/pmA0I' ]] || {
+      echo "central key fingerprint is not authorized" >&2
+      exit 1
+    }
+    install -d -o root -g root -m 0700 /run/finals-commissioning
+    install -o root -g root -m 0600 "$work/key" /run/finals-commissioning/central_id_ed25519
+    echo central-staged-in-tmpfs
+  SCRIPT
+  operations_commission_clear_central_script      = <<-SCRIPT
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    [[ $EUID -eq 0 ]] || { echo "central clearing must run as root" >&2; exit 1; }
+    [[ $(cat /etc/finals-platform/role 2>/dev/null) == '{"role":"operations"}' ]] || exit 1
+    [[ $# -eq 0 ]] || { echo "central clearing takes no arguments" >&2; exit 2; }
+    rm -f -- /run/finals-commissioning/central_id_ed25519
+    test ! -e /run/finals-commissioning/central_id_ed25519
+  SCRIPT
+  operations_commission_gateway_secret_script     = <<-SCRIPT
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    [[ $EUID -eq 0 ]] || { echo "gateway secret commissioning must run as root" >&2; exit 1; }
+    [[ $(cat /etc/finals-platform/role 2>/dev/null) == '{"role":"operations"}' ]] || exit 1
+    [[ -f /run/finals-commissioning/central_id_ed25519 && ! -L /run/finals-commissioning/central_id_ed25519 ]] || exit 1
+    [[ $# -eq 2 ]] || { echo "usage: finals-commission-gateway-secret TARGET BUNDLE" >&2; exit 2; }
+    case "$1:$2" in
+      gateway-primary:gateway-wireguard) address=10.60.250.10; bundle=gateway-wireguard ;;
+      gateway-primary:gateway-reconciler) address=10.60.250.10; bundle=gateway-reconciler ;;
+      gateway-standby:gateway-wireguard) address=10.60.250.11; bundle=gateway-wireguard ;;
+      gateway-standby:gateway-reconciler) address=10.60.250.11; bundle=gateway-reconciler ;;
+      *) echo "unsupported fixed gateway secret target" >&2; exit 2 ;;
+    esac
+    temporary=$(mktemp /run/finals-gateway-secret.XXXXXX)
+    trap 'rm -f -- "$temporary"' EXIT
+    dd bs=65537 count=1 status=none > "$temporary"
+    [[ -s $temporary && $(stat -c '%s' "$temporary") -le 65536 ]] || exit 1
+    ssh -F /dev/null -i /run/finals-commissioning/central_id_ed25519 \
+      -o BatchMode=yes -o ConnectTimeout=10 -o IdentitiesOnly=yes -o PasswordAuthentication=no \
+      -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts \
+      -- "ubuntu@$address" "sudo -n /usr/local/sbin/finals-install-secret-bundle $bundle" < "$temporary"
+  SCRIPT
+  operations_commission_gateway_authorizer_script = <<-SCRIPT
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    [[ $EUID -eq 0 ]] || exit 1
+    [[ $(cat /etc/finals-platform/role 2>/dev/null) == '{"role":"operations"}' ]] || exit 1
+    [[ -f /run/finals-commissioning/central_id_ed25519 && ! -L /run/finals-commissioning/central_id_ed25519 ]] || exit 1
+    [[ $# -eq 1 ]] || exit 2
     case "$1" in
       gateway-primary) address=10.60.250.10 ;;
       gateway-standby) address=10.60.250.11 ;;
-      *) echo "unsupported fixed inventory target" >&2; exit 2 ;;
+      *) echo "unsupported fixed gateway authorizer target" >&2; exit 2 ;;
     esac
-
-    temporary=$(mktemp /run/finals-peer-inventory.XXXXXX)
-    trap 'rm -f -- "$temporary"' EXIT
-    dd bs=262145 count=1 status=none > "$temporary"
-    [[ -s $temporary && $(stat -c '%s' "$temporary") -le 262144 ]] || {
-      echo "inventory has an invalid size" >&2
-      exit 1
-    }
 
     exec /usr/bin/ssh \
       -F /dev/null \
-      -i /etc/finals-platform/operations/id_ed25519 \
+      -i /run/finals-commissioning/central_id_ed25519 \
       -o BatchMode=yes \
       -o ConnectTimeout=10 \
       -o IdentitiesOnly=yes \
       -o PasswordAuthentication=no \
       -o StrictHostKeyChecking=yes \
       -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts \
-      -- "peer-reconciler@$address" < "$temporary"
+      -- "ubuntu@$address" \
+      'set -euo pipefail; test -f /etc/event-router/reconciler_authorized_key; test ! -L /etc/event-router/reconciler_authorized_key; sudo -n /usr/local/sbin/event-router-authorize-reconciler /etc/event-router/reconciler_authorized_key'
   SCRIPT
-  operations_commission_gateway_role_script = <<-SCRIPT
+  operations_commission_gateway_role_script       = <<-SCRIPT
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -215,7 +298,7 @@ locals {
 
     exec /usr/bin/ssh \
       -F /dev/null \
-      -i /etc/finals-platform/operations/id_ed25519 \
+      -i /run/finals-commissioning/central_id_ed25519 \
       -o BatchMode=yes \
       -o ConnectTimeout=10 \
       -o IdentitiesOnly=yes \
@@ -225,23 +308,19 @@ locals {
       -- "ubuntu@$address" 'set -euo pipefail
         platform_role=$(cat /etc/finals-platform/role 2>/dev/null || true)
         router_role=$(cat /etc/event-router/role 2>/dev/null || true)
-        case "$platform_role" in
-          "" ) ;;
-          "{\"role\":\"production\"}" ) sudo rm -f -- /etc/finals-platform/role ;;
-          * ) echo "gateway has an unexpected platform role marker" >&2; exit 1 ;;
+        repair=none
+        case "$platform_role|$router_role" in
+          "|'$expected'" ) ;;
+          "{\"role\":\"production\"}|'$expected'" ) repair=remove-production ;;
+          * ) echo "gateway role tuple is not authorized" >&2; exit 1 ;;
         esac
-        case "$router_role" in
-          "'$expected'" ) ;;
-          "" ) printf "%s\n" "'$expected'" | sudo install -D -m 0644 /dev/stdin /etc/event-router/role ;;
-          * ) echo "gateway has an unexpected router role marker" >&2; exit 1 ;;
-        esac
+        if [[ $repair == remove-production ]]; then
+          sudo rm -f -- /etc/finals-platform/role
+        fi
         [[ ! -e /etc/finals-platform/role ]]
-        [[ $(cat /etc/event-router/role) == "'$expected'" ]]
-        if [[ -f /etc/event-router/reconciler_authorized_key && ! -L /etc/event-router/reconciler_authorized_key ]]; then
-          sudo /usr/local/sbin/event-router-authorize-reconciler /etc/event-router/reconciler_authorized_key
-        fi'
+        [[ $(cat /etc/event-router/role) == "'$expected'" ]]'
   SCRIPT
-  operations_commission_sudoers             = <<-SUDOERS
+  operations_commission_sudoers                   = <<-SUDOERS
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh gateway-primary gateway-wireguard
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh gateway-primary gateway-reconciler
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh gateway-standby gateway-wireguard
@@ -250,12 +329,16 @@ locals {
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh control control-reconciler
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh control control-checkers
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh repository repository
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform volume-initialize
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume gateway-primary volume-initialize
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume gateway-standby volume-initialize
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-secret platform anvil
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-inventory gateway-primary
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-inventory gateway-standby
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-stage-central
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-clear-central
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-gateway-secret gateway-primary gateway-wireguard
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-gateway-secret gateway-primary gateway-reconciler
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-gateway-secret gateway-standby gateway-wireguard
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-gateway-secret gateway-standby gateway-reconciler
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-gateway-authorizer gateway-primary
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-gateway-authorizer gateway-standby
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-gateway-role gateway-primary
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-gateway-role gateway-standby
   SUDOERS
@@ -263,8 +346,10 @@ locals {
     "  - |",
     "    set -eu",
     "    printf '%s' '${base64encode(local.operations_commission_script)}' | base64 -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-volume",
-    "    printf '%s' '${base64encode(local.operations_commission_secret_script)}' | base64 -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-secret",
-    "    printf '%s' '${base64encode(local.operations_commission_inventory_script)}' | base64 -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-inventory",
+    "    printf '%s' '${base64encode(local.operations_commission_stage_central_script)}' | base64 -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-stage-central",
+    "    printf '%s' '${base64encode(local.operations_commission_clear_central_script)}' | base64 -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-clear-central",
+    "    printf '%s' '${base64encode(local.operations_commission_gateway_secret_script)}' | base64 -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-gateway-secret",
+    "    printf '%s' '${base64encode(local.operations_commission_gateway_authorizer_script)}' | base64 -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-gateway-authorizer",
     "    printf '%s' '${base64encode(local.operations_commission_gateway_role_script)}' | base64 -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-gateway-role",
     "    temporary=$(mktemp /etc/sudoers.d/.finals-operations-commissioning.XXXXXX)",
     "    printf '%s' '${base64encode(local.operations_commission_sudoers)}' | base64 -d > \"$temporary\"",
@@ -311,6 +396,11 @@ check "operations_commission_cloud_init" {
   assert {
     condition     = length(regexall("finals-commission-volume", local.cloud_init_by_role["operations"])) > 0
     error_message = "Operations cloud-init must install the fixed commissioning wrapper."
+  }
+
+  assert {
+    condition     = length(local.cloud_init_by_role["operations"]) < 24576
+    error_message = "Operations cloud-init must fit the OCI base64 metadata limit."
   }
 
   assert {
