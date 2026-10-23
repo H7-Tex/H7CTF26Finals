@@ -350,6 +350,20 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertRegex(generated_key, re.compile(r"^ssh-ed25519 [A-Za-z0-9+/]{68}$"))
         self.assertFalse(generated_key.endswith("="))
 
+    def test_model_a_wrappers_are_fixed_and_pin_the_reviewed_router_files(self):
+        platform = (ROOT / "terraform/modules/oci-platform/main.tf").read_text(encoding="utf-8")
+        router = ROOT / "images/router/rootfs"
+        for path in ("etc/nftables.conf", "usr/local/libexec/event-router/render_inventory.py", "usr/local/sbin/event-router-apply-inventory"):
+            self.assertIn(hashlib.sha256((router / path).read_bytes()).hexdigest(), platform, path)
+        for wrapper in ("finals-commission-production-keys", "finals-commission-gateway-model-a"):
+            self.assertEqual(platform.count(f'ocarun ALL=(root) NOPASSWD: /usr/local/sbin/{wrapper} ""'), 1)
+            self.assertNotIn(f"/usr/local/sbin/{wrapper} *", platform)
+        self.assertIn("^production-(0[1-9]|1[0-5])$", platform)
+        self.assertIn("SHA256:dfPMQE51IWgeI/TQvWs+zgCNU1dyZhpMBnQap/pmA0I", platform)
+        self.assertIn('UserKnownHostsFile="$work/known_hosts"', platform)
+        self.assertNotIn("base64encode(local.operations_commission_", platform)
+        self.assertIn("| base64 -d | gzip -d |", platform)
+
     def test_operations_rotation_commissioning_is_fixed_and_hash_bound(self):
         platform = (ROOT / "terraform/modules/oci-platform/main.tf").read_text(encoding="utf-8")
         initializer = (ROOT / "volumes/initialize-volume.py").read_bytes()
@@ -440,6 +454,37 @@ class BuilderMetadataTests(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, platform_diagnostic)
         self.assertIn("base64gzip(local.operations_commission_platform_diagnostic_script)", platform)
+        firewall_wrapper = platform[
+            platform.index("operations_commission_host_firewall_script"):
+            platform.index("operations_commission_stage_central_script")
+        ]
+        self.assertIn(
+            'filesha256("${path.module}/../../../platform/rootfs/usr/local/libexec/finals-platform/firewall")',
+            firewall_wrapper,
+        )
+        targets = [
+            "platform",
+            "control",
+            "repository",
+            "mirror",
+            "hill-01",
+            "hill-02",
+            "hill-03",
+            *(f"production-{number:02d}" for number in range(1, 17)),
+        ]
+        for target in targets:
+            fixed = f"ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall {target}"
+            self.assertEqual(platform.count(fixed), 1, target)
+        self.assertNotIn("finals-commission-host-firewall *", platform)
+        self.assertIn("StrictHostKeyChecking=yes", firewall_wrapper)
+        self.assertIn('UserKnownHostsFile="$work/known_hosts"', firewall_wrapper)
+        self.assertIn("production-0[1-9]|production-1[0-6]", firewall_wrapper)
+        self.assertIn("nft --check --file -", firewall_wrapper)
+        self.assertIn("systemctl restart finals-host-firewall.service", firewall_wrapper)
+        self.assertIn("base64gzip(file(", firewall_wrapper)
+        for forbidden in ('"$@"', "eval ", "bash -c", "StrictHostKeyChecking=accept-new"):
+            self.assertNotIn(forbidden, firewall_wrapper)
+        self.assertIn("base64gzip(local.operations_commission_host_firewall_script)", platform)
         self.assertIn("relay_authorized_keys_readable_roles", platform)
         self.assertIn("finals-commission-volume gateway-primary volume-initialize", platform)
         self.assertIn("finals-commission-volume gateway-standby volume-initialize", platform)

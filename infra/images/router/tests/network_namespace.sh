@@ -302,6 +302,26 @@ if tcp_client "$PEER_PID" 10.61.2.2 22 >/dev/null 2>&1; then
   exit 1
 fi
 
+# model a: ssh to the own production box only while the production-ssh switch fills the set
+start_tcp_server "$PRODUCTION_PID" 10.60.1.2 22
+if tcp_client "$PEER_PID" 10.60.1.2 22 >/dev/null 2>&1; then
+  echo "a peer reached production ssh with the switch off" >&2
+  exit 1
+fi
+nft add element inet event_router peer_production_access '{ 10.80.1.200 . 10.60.1.2 }'
+[[ $(tcp_client "$PEER_PID" 10.60.1.2 22) == 10.60.250.121 ]]
+start_tcp_server "$PRODUCTION_TWO_PID" 10.60.2.2 22
+if tcp_client "$PEER_PID" 10.60.2.2 22 >/dev/null 2>&1; then
+  echo "a peer reached another team's production ssh" >&2
+  exit 1
+fi
+start_tcp_server "$PRODUCTION_PID" 10.60.1.2 2222
+if tcp_client "$PEER_PID" 10.60.1.2 2222 >/dev/null 2>&1; then
+  echo "production access opened a port other than ssh" >&2
+  exit 1
+fi
+nft flush set inet event_router peer_production_access
+
 start_tcp_server "$CORE_PID" 10.60.201.20 443
 if tcp_client "$PEER_PID" 10.60.201.20 443 >/dev/null 2>&1; then
   echo "a peer reached the checker control host" >&2

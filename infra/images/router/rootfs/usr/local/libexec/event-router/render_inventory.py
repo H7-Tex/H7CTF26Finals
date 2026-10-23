@@ -10,6 +10,8 @@ from pathlib import Path
 IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$")
 TOP_LEVEL_KEYS = {"version", "generation", "peers"}
 PEER_KEYS = {"peer_id", "team_id", "team_number", "public_key", "address"}
+# highest participant team number; 10.80.T.x, 10.60.T.2 and 10.60.250.(120+T) follow it
+MAX_TEAM_NUMBER = 15
 
 
 def fail(message):
@@ -53,8 +55,8 @@ def validate_peer(peer):
             fail(f"invalid {field}")
 
     team = peer["team_number"]
-    if type(team) is not int or not 1 <= team <= 15:
-        fail("team_number must be between 1 and 15")
+    if type(team) is not int or not 1 <= team <= MAX_TEAM_NUMBER:
+        fail(f"team_number must be between 1 and {MAX_TEAM_NUMBER}")
 
     if not isinstance(peer["address"], str):
         fail("peer address must be a string")
@@ -81,7 +83,7 @@ def validate_peer(peer):
     return address.ip, f"10.60.250.{120 + team}"
 
 
-def render(inventory):
+def render(inventory, production_ssh=False):
     peers = []
     seen_ids = set()
     seen_keys = set()
@@ -108,6 +110,7 @@ def render(inventory):
     nftables = [
         "flush set inet event_router peer_addresses",
         "flush set inet event_router peer_workbench_access",
+        "flush set inet event_router peer_production_access",
         "flush map inet event_router peer_snat",
     ]
     if peers:
@@ -118,6 +121,12 @@ def render(inventory):
         )
         nftables.append(f"add element inet event_router peer_addresses {{ {addresses} }}")
         nftables.append(f"add element inet event_router peer_workbench_access {{ {workbenches} }}")
+        if production_ssh:
+            # model a: a player reaches ssh on its own team's production box, nothing else
+            productions = ", ".join(
+                f"{address} . 10.60.{address.packed[2]}.2" for address, _, _ in peers
+            )
+            nftables.append(f"add element inet event_router peer_production_access {{ {productions} }}")
         nftables.append(f"add element inet event_router peer_snat {{ {mappings} }}")
 
     return "\n".join(wireguard), "\n".join(nftables) + "\n"
@@ -129,12 +138,13 @@ def main():
     parser.add_argument("--wireguard-output", required=True, type=Path)
     parser.add_argument("--nft-output", required=True, type=Path)
     parser.add_argument("--active-inventory", type=Path)
+    parser.add_argument("--production-ssh", action="store_true")
     args = parser.parse_args()
 
     try:
         inventory = load_inventory(args.inventory)
         ensure_successor(inventory, args.active_inventory)
-        wireguard, nftables = render(inventory)
+        wireguard, nftables = render(inventory, args.production_ssh)
     except ValueError as error:
         parser.error(str(error))
 

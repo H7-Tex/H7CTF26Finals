@@ -12,6 +12,41 @@ LOADER.exec_module(MODULE)
 
 
 class FirewallTests(unittest.TestCase):
+    def test_every_container_role_has_only_exact_scoped_network_allows(self):
+        for role, subnets in MODULE.CONTAINER_SUBNETS.items():
+            rules = MODULE.render(role)
+            for subnet in subnets:
+                self.assertIn(
+                    f'iifname "br-*" oifname "br-*" ip saddr {subnet} ip daddr {subnet} accept',
+                    rules,
+                    role,
+                )
+                self.assertIn(f"ip daddr {subnet} accept", rules, role)
+        rendered = "\n".join(MODULE.render(role) for role in MODULE.ROLES)
+        self.assertNotIn("172.31.0.0/16", rendered)
+        self.assertNotIn('iifname "br-*" oifname "br-*" accept', rendered)
+
+    def test_proven_anvil_and_model_a_paths_are_explicit(self):
+        platform = MODULE.render("platform")
+        production = MODULE.render("production")
+        self.assertIn(
+            'iifname "br-*" oifname "br-*" ip saddr 172.31.26.0/24 ip daddr 172.31.26.0/24 accept',
+            platform,
+        )
+        self.assertIn("ip daddr 172.31.26.0/24 accept", platform)
+        self.assertIn(
+            'iifname "br-*" oifname "br-*" ip saddr 172.31.60.0/24 ip daddr 172.31.60.0/24 accept',
+            production,
+        )
+        self.assertIn("ip daddr 172.31.60.0/24 accept", production)
+
+    def test_compose_subnets_match_firewall_contract(self):
+        platform_root = Path(__file__).parents[1] / "rootfs/etc/finals-platform"
+        repository = (platform_root / "repository/compose.yaml").read_text(encoding="utf-8")
+        mirror = (platform_root / "mirror/compose.yaml").read_text(encoding="utf-8")
+        self.assertEqual(repository.count("subnet: 172.31.27.0/24"), 1)
+        self.assertEqual(mirror.count("subnet: 172.31.29.0/24"), 1)
+
     def test_every_role_defaults_all_host_chains_to_drop(self):
         for role in MODULE.ROLES:
             rules = MODULE.render(role)

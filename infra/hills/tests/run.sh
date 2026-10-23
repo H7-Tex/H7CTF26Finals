@@ -14,6 +14,9 @@ grep -Fq 'ReadWritePaths=/run/finals-hill' "$hill_dir/finals-hill-credentials.se
 ! grep -Eq 'Environment=.*(TOKEN|SECRET|CREDENTIAL)' "$hill_dir/finals-hill-credentials.service"
 [[ $(grep -Ec '^  hill_(reset|teams):$' "$hill_dir/credentials.compose.yaml") == 2 ]]
 [[ $(grep -Ec '^    file: /run/finals-hill/credentials/current/hill_(reset|teams)$' "$hill_dir/credentials.compose.yaml") == 2 ]]
+[[ $(grep -Fhc 'subnet: 172.31.41.0/24' "$hill_dir/hill-01.networks.compose.yaml") == 1 ]]
+[[ $(grep -Ec 'subnet: 172\.31\.(42|43)\.0/24' "$hill_dir/hill-02.networks.compose.yaml") == 2 ]]
+[[ $(grep -Fhc 'subnet: 172.31.44.0/24' "$hill_dir/hill-03.networks.compose.yaml") == 1 ]]
 
 if docker compose version >/dev/null 2>&1; then
   rendered=$(docker compose \
@@ -23,4 +26,10 @@ if docker compose version >/dev/null 2>&1; then
   [[ $rendered == *'/run/finals-hill/credentials/current/hill_reset'* ]]
   [[ $rendered == *'/run/finals-hill/credentials/current/hill_teams'* ]]
   [[ $rendered != *'external: true'* ]]
+  for role in hill-01 hill-02 hill-03; do
+    docker compose \
+      --file "$hill_dir/tests/compose.fixture.yaml" \
+      --file "$hill_dir/$role.networks.compose.yaml" \
+      config >/dev/null
+  done
 fi

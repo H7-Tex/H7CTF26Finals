@@ -7,6 +7,24 @@ from pathlib import Path
 
 ROLES = {"platform", "operations", "control", "repository", "mirror", "production", "hill-01", "hill-02", "hill-03"}
 HILL_PORTS = {"hill-01": 7101, "hill-02": 7102, "hill-03": 7103}
+CONTAINER_SUBNETS = {
+    "platform": ("172.31.26.0/24",),
+    "repository": ("172.31.27.0/24",),
+    "control": (
+        "172.31.28.0/24",
+        "172.31.31.0/24",
+        "172.31.32.0/24",
+        "172.31.33.0/24",
+        "172.31.34.0/24",
+        "172.31.35.0/24",
+        "172.31.36.0/24",
+    ),
+    "mirror": ("172.31.29.0/24",),
+    "hill-01": ("172.31.41.0/24",),
+    "hill-02": ("172.31.42.0/24", "172.31.43.0/24"),
+    "hill-03": ("172.31.44.0/24",),
+    "production": ("172.31.60.0/24",),
+}
 
 
 COMMON_INPUT = """
@@ -29,6 +47,17 @@ COMMON_OUTPUT = """
 """
 
 
+def container_forward_rules(role):
+    return "\n    ".join(
+        f'iifname "br-*" oifname "br-*" ip saddr {subnet} ip daddr {subnet} accept'
+        for subnet in CONTAINER_SUBNETS[role]
+    )
+
+
+def container_output_rules(role):
+    return "\n    ".join(f"ip daddr {subnet} accept" for subnet in CONTAINER_SUBNETS[role])
+
+
 def role_rules(role, mirror_warmup=False, archive_egress=False):
     if role == "platform":
         public_egress = "\n    tcp dport 443 accept" if archive_egress else ""
@@ -36,9 +65,10 @@ def role_rules(role, mirror_warmup=False, archive_egress=False):
             "ip saddr 10.60.0.0/16 tcp dport 443 accept\n"
             "    ip saddr 10.60.250.121-10.60.250.135 tcp dport 4141 accept\n"
             "    ip saddr 10.60.200.5 tcp dport 22 accept",
-            "ip saddr 10.60.0.0/16 ct status dnat ct original proto-dst { 443, 4141 } accept\n"
+            f"{container_forward_rules(role)}\n"
+            "    ip saddr 10.60.0.0/16 ct status dnat ct original proto-dst { 443, 4141 } accept\n"
             "    iifname \"br-*\" ip daddr 10.60.0.0/16 accept",
-            f"ip daddr 10.60.0.0/16 accept{public_egress}",
+            f"{container_output_rules(role)}\n    ip daddr 10.60.0.0/16 accept{public_egress}",
         )
     if role == "operations":
         return (
@@ -52,37 +82,42 @@ def role_rules(role, mirror_warmup=False, archive_egress=False):
         return (
             "ip saddr 10.60.200.10 tcp dport 9001-9006 accept\n"
             "    ip saddr 10.60.200.5 tcp dport 22 accept",
-            "ip saddr 10.60.200.10 ct status dnat ct original proto-dst 9001-9006 accept\n"
+            f"{container_forward_rules(role)}\n"
+            "    ip saddr 10.60.200.10 ct status dnat ct original proto-dst 9001-9006 accept\n"
             "    iifname \"br-*\" ip daddr 10.60.0.0/16 accept",
-            "ip daddr 10.60.0.0/16 accept",
+            f"{container_output_rules(role)}\n    ip daddr 10.60.0.0/16 accept",
         )
     if role == "repository":
         public_egress = "\n    tcp dport 443 accept" if archive_egress else ""
         return (
             "ip saddr 10.60.200.5 tcp dport 2222 accept",
-            "ip saddr 10.60.0.0/16 ct status dnat ct original proto-dst { 22, 443 } accept\n"
+            f"{container_forward_rules(role)}\n"
+            "    ip saddr 10.60.0.0/16 ct status dnat ct original proto-dst { 22, 443 } accept\n"
             "    iifname \"br-*\" ip daddr 10.60.0.0/16 tcp dport 9300 accept",
-            f"ip daddr 10.60.0.0/16 accept{public_egress}",
+            f"{container_output_rules(role)}\n    ip daddr 10.60.0.0/16 accept{public_egress}",
         )
     if role == "mirror":
         public_egress = "\n    tcp dport { 80, 443 } accept" if mirror_warmup else ""
         return (
             "ip saddr 10.60.0.0/16 tcp dport 3142 accept\n"
             "    ip saddr 10.60.200.5 tcp dport 22 accept",
-            "ip saddr 10.60.0.0/16 ct status dnat ct original proto-dst { 3141, 4873, 5000 } accept",
-            f"ip daddr 10.60.0.0/16 accept{public_egress}",
+            f"{container_forward_rules(role)}\n"
+            "    ip saddr 10.60.0.0/16 ct status dnat ct original proto-dst { 3141, 4873, 5000 } accept",
+            f"{container_output_rules(role)}\n    ip daddr 10.60.0.0/16 accept{public_egress}",
         )
     if role == "production":
         return (
             "ip saddr 10.60.250.120 tcp dport 7001-7006 accept\n"
             "    ip saddr { 10.60.200.10, 10.60.201.20, 10.60.201.30 } tcp dport 9300 accept\n"
             "    ip saddr 10.60.200.5 tcp dport 22 accept",
-            "ip saddr 10.60.250.120 ct status dnat ct original proto-dst 7001-7006 accept\n"
+            f"{container_forward_rules(role)}\n"
+            "    ip saddr 10.60.250.120 ct status dnat ct original proto-dst 7001-7006 accept\n"
             "    iifname \"br-*\" ip daddr 10.60.200.10 tcp dport 443 accept\n"
             "    iifname \"br-*\" ip daddr 10.60.201.20 tcp dport 9300 accept\n"
             "    iifname \"br-*\" ip daddr 10.60.201.30 tcp dport { 22, 443 } accept\n"
             "    iifname \"br-*\" ip daddr 10.60.202.10 tcp dport { 3141, 3142, 4873, 5000 } accept",
-            "ip daddr 10.60.200.10 tcp dport 443 accept\n"
+            f"{container_output_rules(role)}\n"
+            "    ip daddr 10.60.200.10 tcp dport 443 accept\n"
             "    ip daddr 10.60.201.20 tcp dport 9300 accept\n"
             "    ip daddr 10.60.201.30 tcp dport { 22, 443 } accept\n"
             "    ip daddr 10.60.202.10 tcp dport { 3141, 3142, 4873, 5000 } accept",
@@ -93,12 +128,14 @@ def role_rules(role, mirror_warmup=False, archive_egress=False):
         f"    ip saddr 10.60.250.121-10.60.250.135 tcp dport {port} accept\n"
         f"    ip saddr 10.60.201.20 tcp dport {port} accept\n"
         "    ip saddr 10.60.200.5 tcp dport 22 accept",
-        f"ip daddr 10.60.210.0/24 counter drop\n"
+        f"{container_forward_rules(role)}\n"
+        f"    ip daddr 10.60.210.0/24 counter drop\n"
         f"    ip saddr 10.60.250.121-10.60.250.135 ct status dnat ct original proto-dst {port} accept\n"
         f"    ip saddr 10.60.201.20 ct status dnat ct original proto-dst {port} accept\n"
         "    iifname \"br-*\" ip daddr 10.60.210.0/24 counter drop\n"
         "    iifname \"br-*\" ip daddr { 10.60.200.10, 10.60.201.20 } accept",
-        "ip daddr 10.60.210.0/24 counter drop\n"
+        f"{container_output_rules(role)}\n"
+        "    ip daddr 10.60.210.0/24 counter drop\n"
         "    ip daddr { 10.60.200.10, 10.60.201.20 } accept\n"
         "    ip daddr != 10.60.0.0/15 tcp dport 443 accept",
     )

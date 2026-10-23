@@ -263,6 +263,70 @@ locals {
       -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts \
       -- ubuntu@10.60.200.10 "$remote"
   SCRIPT
+  operations_commission_host_firewall_script       = <<-SCRIPT
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    [[ $EUID -eq 0 ]] || { echo "host firewall commissioning must run as root" >&2; exit 1; }
+    [[ $(cat /etc/finals-platform/role 2>/dev/null) == '{"role":"operations"}' ]] || exit 1
+    central=/run/finals-commissioning/central_id_ed25519
+    [[ -f $central && ! -L $central && $# -eq 1 ]] || {
+      echo "usage: finals-commission-host-firewall TARGET" >&2
+      exit 2
+    }
+    target=$1
+    case "$target" in
+      platform) address=10.60.200.10; port=22; role=platform ;;
+      control) address=10.60.201.20; port=22; role=control ;;
+      repository) address=10.60.201.30; port=2222; role=repository ;;
+      mirror) address=10.60.202.10; port=22; role=mirror ;;
+      hill-01) address=10.60.210.11; port=22; role=hill-01 ;;
+      hill-02) address=10.60.210.12; port=22; role=hill-02 ;;
+      hill-03) address=10.60.210.13; port=22; role=hill-03 ;;
+      production-0[1-9]|production-1[0-6])
+        number=$${target#production-}
+        address="10.60.$((10#$number)).2"
+        port=22
+        role=production
+        ;;
+      *) echo "unsupported fixed firewall target" >&2; exit 2 ;;
+    esac
+    expected_host=$address
+    [[ $port -eq 22 ]] || expected_host="[$address]:$port"
+    work=$(mktemp -d /run/finals-host-firewall.XXXXXX)
+    trap 'rm -rf -- "$work"' EXIT
+    IFS= read -r host type key extra
+    [[ $host == "$expected_host" && $type == ssh-ed25519 && $key =~ ^[A-Za-z0-9+/]{68}$ && -z $${extra:-} ]] || {
+      echo "host key line is invalid for the fixed target" >&2
+      exit 1
+    }
+    printf '%s %s %s\n' "$host" "$type" "$key" > "$work/known_hosts"
+    printf '%s' '${base64gzip(file("${path.module}/../../../platform/rootfs/usr/local/libexec/finals-platform/firewall"))}' | base64 -d | gzip -d > "$work/firewall"
+    [[ $(sha256sum "$work/firewall" | awk '{print $1}') == '${filesha256("${path.module}/../../../platform/rootfs/usr/local/libexec/finals-platform/firewall")}' ]]
+    remote="set -euo pipefail
+      [[ \$(cat /etc/finals-platform/role 2>/dev/null) == '{\"role\":\"$role\"}' ]]
+      temporary=/run/finals-host-firewall.next
+      trap 'sudo -n rm -f -- \"\$temporary\"' EXIT
+      sudo -n install -o root -g root -m 0755 /dev/stdin \"\$temporary\"
+      echo '${filesha256("${path.module}/../../../platform/rootfs/usr/local/libexec/finals-platform/firewall")}  '\"\$temporary\" | sudo -n sha256sum -c --quiet
+      sudo -n \"\$temporary\" --render '$role' | sudo -n nft --check --file -
+      sudo -n install -o root -g root -m 0755 \"\$temporary\" /usr/local/libexec/finals-platform/firewall
+      sudo -n systemctl restart finals-host-firewall.service
+      sudo -n systemctl is-active --quiet finals-host-firewall.service
+      echo '${filesha256("${path.module}/../../../platform/rootfs/usr/local/libexec/finals-platform/firewall")}  /usr/local/libexec/finals-platform/firewall' | sudo -n sha256sum -c --quiet
+      printf '%s firewall-applied ${filesha256("${path.module}/../../../platform/rootfs/usr/local/libexec/finals-platform/firewall")}\n' '$target'"
+    exec /usr/bin/ssh \
+      -F /dev/null \
+      -i "$central" \
+      -p "$port" \
+      -o BatchMode=yes \
+      -o ConnectTimeout=10 \
+      -o IdentitiesOnly=yes \
+      -o PasswordAuthentication=no \
+      -o StrictHostKeyChecking=yes \
+      -o UserKnownHostsFile="$work/known_hosts" \
+      -- "ubuntu@$address" "$remote" < "$work/firewall"
+  SCRIPT
   operations_commission_stage_central_script       = <<-SCRIPT
     #!/usr/bin/env bash
     set -euo pipefail
@@ -475,6 +539,98 @@ locals {
         case "$router" in active|standby) router_category=$router ;; "") router_category=absent ;; *) router_category=unexpected ;; esac
         printf "platform=%s router=%s\n" "$platform_category" "$router_category"'
   SCRIPT
+  operations_commission_production_keys_script     = <<-SCRIPT
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # model a: put one team's ssh keys on its own production box. stdin is a header
+    # line "production-NN apply|rollback", then for apply the box's host key line
+    # "known-host 10.60.N.2 ssh-ed25519 ..." and the authorized_keys lines.
+    [[ $EUID -eq 0 && $(cat /etc/finals-platform/role 2>/dev/null) == '{"role":"operations"}' ]] || exit 1
+    central=/run/finals-commissioning/central_id_ed25519
+    [[ -f $central && ! -L $central && $# -eq 0 ]] || exit 2
+    work=$(mktemp -d /run/finals-production-keys.XXXXXX)
+    trap 'rm -rf -- "$work"' EXIT
+    dd bs=16385 count=1 status=none > "$work/in"
+    [[ -s $work/in && $(stat -c '%s' "$work/in") -le 16384 ]] || { echo "payload size is invalid" >&2; exit 1; }
+    read -r target action < <(head -n1 "$work/in")
+    [[ $target =~ ^production-(0[1-9]|1[0-5])$ ]] || { echo "unsupported fixed production target" >&2; exit 2; }
+    address="10.60.$((10#$${BASH_REMATCH[1]})).2"
+    [[ $action == apply || $action == rollback ]] || exit 2
+    tail -n +2 "$work/in" > "$work/body"
+    read -r marker host type key < <(head -n1 "$work/body")
+    [[ $marker == known-host && $host == "$address" && $type == ssh-ed25519 && $key =~ ^[A-Za-z0-9+/]{68}$ ]] || { echo "host key line is invalid" >&2; exit 1; }
+    printf '%s %s %s\n' "$address" "$type" "$key" > "$work/known_hosts"
+    tail -n +2 "$work/body" > "$work/authorized_keys"
+    ssh_to() { ssh -F /dev/null -i "$central" -o BatchMode=yes -o ConnectTimeout=10 -o IdentitiesOnly=yes \
+      -o PasswordAuthentication=no -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/known_hosts" -- "ubuntu@$address" "$1"; }
+    if [[ $action == rollback ]]; then
+      ssh_to 'set -eu; cd "$HOME/.ssh"; test -f authorized_keys.prev; cp -p authorized_keys authorized_keys.swap; mv authorized_keys.prev authorized_keys; mv authorized_keys.swap authorized_keys.prev; ssh-keygen -lf authorized_keys | wc -l'
+      exit 0
+    fi
+    lines=0 organizer=0
+    while IFS= read -r line; do
+      [[ $line =~ ^ssh-ed25519\ [A-Za-z0-9+/]{68}(\ [A-Za-z0-9._@:-]{1,100})?$ ]] || { echo "authorized key line is invalid" >&2; exit 1; }
+      [[ $(ssh-keygen -lf - <<<"$line" | awk '{print $2}') != 'SHA256:dfPMQE51IWgeI/TQvWs+zgCNU1dyZhpMBnQap/pmA0I' ]] || organizer=1
+      lines=$((lines + 1))
+    done < "$work/authorized_keys"
+    (( organizer == 1 && lines >= 2 && lines <= 64 )) || { echo "keys must keep the organizer and add 1-63 team keys" >&2; exit 1; }
+    ssh_to 'set -eu; umask 077; mkdir -p "$HOME/.ssh"; cd "$HOME/.ssh"; cat > authorized_keys.next; if [ -f authorized_keys ]; then cp -p authorized_keys authorized_keys.prev; fi; mv authorized_keys.next authorized_keys; ssh-keygen -lf authorized_keys | wc -l' < "$work/authorized_keys"
+  SCRIPT
+  operations_commission_gateway_model_a_script     = <<-SCRIPT
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # event-time exception to the gateway image: stage the reviewed model a router
+    # files (hash pinned), activate them, or flip the production-ssh switch.
+    # stdin header: "gateway-primary|gateway-standby stage NAME|activate|enable|disable"
+    [[ $EUID -eq 0 && $(cat /etc/finals-platform/role 2>/dev/null) == '{"role":"operations"}' ]] || exit 1
+    central=/run/finals-commissioning/central_id_ed25519
+    [[ -f $central && ! -L $central && $# -eq 0 ]] || exit 2
+    work=$(mktemp -d /run/finals-gateway-model-a.XXXXXX)
+    trap 'rm -rf -- "$work"' EXIT
+    dd bs=65537 count=1 status=none > "$work/in"
+    [[ -s $work/in && $(stat -c '%s' "$work/in") -le 65536 ]] || exit 1
+    read -r target action name < <(head -n1 "$work/in")
+    case "$target" in
+      gateway-primary) address=10.60.250.10 ;;
+      gateway-standby) address=10.60.250.11 ;;
+      *) echo "unsupported fixed gateway target" >&2; exit 2 ;;
+    esac
+    declare -A pinned=(
+      [nftables]=b3122786466030efae9b2cb29903116d42aa824d6c703235968222f52807a269
+      [render]=a40b74f027e0137442f1f6ddfa1ce4f86b2a490c29716a5716aa9af8c1aa4dc6
+      [apply-inventory]=4725b32ca95776bfcfcbe61f8ee5e7ee66711e8008a7cdd1350ff494ccdf7e57
+    )
+    ssh_to() { ssh -F /dev/null -i "$central" -o BatchMode=yes -o ConnectTimeout=10 -o IdentitiesOnly=yes \
+      -o PasswordAuthentication=no -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts -- "ubuntu@$address" "$1"; }
+    case "$action" in
+      stage)
+        [[ -n $${pinned[$name]:-} ]] || { echo "unsupported model a file" >&2; exit 2; }
+        tail -n +2 "$work/in" > "$work/file"
+        read -r sum _ < <(sha256sum "$work/file")
+        [[ $sum == "$${pinned[$name]}" ]] || { echo "model a file hash is not the reviewed one" >&2; exit 1; }
+        ssh_to "set -eu; sudo -n install -d -m 0700 /var/lib/event-router/model-a; sudo -n tee /var/lib/event-router/model-a/$name >/dev/null" < "$work/file"
+        ;;
+      activate)
+        ssh_to "set -eu; d=/var/lib/event-router/model-a
+          echo '$${pinned[nftables]}  '\$d/nftables | sudo -n sha256sum -c --quiet
+          echo '$${pinned[render]}  '\$d/render | sudo -n sha256sum -c --quiet
+          echo '$${pinned[apply-inventory]}  '\$d/apply-inventory | sudo -n sha256sum -c --quiet
+          sudo -n install -m 0644 \$d/nftables /etc/nftables.conf
+          sudo -n install -m 0755 \$d/render /usr/local/libexec/event-router/render_inventory.py
+          sudo -n install -m 0755 \$d/apply-inventory /usr/local/sbin/event-router-apply-inventory
+          sudo -n nft -c -f /etc/nftables.conf
+          sudo -n systemctl restart nftables.service event-router-restore.service
+          if sudo -n grep -Fxq active /etc/event-router/role; then sudo -n systemctl restart event-router-activate.service; fi
+          sudo -n nft list set inet event_router peer_production_access >/dev/null"
+        ;;
+      enable|disable)
+        ssh_to "set -eu; if [ $action = enable ]; then echo enabled | sudo -n tee /etc/event-router/production-ssh >/dev/null; else sudo -n rm -f /etc/event-router/production-ssh; fi
+          sudo -n test ! -f /var/lib/event-router/active-peers.json || sudo -n /usr/local/sbin/event-router-apply-inventory /var/lib/event-router/active-peers.json
+          sudo -n nft list set inet event_router peer_production_access | grep -c ' \. ' || true"
+        ;;
+      *) echo "unsupported model a action" >&2; exit 2 ;;
+    esac
+  SCRIPT
   operations_commission_sudoers                    = <<-SUDOERS
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh gateway-primary gateway-wireguard
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh gateway-primary gateway-reconciler
@@ -492,6 +648,29 @@ locals {
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-secret control-reconciler
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-secret control-checkers
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-platform-diagnostic diagnose
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall platform
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall control
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall repository
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall mirror
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall hill-01
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall hill-02
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall hill-03
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-01
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-02
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-03
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-04
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-05
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-06
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-07
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-08
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-09
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-10
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-11
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-12
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-13
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-14
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-15
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-16
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume gateway-primary volume-initialize
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume gateway-standby volume-initialize
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-stage-central
@@ -506,6 +685,8 @@ locals {
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-gateway-role gateway-standby
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-gateway-role-audit gateway-primary
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-gateway-role-audit gateway-standby
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-production-keys ""
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-gateway-model-a ""
   SUDOERS
   operations_commission_runcmd = join("\n", [
     "  - |",
@@ -515,12 +696,15 @@ locals {
     "    printf '%s' '${base64gzip(local.operations_commission_control_action_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-control-action",
     "    printf '%s' '${base64gzip(local.operations_commission_control_secret_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-control-secret",
     "    printf '%s' '${base64gzip(local.operations_commission_platform_diagnostic_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-platform-diagnostic",
+    "    printf '%s' '${base64gzip(local.operations_commission_host_firewall_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-host-firewall",
     "    printf '%s' '${base64gzip(local.operations_commission_stage_central_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-stage-central",
     "    printf '%s' '${base64gzip(local.operations_commission_clear_central_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-clear-central",
     "    printf '%s' '${base64gzip(local.operations_commission_gateway_secret_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-gateway-secret",
     "    printf '%s' '${base64gzip(local.operations_commission_gateway_authorizer_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-gateway-authorizer",
     "    printf '%s' '${base64gzip(local.operations_commission_gateway_role_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-gateway-role",
     "    printf '%s' '${base64gzip(local.operations_commission_gateway_role_audit_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-gateway-role-audit",
+    "    printf '%s' '${base64gzip(local.operations_commission_production_keys_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-production-keys",
+    "    printf '%s' '${base64gzip(local.operations_commission_gateway_model_a_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-gateway-model-a",
     "    temporary=$(mktemp /etc/sudoers.d/.finals-operations-commissioning.XXXXXX)",
     "    printf '%s' '${base64gzip(local.operations_commission_sudoers)}' | base64 -d | gzip -d > \"$temporary\"",
     "    chmod 0440 \"$temporary\"",

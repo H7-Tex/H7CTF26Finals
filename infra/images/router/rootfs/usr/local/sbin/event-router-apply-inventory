@@ -24,6 +24,8 @@ render_args=(
   --nft-output "$workdir/peers.nft"
 )
 [[ ! -f $active_inventory ]] || render_args+=(--active-inventory "$active_inventory")
+# model a only: players reach ssh on their own production box while this switch is set
+[[ $(cat /etc/event-router/production-ssh 2>/dev/null || true) != enabled ]] || render_args+=(--production-ssh)
 /usr/local/libexec/event-router/render_inventory.py "${render_args[@]}"
 
 {

@@ -174,6 +174,11 @@ def compile_manifest(manifest_path, organizer_path, output_dir):
         item = payload(document["change_id"], host, team, organizers, keys)
         atomic_write(output / "payloads" / f"{host}.json", (json.dumps(item, sort_keys=True, separators=(",", ":")) + "\n").encode())
         inventory.extend({"team": team, "participant_id": key["participant_id"], "fingerprint": key["fingerprint"]} for key in keys)
+    # model a: the same keys for the team's production box, organizer first. the
+    # operator prepends "production-NN apply" and the box's verified host-key line.
+    for team, keys in sorted(teams.items()):
+        lines = authorized_content(organizers, keys)
+        atomic_write(output / "payloads" / f"production-{team.removeprefix('team-')}.authorized_keys", lines)
     spare = document["spare_assignment"]
     spare_keys = teams[spare] if spare else []
     item = payload(document["change_id"], "spare-workbench", spare, organizers, spare_keys)

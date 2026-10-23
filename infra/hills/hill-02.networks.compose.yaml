@@ -1,0 +1,9 @@
+networks:
+  arena:
+    ipam:
+      config:
+        - subnet: 172.31.42.0/24
+  evm:
+    ipam:
+      config:
+        - subnet: 172.31.43.0/24

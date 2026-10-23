@@ -50,6 +50,15 @@ class CompileTests(unittest.TestCase):
         variables = json.loads((output / "team-workbench-ssh-authorized-keys.auto.tfvars.json").read_text())
         self.assertEqual(set(variables["team_workbench_ssh_authorized_keys"]), {f"team-{number:02d}" for number in range(1, 16)})
         self.assertEqual(len(list((output / "payloads").glob("*.json"))), 16)
+        production = sorted((output / "payloads").glob("production-*.authorized_keys"))
+        self.assertEqual([path.name for path in production], [f"production-{number:02d}.authorized_keys" for number in range(1, 16)])
+        lines = production[6].read_text().splitlines()
+        # organizer first, then only that team's keys, in the line shape the ops wrapper accepts
+        self.assertGreaterEqual(len(lines), 2)
+        self.assertTrue(lines[0].endswith("organizer-1"))
+        for line in lines:
+            self.assertRegex(line, r"^ssh-ed25519 [A-Za-z0-9+/]{68}( [A-Za-z0-9._@:-]{1,100})?$")
+        self.assertTrue(all("team-07" in line for line in lines[1:]))
         audit = json.loads((output / "fingerprints.json").read_text())
         self.assertEqual(len(audit["participants"]), 15)
         self.assertNotIn("public_key", json.dumps(audit))

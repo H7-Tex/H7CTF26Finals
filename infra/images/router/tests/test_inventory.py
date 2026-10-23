@@ -43,6 +43,21 @@ class InventoryTests(unittest.TestCase):
         self.assertIn("10.80.3.201 . 10.61.3.2", nftables)
         self.assertIn("10.80.3.202 . 10.61.3.2", nftables)
 
+    def test_production_ssh_reaches_only_the_own_team_box(self):
+        peers = inventory([peer("peer-a", 3, 201, 1), peer("peer-b", 7, 205, 2)])
+        _, closed = MODULE.render(peers)
+        self.assertIn("flush set inet event_router peer_production_access", closed)
+        self.assertNotIn("add element inet event_router peer_production_access", closed)
+        _, opened = MODULE.render(peers, production_ssh=True)
+        line = next(item for item in opened.splitlines() if "add element inet event_router peer_production_access" in item)
+        self.assertIn("10.80.3.201 . 10.60.3.2", line)
+        self.assertIn("10.80.7.205 . 10.60.7.2", line)
+        self.assertNotIn("10.80.3.201 . 10.60.7.2", line)
+
+    def test_team_bound_follows_the_constant(self):
+        with self.assertRaises(ValueError):
+            MODULE.render(inventory([peer("peer-a", MODULE.MAX_TEAM_NUMBER + 1, 201, 1)]))
+
     def test_rejects_duplicate_addresses(self):
         with self.assertRaisesRegex(ValueError, "addresses must be unique"):
             MODULE.render(inventory([
