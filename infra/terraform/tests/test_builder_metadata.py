@@ -38,7 +38,7 @@ class BuilderMetadataTests(unittest.TestCase):
                     "git", "-C", str(checkout),
                     "-c", "user.name=Package Test",
                     "-c", "user.email=package-test@example.invalid",
-                    "commit", "--quiet", "-m", "package test",
+                    "commit", "--quiet", "--allow-empty", "-m", "package test",
                 ],
                 check=True,
             )
