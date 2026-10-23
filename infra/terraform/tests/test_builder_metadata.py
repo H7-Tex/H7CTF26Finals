@@ -293,6 +293,8 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn("operations_commission_script", platform)
         self.assertIn('resource "terraform_data" "operations_generation"', platform)
         self.assertIn('input = "bootstrap"', platform)
+        self.assertIn('check "operations_commission_cloud_init"', platform)
+        self.assertIn('local.cloud_init_by_role[role] == local.cloud_init_base_by_role[role]', platform)
         self.assertIn("StrictHostKeyChecking=yes", platform)
         self.assertIn("UserKnownHostsFile=/etc/finals-platform/operations/known_hosts", platform)
         self.assertIn("finals-commission-volume platform volume-initialize", platform)

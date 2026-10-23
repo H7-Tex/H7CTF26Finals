@@ -145,16 +145,17 @@ locals {
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume gateway-primary volume-initialize
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume gateway-standby volume-initialize
   SUDOERS
-  operations_commission_runcmd             = <<-YAML
-        - |
-          set -eu
-          printf '%s' '${base64encode(local.operations_commission_script)}' | base64 -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-volume
-          temporary=$(mktemp /etc/sudoers.d/.finals-operations-commissioning.XXXXXX)
-          printf '%s' '${base64encode(local.operations_commission_sudoers)}' | base64 -d > "$temporary"
-          chmod 0440 "$temporary"
-          visudo -cf "$temporary" >/dev/null
-          mv "$temporary" /etc/sudoers.d/finals-operations-commissioning
-  YAML
+  operations_commission_runcmd = join("\n", [
+    "  - |",
+    "    set -eu",
+    "    printf '%s' '${base64encode(local.operations_commission_script)}' | base64 -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-volume",
+    "    temporary=$(mktemp /etc/sudoers.d/.finals-operations-commissioning.XXXXXX)",
+    "    printf '%s' '${base64encode(local.operations_commission_sudoers)}' | base64 -d > \"$temporary\"",
+    "    chmod 0440 \"$temporary\"",
+    "    visudo -cf \"$temporary\" >/dev/null",
+    "    mv \"$temporary\" /etc/sudoers.d/finals-operations-commissioning",
+    "",
+  ])
 
   cloud_init_base_by_role = {
     for role in keys(local.hosts) : role => <<-YAML
@@ -183,9 +184,23 @@ locals {
   cloud_init_by_role = {
     for role, content in local.cloud_init_base_by_role : role => role == "operations" ? replace(
       content,
-      "        - [\"/usr/local/sbin/finals-platform-activate\", \"operations\"]\n",
-      "        - [\"/usr/local/sbin/finals-platform-activate\", \"operations\"]\n${local.operations_commission_runcmd}",
+      "  - [\"/usr/local/sbin/finals-platform-activate\", \"operations\"]\n",
+      "  - [\"/usr/local/sbin/finals-platform-activate\", \"operations\"]\n${local.operations_commission_runcmd}",
     ) : content
+  }
+}
+
+check "operations_commission_cloud_init" {
+  assert {
+    condition     = length(regexall("finals-commission-volume", local.cloud_init_by_role["operations"])) > 0
+    error_message = "Operations cloud-init must install the fixed commissioning wrapper."
+  }
+
+  assert {
+    condition = alltrue([
+      for role in keys(local.hosts) : role == "operations" || local.cloud_init_by_role[role] == local.cloud_init_base_by_role[role]
+    ])
+    error_message = "The commissioning window must not alter any non-operations cloud-init payload."
   }
 }
 
