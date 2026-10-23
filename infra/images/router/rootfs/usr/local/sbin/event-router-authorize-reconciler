@@ -15,12 +15,13 @@ read -r key_type key_data _ < "$public_key_file"
 
 home=/var/lib/peer-reconciler
 install -d -o root -g root -m 0755 "$home"
-install -d -o root -g root -m 0700 "$home/.ssh"
+install -d -o root -g root -m 0755 "$home/.ssh"
 temporary=$(mktemp "$home/.ssh/.authorized_keys.XXXXXX")
 trap 'rm -f -- "$temporary"' EXIT
 printf 'restrict,command="/usr/bin/sudo -n /usr/local/sbin/event-router-receive-inventory" %s %s\n' \
   "$key_type" "$key_data" > "$temporary"
-chmod 0600 "$temporary"
+# sshd reads authorized_keys as the user, so it must be readable but root-owned
+chmod 0644 "$temporary"
 chown root:root "$temporary"
 mv -f "$temporary" "$home/.ssh/authorized_keys"
 sshd -t

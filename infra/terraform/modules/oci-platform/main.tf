@@ -95,8 +95,8 @@ locals {
     }
     target=$${1:-}
     action=$${2:-}
-    [[ $# -eq 2 && ( $action == volume-initialize || ( $target == platform && $action == anvil-audit ) ) ]] || {
-      echo "usage: finals-commission-volume {platform|gateway-primary|gateway-standby} volume-initialize | platform anvil-audit" >&2
+    [[ $# -eq 2 && ( $action == volume-initialize || ( $target == platform && ( $action == anvil-audit || $action == admin-promote ) ) ) ]] || {
+      echo "usage: finals-commission-volume {platform|gateway-primary|gateway-standby} volume-initialize | platform anvil-audit|admin-promote" >&2
       exit 2
     }
     case "$target" in
@@ -132,6 +132,13 @@ locals {
         sudo -n find /srv/anvil/backups -mindepth 1 -maxdepth 2 -type f -printf "%P %s\n" | sort | tail -n 12
         sudo -n journalctl --unit=anvil-finals.service --unit=anvil-finals-backup.service --lines=30 --no-pager --output=short-iso
         printf "%s\n" anvil-audit-complete'
+    fi
+    if [[ $action == admin-promote ]]; then
+      exec /usr/bin/ssh "$${ssh_options[@]}" -- "ubuntu@$address" \
+        'sudo -n /usr/bin/docker compose --project-name anvil-finals --project-directory /opt/anvil/current/deployments/finals --env-file /etc/anvil/finals.env -f /opt/anvil/current/deployments/finals/compose.yaml exec -T postgres psql -v ON_ERROR_STOP=1 --username anvil --dbname anvil --tuples-only --no-align' <<'SQL'
+    UPDATE users SET role = 'admin' WHERE username = 'h7ops' AND status = 'active' AND NOT EXISTS (SELECT 1 FROM users WHERE role = 'admin') RETURNING 'promoted ' || username;
+    SELECT 'admins=' || count(*) FROM users WHERE role = 'admin';
+    SQL
     fi
     temporary=$(mktemp /run/finals-volume-initialize.XXXXXX)
     trap 'rm -f -- "$temporary"' EXIT
@@ -180,7 +187,7 @@ locals {
     [[ $# -eq 1 ]] || { echo "usage: finals-commission-control-action ACTION" >&2; exit 2; }
     case "$1" in
       reconcile-once)
-        remote='set -uo pipefail; if sudo -n systemctl start peer-reconciler.service && [[ $(sudo -n systemctl show --property=Result --value peer-reconciler.service) == success ]]; then echo peer-reconciler-once=success; else sudo -n systemctl show peer-reconciler.service --property=ActiveState,SubState,Result,ExecMainStatus --no-pager; sudo -n journalctl --unit=peer-reconciler.service --lines=30 --no-pager --output=short-iso; exit 1; fi'
+        remote='set -uo pipefail; if sudo -n systemctl start peer-reconciler.service && [[ $(sudo -n systemctl show --property=Result --value peer-reconciler.service) == success ]]; then echo peer-reconciler-once=success; else sudo -n journalctl --unit=peer-reconciler.service --lines=3 --reverse --no-pager --output=cat; exit 1; fi'
         ;;
       reconciler-enable)
         remote='set -euo pipefail; sudo -n systemctl enable --now peer-reconciler.timer >/dev/null; sudo -n systemctl is-active --quiet peer-reconciler.timer; echo peer-reconciler-timer=active'
@@ -543,7 +550,7 @@ locals {
   SCRIPT
   # event-time exception to the gateway image: stage the reviewed model a router
   # files (hash pinned), activate them, or flip the production-ssh switch.
-  # stdin header: "gateway-primary|gateway-standby stage NAME|activate|enable|disable" or "control stage render|validator"
+  # stdin header: "gateway-primary|gateway-standby stage NAME|activate|enable|disable|reconciler-access"
   operations_commission_gateway_model_a_script = <<-SCRIPT
     #!/usr/bin/env bash
     set -euo pipefail
@@ -558,10 +565,8 @@ locals {
     case "$target" in
       gateway-primary) address=10.60.250.10 ;;
       gateway-standby) address=10.60.250.11 ;;
-      control) address=10.60.201.20 ;;
       *) echo "unsupported fixed gateway target" >&2; exit 2 ;;
     esac
-    [[ $target != control || $action == validator || "$action $name" == "stage render" ]] && [[ $target == control || $action != validator ]] || { echo "control takes only the validator" >&2; exit 2; }
     declare -A pinned=(
       [nftables]=b3122786466030efae9b2cb29903116d42aa824d6c703235968222f52807a269
       [render]=a40b74f027e0137442f1f6ddfa1ce4f86b2a490c29716a5716aa9af8c1aa4dc6
@@ -595,13 +600,11 @@ locals {
           sudo -n test ! -f /var/lib/event-router/active-peers.json || sudo -n /usr/local/sbin/event-router-apply-inventory /var/lib/event-router/active-peers.json
           sudo -n nft list set inet event_router peer_production_access | grep -c ' \. ' || true"
         ;;
-      validator)
-        ssh_to "set -eu; d=/var/lib/event-router/model-a
-          echo '$${pinned[render]}  '\$d/render | sudo -n sha256sum -c --quiet
-          sudo -n install -d -o root -g root -m 0755 /usr/local/libexec/event-router
-          sudo -n install -o root -g root -m 0755 \$d/render /usr/local/libexec/event-router/render_inventory.py
-          echo '$${pinned[render]}  /usr/local/libexec/event-router/render_inventory.py' | sudo -n sha256sum -c --quiet
-          sudo -n -u peer-reconciler test -x /usr/local/libexec/event-router/render_inventory.py && echo validator=installed"
+      reconciler-access)
+        ssh_to "set -eu; h=/var/lib/peer-reconciler/.ssh
+          [ \"\$(sudo -n stat -c %U:%G \$h/authorized_keys)\" = root:root ]
+          sudo -n chmod 0755 \$h; sudo -n chmod 0644 \$h/authorized_keys
+          sudo -n -u peer-reconciler grep -c '^restrict,command=\"/usr/bin/sudo -n /usr/local/sbin/event-router-receive-inventory\" ssh-ed25519 ' \$h/authorized_keys"
         ;;
       *) echo "unsupported model a action" >&2; exit 2 ;;
     esac
@@ -618,6 +621,7 @@ locals {
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-secret platform anvil
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform volume-initialize
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform anvil-audit
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform admin-promote
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-action reconcile-once
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-action reconciler-enable
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-action control-status

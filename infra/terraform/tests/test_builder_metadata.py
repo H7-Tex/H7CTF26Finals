@@ -405,9 +405,6 @@ class BuilderMetadataTests(unittest.TestCase):
             self.assertEqual(platform.count(f'ocarun ALL=(root) NOPASSWD: /usr/local/sbin/{wrapper} ""'), 1)
             self.assertNotIn(f"/usr/local/sbin/{wrapper} *", platform)
         self.assertIn("^production-(0[1-9]|1[0-5])$", platform)
-        self.assertIn("control) address=10.60.201.20 ;;", platform)
-        self.assertIn('[[ $target != control || $action == validator || "$action $name" == "stage render" ]]', platform)
-        self.assertIn("/usr/local/libexec/event-router/render_inventory.py' | sudo -n sha256sum -c --quiet", platform)
         self.assertIn("SHA256:dfPMQE51IWgeI/TQvWs+zgCNU1dyZhpMBnQap/pmA0I", platform)
         self.assertIn('UserKnownHostsFile="$work/known_hosts"', platform)
         self.assertNotIn("base64encode(local.operations_commission_", platform)
@@ -446,7 +443,10 @@ class BuilderMetadataTests(unittest.TestCase):
         ):
             fixed = f"ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-action {action}"
             self.assertEqual(platform.count(fixed), 1)
-        self.assertIn("journalctl --unit=peer-reconciler.service --lines=30", platform)
+        self.assertIn("journalctl --unit=peer-reconciler.service --lines=3 --reverse", platform)
+        self.assertIn("reconciler-access)", platform)
+        self.assertIn("sudo -n chmod 0755 \\$h; sudo -n chmod 0644 \\$h/authorized_keys", platform)
+        self.assertIn("finals-commission-volume platform admin-promote", platform)
         self.assertNotIn("finals-commission-control-action *", platform)
         control_wrapper = platform[
             platform.index("operations_commission_control_action_script"):
