@@ -21,6 +21,14 @@ TEMPLATES = (
 
 
 class BuilderMetadataTests(unittest.TestCase):
+    def test_platform_image_override_is_scoped_to_platform_host(self):
+        module = (ROOT / "terraform/modules/oci-platform/main.tf").read_text(encoding="utf-8")
+        environment = (ROOT / "terraform/environments/production/oci-platform/main.tf").read_text(encoding="utf-8")
+        variables = (ROOT / "terraform/modules/oci-platform/variables.tf").read_text(encoding="utf-8")
+        self.assertIn('each.key == "platform" && var.platform_image_id != null', module)
+        self.assertIn("platform_image_id               = var.platform_image_id", environment)
+        self.assertIn('variable "platform_image_id"', variables)
+
     def test_oci_stack_packages_are_byte_reproducible(self):
         repository = ROOT.parent
         package_script = ROOT / "terraform/scripts/package-oci-stack.sh"

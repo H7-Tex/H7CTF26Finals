@@ -773,7 +773,7 @@ resource "oci_core_instance" "host" {
   }
 
   source_details {
-    source_id               = each.value.architecture == "x86" ? var.x86_image_id : var.arm_image_id
+    source_id               = each.key == "platform" && var.platform_image_id != null ? var.platform_image_id : (each.value.architecture == "x86" ? var.x86_image_id : var.arm_image_id)
     source_type             = "image"
     boot_volume_size_in_gbs = each.value.boot_gb
   }

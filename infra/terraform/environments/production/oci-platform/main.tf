@@ -6,6 +6,7 @@ module "platform" {
   subnet_ids                      = var.subnet_ids
   infra_nsg_id                    = var.infra_nsg_id
   x86_image_id                    = var.x86_image_id
+  platform_image_id               = var.platform_image_id
   arm_image_id                    = var.arm_image_id
   organizer_ssh_authorized_keys   = var.organizer_ssh_authorized_keys
   operations_relay_ssh_public_key = var.operations_relay_ssh_public_key

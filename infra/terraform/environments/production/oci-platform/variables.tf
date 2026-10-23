@@ -33,6 +33,12 @@ variable "x86_image_id" {
   type        = string
 }
 
+variable "platform_image_id" {
+  description = "Optional reviewed immutable image OCID used only by the platform host."
+  type        = string
+  default     = null
+}
+
 variable "arm_image_id" {
   description = "Reviewed immutable AArch64 platform image OCID."
   type        = string
