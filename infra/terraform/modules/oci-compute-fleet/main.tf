@@ -84,6 +84,7 @@ resource "oci_core_private_ip" "staging" {
 
   lifecycle {
     prevent_destroy = true
+    ignore_changes  = [vnic_id]
   }
 }
 

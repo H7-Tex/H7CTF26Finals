@@ -551,6 +551,9 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn('variable "reference_production_image_id"', variables)
         self.assertIn("each.value.team == 16 && var.reference_production_image_id != null", source)
         self.assertIn("reference_production_image_id      = var.reference_production_image_id", root)
+        staging = source[source.index('resource "oci_core_private_ip" "staging"'):source.index('resource "oci_core_volume" "production_data"')]
+        self.assertIn("prevent_destroy = true", staging)
+        self.assertIn("ignore_changes  = [vnic_id]", staging)
         self.assertIn("production_numbers                 = var.production_numbers", root)
         self.assertIn("workbench_numbers                  = var.workbench_numbers", root)
 

@@ -7,3 +7,5 @@ Only organizer break-glass keys are installed on production hosts. Each team wor
 Apply only an exact saved plan from a reviewed commit. Set `production_numbers = [16]` and `workbench_numbers = [16, 17]` for the NOP and support canary, then add team 01 and expand both sets monotonically in reviewed batches. Never remove an applied number: deletion guards intentionally reject a shrinking rollout. The final full-fleet plan has 33 instances, 16 staging private addresses, 16 production data volumes and 16 production volume attachments with no replacements or deletes.
 
 When expanding teams on a newer reviewed image while preserving the existing reference host, set `reference_production_image_id` to production-16's current immutable image. Leave it null when all production hosts use `production_image_id`.
+
+Staging private addresses ignore provider refresh churn on `vnic_id`. New addresses still consume the VNIC at creation, while existing production instances and staging addresses are both protected from replacement by `prevent_destroy`.
