@@ -548,6 +548,9 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn("number >= 1 && number <= 16", variables)
         self.assertIn("number >= 1 && number <= 17", variables)
         self.assertIn("Every enabled workbench requires", source)
+        self.assertIn('variable "reference_production_image_id"', variables)
+        self.assertIn("each.value.team == 16 && var.reference_production_image_id != null", source)
+        self.assertIn("reference_production_image_id      = var.reference_production_image_id", root)
         self.assertIn("production_numbers                 = var.production_numbers", root)
         self.assertIn("workbench_numbers                  = var.workbench_numbers", root)
 

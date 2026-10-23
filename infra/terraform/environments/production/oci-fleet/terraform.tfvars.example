@@ -3,6 +3,7 @@ finals_compartment_id = "ocid1.compartment.oc1..replace-me"
 availability_domain   = "AP-HYDERABAD-1-AD-1"
 game_nsg_id           = "ocid1.networksecuritygroup.oc1.ap-hyderabad-1.replace-me"
 production_image_id   = "ocid1.image.oc1.ap-hyderabad-1.replace-me"
+reference_production_image_id = null
 workbench_image_id    = "ocid1.image.oc1.ap-hyderabad-1.replace-me"
 
 organizer_ssh_authorized_keys = "ssh-ed25519 replace-me organizer"

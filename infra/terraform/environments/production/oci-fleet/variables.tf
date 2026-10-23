@@ -39,6 +39,13 @@ variable "production_image_id" {
   type        = string
 }
 
+variable "reference_production_image_id" {
+  description = "Optional immutable image OCID retained only for production-16."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
 variable "workbench_image_id" {
   description = "Reviewed immutable workbench image OCID."
   type        = string

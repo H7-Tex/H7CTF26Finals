@@ -7,6 +7,7 @@ module "fleet" {
   workbench_subnet_ids               = var.workbench_subnet_ids
   game_nsg_id                        = var.game_nsg_id
   production_image_id                = var.production_image_id
+  reference_production_image_id      = var.reference_production_image_id
   workbench_image_id                 = var.workbench_image_id
   production_numbers                 = var.production_numbers
   workbench_numbers                  = var.workbench_numbers

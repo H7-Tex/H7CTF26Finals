@@ -49,7 +49,7 @@ resource "oci_core_instance" "production" {
   }
 
   source_details {
-    source_id               = var.production_image_id
+    source_id               = each.value.team == 16 && var.reference_production_image_id != null ? var.reference_production_image_id : var.production_image_id
     source_type             = "image"
     boot_volume_size_in_gbs = 150
   }
