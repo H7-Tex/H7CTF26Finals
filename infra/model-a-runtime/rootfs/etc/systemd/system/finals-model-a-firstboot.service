@@ -1,6 +1,6 @@
 [Unit]
 Description=Install the baked Model A services on this production box
-Requires=finals-volume@production.service docker.service
+Requires=finals-volume@production.service docker.service finals-host-firewall.service
 After=finals-volume@production.service docker.service finals-host-firewall.service network-online.target
 Wants=network-online.target
 ConditionPathExists=!/var/lib/finals-model-a/firstboot.done

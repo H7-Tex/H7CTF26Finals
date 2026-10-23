@@ -11,7 +11,11 @@ PYTHONPYCACHEPREFIX="$cache" python3 -m py_compile \
   "$root/tests/local-acceptance.py" \
   "$root/rootfs/usr/local/sbin/finals-model-a-install" \
   "$root/rootfs/usr/local/sbin/finals-model-a-control"
-bash -n "$root/install.sh"
+bash -n \
+  "$root/install.sh" \
+  "$root/rootfs/usr/local/sbin/finals-model-a-firstboot"
+grep -Fq 'Requires=finals-volume@production.service docker.service finals-host-firewall.service' \
+  "$root/rootfs/etc/systemd/system/finals-model-a-firstboot.service"
 sh -n "$root/rootfs/usr/local/bin/h7"
 if command -v visudo >/dev/null; then
   visudo --check --file="$root/rootfs/etc/sudoers.d/finals-model-a"
