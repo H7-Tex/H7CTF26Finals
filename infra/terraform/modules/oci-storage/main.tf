@@ -48,7 +48,7 @@ resource "oci_core_volume_attachment" "data" {
   volume_id       = oci_core_volume.data[each.key].id
 
   lifecycle {
-    prevent_destroy = true
+    prevent_destroy = false
   }
 
 }
