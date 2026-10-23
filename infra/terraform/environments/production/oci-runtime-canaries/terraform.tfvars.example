@@ -1,0 +1,14 @@
+region              = "ap-hyderabad-1"
+compartment_id      = "ocid1.compartment.oc1..replace-me"
+availability_domain = "replace-me"
+vcn_id              = "ocid1.vcn.oc1.ap-hyderabad-1.replace-me"
+service_subnet_id   = "ocid1.subnet.oc1.ap-hyderabad-1.replace-me"
+image_ids = {
+  platform-x86 = "ocid1.image.oc1.ap-hyderabad-1.replace-me"
+  platform-arm = "ocid1.image.oc1.ap-hyderabad-1.replace-me"
+  production   = "ocid1.image.oc1.ap-hyderabad-1.replace-me"
+  workbench    = "ocid1.image.oc1.ap-hyderabad-1.replace-me"
+}
+image_source_revision   = "c7c6d42de4e11541b733ad0dc0af1d17f3df1868"
+anvil_revision          = "26cbd9a88d53d199ff2f3a0e6d1c9c4c4e8ecbed"
+package_source_revision = "replace-with-clean-packaged-git-head"

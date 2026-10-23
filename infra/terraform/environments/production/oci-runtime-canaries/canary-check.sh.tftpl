@@ -1,0 +1,135 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+exec > >(tee -a /var/log/finals-runtime-canary.log /dev/console) 2>&1
+
+ROLE='${role}'
+IMAGE_SOURCE='${image_source_revision}'
+ANVIL_SOURCE='${anvil_revision}'
+PHASE=manifest
+
+finish() {
+  status=$?
+  trap - EXIT
+  if [[ $status -eq 0 ]]; then
+    echo "runtime-image-canary role=$ROLE phase=$PHASE status=passed image_source=$IMAGE_SOURCE anvil_source=$ANVIL_SOURCE"
+  else
+    echo "runtime-image-canary role=$ROLE phase=$PHASE status=failed exit=$status image_source=$IMAGE_SOURCE anvil_source=$ANVIL_SOURCE"
+  fi
+  sync
+  systemctl poweroff --no-block || true
+  exit "$status"
+}
+trap finish EXIT
+
+python3 - "$ROLE" "$IMAGE_SOURCE" "$ANVIL_SOURCE" <<'PY'
+import hashlib
+import json
+import os
+import re
+import stat
+import sys
+from pathlib import Path
+
+role, image_source, anvil_source = sys.argv[1:]
+manifest_path = Path("/etc/runtime-image.json")
+info = manifest_path.lstat()
+if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_gid != 0 or stat.S_IMODE(info.st_mode) != 0o644:
+    raise SystemExit("runtime image manifest metadata is unsafe")
+manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+expected_keys = {"anvil_revision", "base_image_id", "package_manifest", "package_manifest_sha256", "role", "source_revision"}
+if set(manifest) != expected_keys:
+    raise SystemExit("runtime image manifest shape is invalid")
+if manifest["role"] != role or manifest["source_revision"] != image_source or manifest["anvil_revision"] != anvil_source:
+    raise SystemExit("runtime image manifest identity mismatch")
+if manifest["package_manifest"] != "/etc/runtime-image-packages.tsv" or re.fullmatch(r"[0-9a-f]{64}", manifest["package_manifest_sha256"]) is None:
+    raise SystemExit("runtime image package manifest identity is invalid")
+package_path = Path(manifest["package_manifest"])
+recorded_path = Path("/etc/runtime-image-packages.sha256")
+for path in (package_path, recorded_path):
+    item = path.lstat()
+    if not stat.S_ISREG(item.st_mode) or item.st_uid != 0 or item.st_gid != 0 or stat.S_IMODE(item.st_mode) != 0o644:
+        raise SystemExit("runtime image package evidence metadata is unsafe")
+actual = hashlib.sha256(package_path.read_bytes()).hexdigest()
+if actual != manifest["package_manifest_sha256"] or recorded_path.read_text(encoding="utf-8").strip() != actual:
+    raise SystemExit("runtime image package manifest hash mismatch")
+print(f"runtime-image-canary role={role} phase=manifest status=passed package_manifest_sha256={actual}")
+PY
+
+PHASE=common
+for command in auditctl chronyc docker git jq nft python3 rsync sshd; do
+  command -v "$command" >/dev/null
+done
+docker buildx version >/dev/null
+docker compose version >/dev/null
+sshd -t
+grep -Fxq 'PasswordAuthentication no' /etc/ssh/sshd_config.d/90-runtime.conf
+grep -Fxq 'PermitRootLogin no' /etc/ssh/sshd_config.d/90-runtime.conf
+[[ $(systemctl is-enabled apt-daily.timer 2>/dev/null) == masked ]]
+[[ $(systemctl is-enabled apt-daily-upgrade.timer 2>/dev/null) == masked ]]
+
+case "$ROLE" in
+  platform-x86)
+    PHASE=platform-x86
+    [[ $(readlink -f /opt/anvil/current) == "/opt/anvil/releases/$ANVIL_SOURCE" ]]
+    [[ $(git -C /opt/anvil/current rev-parse HEAD) == "$ANVIL_SOURCE" ]]
+    test -f /opt/anvil/current/internal/database/migrations/067_deployment_pipeline_events.sql
+    timeout 120s bash -c 'until systemctl is-active --quiet docker.service; do sleep 2; done'
+    docker image inspect "anvil-finals-api:$ANVIL_SOURCE" >/dev/null
+    docker image inspect "anvil-finals-web:$ANVIL_SOURCE" >/dev/null
+    /usr/local/sbin/finals-platform-activate control
+    [[ $(cat /etc/finals-platform/role) == '{"role":"control"}' ]]
+    systemctl is-active --quiet finals-host-firewall.service
+    [[ $(systemctl is-enabled checker-runtime.service 2>/dev/null) == disabled ]]
+    ! systemctl is-active --quiet checker-runtime.service
+    test ! -e /etc/checker-runtime/enabled
+    test ! -e /etc/checker-runtime/anvil-admin.token
+    ;;
+  platform-arm)
+    PHASE=platform-arm
+    timeout 120s bash -c 'until systemctl is-active --quiet docker.service; do sleep 2; done'
+    /usr/local/sbin/finals-platform-activate operations
+    [[ $(cat /etc/finals-platform/role) == '{"role":"operations"}' ]]
+    systemctl is-active --quiet finals-host-firewall.service
+    systemctl is-enabled finals-platform.target >/dev/null
+    test ! -e /etc/finals-secrets/operations-relay
+    ;;
+  production)
+    PHASE=production
+    [[ $(cat /etc/finals-platform/role) == '{"role":"production"}' ]]
+    systemctl is-active --quiet finals-host-firewall.service
+    systemctl is-enabled finals-volume@production.service >/dev/null
+    [[ $(systemctl is-enabled deployment-orchestrator.service 2>/dev/null) == disabled ]]
+    [[ $(systemctl is-enabled deployment-executor.socket 2>/dev/null) == disabled ]]
+    [[ $(systemctl is-enabled finals-service-proxy.service 2>/dev/null) == disabled ]]
+    ! systemctl is-active --quiet deployment-orchestrator.service
+    ! systemctl is-active --quiet deployment-executor.socket
+    ! systemctl is-active --quiet finals-service-proxy.service
+    test -x /usr/local/bin/deployment-orchestrator
+    test -x /usr/local/libexec/deployment-orchestrator/runner
+    test -x /usr/local/libexec/deployment-executor/executor
+    test ! -e /etc/deployment-orchestrator/config.json
+    test ! -e /etc/deployment-executor/policy.json
+    if output=$(deployment-orchestrator host-preflight 2>&1); then
+      echo "uncommissioned production preflight unexpectedly passed: $output" >&2
+      exit 1
+    fi
+    grep -Fq 'required host path /etc/deployment-orchestrator/config.json' <<<"$output"
+    ;;
+  workbench)
+    PHASE=workbench
+    for command in cargo clang cmake gdb go node npm rg rustc tmux; do
+      command -v "$command" >/dev/null
+    done
+    timeout 120s bash -c 'until systemctl is-active --quiet docker.service; do sleep 2; done'
+    docker info >/dev/null
+    command -v finals-team-access >/dev/null
+    grep -Fxq 'ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-team-access apply' /etc/sudoers.d/finals-team-access
+    grep -Fxq 'ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-team-access rollback' /etc/sudoers.d/finals-team-access
+    test ! -e /var/lib/finals-team-access/current.json
+    ;;
+  *)
+    exit 2
+    ;;
+esac
+
+PHASE=complete

@@ -1,0 +1,17 @@
+#cloud-config
+output:
+  all: "| tee -a /var/log/cloud-init-output.log /dev/console"
+write_files:
+  - path: /usr/local/sbin/finals-runtime-canary
+    owner: root:root
+    permissions: '0700'
+    encoding: b64
+    content: ${canary_script_base64}
+runcmd:
+  - [timeout, --signal=TERM, --kill-after=10s, 10m, /usr/local/sbin/finals-runtime-canary]
+power_state:
+  delay: now
+  mode: poweroff
+  message: Runtime image canary complete
+  timeout: 120
+  condition: true

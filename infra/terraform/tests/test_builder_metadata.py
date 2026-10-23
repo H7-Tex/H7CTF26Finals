@@ -251,6 +251,29 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn(f'var.anvil_revision == "{revision}"', variables)
         self.assertIn(f'anvil_revision      = "{revision}"', example)
 
+    def test_runtime_canaries_are_private_bounded_and_fail_closed(self):
+        root = ROOT / "terraform/environments/production/oci-runtime-canaries"
+        source = (root / "main.tf").read_text(encoding="utf-8")
+        script = (root / "canary-check.sh.tftpl").read_text(encoding="utf-8")
+        cloud_init = (root / "canary-cloud-init.tftpl").read_text(encoding="utf-8")
+        package = (ROOT / "terraform/scripts/package-oci-stack.sh").read_text(encoding="utf-8")
+        self.assertIn("oci-runtime-canaries", package)
+        self.assertIn("assign_public_ip       = false", source)
+        self.assertNotIn("ssh_authorized_keys", source)
+        self.assertNotIn('direction                 = "INGRESS"', source)
+        self.assertIn('destination_type          = "SERVICE_CIDR_BLOCK"', source)
+        self.assertIn("min = 443", source)
+        self.assertIn("max = 443", source)
+        self.assertNotIn('resource "oci_core_volume"', source)
+        self.assertNotIn('resource "oci_core_route', source)
+        self.assertNotIn('destination               = "0.0.0.0/0"', source)
+        self.assertIn("/etc/runtime-image.json", script)
+        self.assertIn("067_deployment_pipeline_events.sql", script)
+        self.assertIn("deployment-orchestrator host-preflight", script)
+        self.assertIn("runtime image package manifest hash mismatch", script)
+        self.assertIn("10m", cloud_init)
+        self.assertIn("mode: poweroff", cloud_init)
+
     def test_builder_provenance_and_hard_metadata_gates_exist(self):
         package_script = (ROOT / "terraform/scripts/package-oci-stack.sh").read_text(encoding="utf-8")
         self.assertIn("status --porcelain --untracked-files=normal", package_script)

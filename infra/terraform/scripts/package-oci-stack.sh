@@ -5,9 +5,9 @@ ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 STACK=${1:-}
 
 case "$STACK" in
-  oci-addresses | oci-foundation | oci-gateway-builder | oci-gateway-image | oci-ingress | oci-platform | oci-fleet | oci-runtime-builders | oci-runtime-images) ;;
+  oci-addresses | oci-foundation | oci-gateway-builder | oci-gateway-image | oci-ingress | oci-platform | oci-fleet | oci-runtime-builders | oci-runtime-canaries | oci-runtime-images) ;;
   *)
-    echo "usage: $0 {oci-addresses|oci-foundation|oci-gateway-builder|oci-gateway-image|oci-ingress|oci-platform|oci-fleet|oci-runtime-builders|oci-runtime-images}" >&2
+    echo "usage: $0 {oci-addresses|oci-foundation|oci-gateway-builder|oci-gateway-image|oci-ingress|oci-platform|oci-fleet|oci-runtime-builders|oci-runtime-canaries|oci-runtime-images}" >&2
     exit 2
     ;;
 esac
@@ -34,7 +34,7 @@ mkdir -p "$OUTPUT_DIR"
 mkdir -p "$PACKAGE_DIR"
 git -C "$ROOT" archive --format=tar "$COMMIT" "${PATHS[@]}" | tar -xf - -C "$PACKAGE_DIR"
 case "$STACK" in
-  oci-gateway-builder | oci-runtime-builders)
+  oci-gateway-builder | oci-runtime-builders | oci-runtime-canaries)
     printf '%s\n' "$COMMIT" > "$PACKAGE_DIR/infra/terraform/environments/production/$STACK/packaged-source-revision"
     touch --date="@$COMMIT_EPOCH" "$PACKAGE_DIR/infra/terraform/environments/production/$STACK/packaged-source-revision"
     ;;
