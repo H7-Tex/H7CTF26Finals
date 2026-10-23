@@ -38,10 +38,29 @@ install_relay_sudoers() {
   mv "$temporary" /etc/sudoers.d/finals-secret-relay
 }
 
+install_operations_sudoers() {
+  local temporary
+  temporary=$(mktemp /etc/sudoers.d/.finals-secret-relay.XXXXXX)
+  cat > "$temporary" <<'EOF'
+ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-install-secret-bundle operations-relay
+ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh gateway-primary gateway-wireguard
+ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh gateway-primary gateway-reconciler
+ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh gateway-standby gateway-wireguard
+ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh gateway-standby gateway-reconciler
+ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh platform anvil
+ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh control control-reconciler
+ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh control control-checkers
+ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh repository repository
+EOF
+  chmod 0440 "$temporary"
+  visudo -cf "$temporary" >/dev/null
+  mv "$temporary" /etc/sudoers.d/finals-secret-relay
+}
+
 systemctl enable --now finals-host-firewall.service
 case "$role" in
   operations)
-    install_relay_sudoers ocarun operations-relay
+    install_operations_sudoers
     ;;
   platform)
     install_relay_sudoers ubuntu anvil
