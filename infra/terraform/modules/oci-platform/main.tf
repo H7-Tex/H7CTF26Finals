@@ -95,8 +95,8 @@ locals {
     }
     target=$${1:-}
     action=$${2:-}
-    [[ $# -eq 2 && $action == volume-initialize ]] || {
-      echo "usage: finals-commission-volume {platform|gateway-primary|gateway-standby} volume-initialize" >&2
+    [[ $# -eq 2 && ( $action == volume-initialize || ( $target == platform && $action == anvil-audit ) ) ]] || {
+      echo "usage: finals-commission-volume {platform|gateway-primary|gateway-standby} volume-initialize | platform anvil-audit" >&2
       exit 2
     }
     case "$target" in
@@ -114,11 +114,6 @@ locals {
         ;;
     esac
 
-    temporary=$(mktemp /run/finals-volume-initialize.XXXXXX)
-    trap 'rm -f -- "$temporary"' EXIT
-    cat > "$temporary"
-    printf '%s  %s\n' "${local.operations_commission_initializer_sha256}" "$temporary" | sha256sum -c - >/dev/null
-
     ssh_options=(
       -F /dev/null
       -i /run/finals-commissioning/central_id_ed25519
@@ -129,6 +124,19 @@ locals {
       -o StrictHostKeyChecking=yes
       -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts
     )
+    if [[ $action == anvil-audit ]]; then
+      exec /usr/bin/ssh "$${ssh_options[@]}" -- "ubuntu@$address" \
+        'set -uo pipefail
+        sudo -n systemctl show anvil-finals.service anvil-finals-backup.service --property=Id,ActiveState,SubState,Result,ExecMainStatus --no-pager
+        sudo -n /usr/bin/docker compose --project-name anvil-finals --project-directory /opt/anvil/current/deployments/finals --env-file /etc/anvil/finals.env -f /opt/anvil/current/deployments/finals/compose.yaml ps --format json || true
+        sudo -n find /srv/anvil/backups -mindepth 1 -maxdepth 2 -type f -printf "%P %s\n" | sort | tail -n 12
+        sudo -n journalctl --unit=anvil-finals.service --unit=anvil-finals-backup.service --lines=30 --no-pager --output=short-iso
+        printf "%s\n" anvil-audit-complete'
+    fi
+    temporary=$(mktemp /run/finals-volume-initialize.XXXXXX)
+    trap 'rm -f -- "$temporary"' EXIT
+    cat > "$temporary"
+    printf '%s  %s\n' "${local.operations_commission_initializer_sha256}" "$temporary" | sha256sum -c - >/dev/null
     /usr/bin/ssh "$${ssh_options[@]}" -- "ubuntu@$address" \
       'sudo install -D -m 0755 /dev/stdin /usr/local/sbin/finals-initialize-volume' < "$temporary"
     /usr/bin/ssh "$${ssh_options[@]}" -- "ubuntu@$address" "$post_command"
@@ -599,6 +607,7 @@ locals {
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh repository repository
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-secret platform anvil
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform volume-initialize
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform anvil-audit
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-action reconcile-once
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-action reconciler-enable
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-action control-status

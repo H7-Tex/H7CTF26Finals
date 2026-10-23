@@ -405,10 +405,14 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn("UserKnownHostsFile=/etc/finals-platform/operations/known_hosts", platform)
         platform_secret = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-secret platform anvil"
         platform_volume = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform volume-initialize"
+        platform_audit = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform anvil-audit"
         self.assertEqual(platform.count(platform_secret), 1)
         self.assertEqual(platform.count(platform_volume), 1)
+        self.assertEqual(platform.count(platform_audit), 1)
         self.assertNotIn("finals-commission-secret platform *", platform)
         self.assertNotIn("finals-commission-volume platform *", platform)
+        self.assertIn("anvil-audit-complete", platform)
+        self.assertIn("--lines=30", platform)
         self.assertIn("operations_commission_secret_script", platform)
         self.assertIn("base64gzip(local.operations_commission_secret_script)", platform)
         self.assertNotIn("base64encode(local.operations_commission_", platform)
