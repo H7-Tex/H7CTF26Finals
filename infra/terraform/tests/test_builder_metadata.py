@@ -1,5 +1,6 @@
 import base64
 import gzip
+import hashlib
 import json
 import re
 import stat
@@ -237,12 +238,17 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn('period            = "ONE_DAY"', storage[policy_start:])
         self.assertIn("retention_seconds = 604800", storage[policy_start:])
         for relative in (
-            "terraform/modules/oci-platform/main.tf",
             "terraform/modules/oci-ingress/main.tf",
             "terraform/modules/oci-compute-fleet/main.tf",
         ):
             source = (ROOT / relative).read_text(encoding="utf-8")
             self.assertIn("prevent_destroy = true", source)
+
+        platform = (ROOT / "terraform/modules/oci-platform/main.tf").read_text(encoding="utf-8")
+        self.assertNotIn("prevent_destroy = true", platform)
+        rotation = (ROOT / "terraform/OPERATIONS-ROTATION-WINDOW.md").read_text(encoding="utf-8")
+        self.assertIn("only the stateless operations host", rotation)
+        self.assertIn("must not change or destroy platform", rotation)
 
         ingress = (ROOT / "terraform/modules/oci-ingress/main.tf").read_text(encoding="utf-8")
         self.assertGreaterEqual(ingress.count("prevent_destroy = true"), 3)
@@ -279,6 +285,22 @@ class BuilderMetadataTests(unittest.TestCase):
         generated_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE5+zFPUdhav0YumdESFR9fVhwTeCI43Rn43xyDp5J2a"
         self.assertRegex(generated_key, re.compile(r"^ssh-ed25519 [A-Za-z0-9+/]{68}$"))
         self.assertFalse(generated_key.endswith("="))
+
+    def test_operations_rotation_commissioning_is_fixed_and_hash_bound(self):
+        platform = (ROOT / "terraform/modules/oci-platform/main.tf").read_text(encoding="utf-8")
+        initializer = (ROOT / "volumes/initialize-volume.py").read_bytes()
+        self.assertIn(hashlib.sha256(initializer).hexdigest(), platform)
+        self.assertIn("operations_commission_script", platform)
+        self.assertIn("StrictHostKeyChecking=yes", platform)
+        self.assertIn("UserKnownHostsFile=/etc/finals-platform/operations/known_hosts", platform)
+        self.assertIn("finals-commission-volume platform volume-initialize", platform)
+        self.assertIn("finals-commission-volume gateway-primary volume-initialize", platform)
+        self.assertIn("finals-commission-volume gateway-standby volume-initialize", platform)
+        self.assertIn("sudo install -D -m 0755 /dev/stdin /usr/local/sbin/finals-initialize-volume", platform)
+        standby = platform[platform.index("gateway-standby)"):platform.index("esac", platform.index("gateway-standby)"))]
+        self.assertIn("sha256sum -c -", standby)
+        self.assertNotIn("finals-volume@captures.service", standby)
+        self.assertNotIn('"$@"', platform)
 
     def test_transient_object_payload_is_sensitive(self):
         for root in ("oci-gateway-builder", "oci-runtime-builders"):

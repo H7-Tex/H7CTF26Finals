@@ -82,7 +82,81 @@ locals {
   operations_relay_authorized_key = "restrict,command=\"/usr/local/sbin/finals-secret-relay-receive\" ${var.operations_relay_ssh_public_key}"
   operations_relay_roles          = toset(["platform", "control", "repository"])
 
-  cloud_init_by_role = {
+  operations_commission_initializer_sha256 = "687563400a57f907a777946f58a165b5554b8f14146fd3eec3252d65cc00c146"
+  operations_commission_script             = <<-SCRIPT
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    [[ $EUID -eq 0 ]] || { echo "commissioning wrapper must run as root" >&2; exit 1; }
+    [[ $(cat /etc/finals-platform/role 2>/dev/null) == '{"role":"operations"}' ]] || {
+      echo "commissioning wrapper is restricted to the operations host" >&2
+      exit 1
+    }
+    target=$${1:-}
+    action=$${2:-}
+    [[ $# -eq 2 && $action == volume-initialize ]] || {
+      echo "usage: finals-commission-volume {platform|gateway-primary|gateway-standby} volume-initialize" >&2
+      exit 2
+    }
+    case "$target" in
+      platform)
+        address=10.60.200.10
+        post_command='sudo systemctl restart finals-volume@anvil.service && mountpoint -q /srv/anvil && if sudo test -s /etc/anvil/finals.env && sudo test -s /etc/anvil/tls/fullchain.pem && sudo test -s /etc/anvil/tls/privkey.pem; then sudo systemctl enable --now anvil-finals.service anvil-finals-backup.timer; fi'
+        ;;
+      gateway-primary)
+        address=10.60.250.10
+        post_command='sudo systemctl restart finals-volume@captures.service && mountpoint -q /srv/captures && sudo systemctl restart event-router-flow-log.service event-router-activate.service'
+        ;;
+      gateway-standby)
+        address=10.60.250.11
+        post_command='printf "%s  %s\n" "${local.operations_commission_initializer_sha256}" /usr/local/sbin/finals-initialize-volume | sha256sum -c - >/dev/null'
+        ;;
+    esac
+
+    temporary=$(mktemp /run/finals-volume-initialize.XXXXXX)
+    trap 'rm -f -- "$temporary"' EXIT
+    cat > "$temporary"
+    printf '%s  %s\n' "${local.operations_commission_initializer_sha256}" "$temporary" | sha256sum -c - >/dev/null
+
+    ssh_options=(
+      -F /dev/null
+      -i /etc/finals-platform/operations/id_ed25519
+      -o BatchMode=yes
+      -o ConnectTimeout=10
+      -o IdentitiesOnly=yes
+      -o PasswordAuthentication=no
+      -o StrictHostKeyChecking=yes
+      -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts
+    )
+    /usr/bin/ssh "$${ssh_options[@]}" -- "ubuntu@$address" \
+      'sudo install -D -m 0755 /dev/stdin /usr/local/sbin/finals-initialize-volume' < "$temporary"
+    /usr/bin/ssh "$${ssh_options[@]}" -- "ubuntu@$address" "$post_command"
+  SCRIPT
+  operations_commission_sudoers            = <<-SUDOERS
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh gateway-primary gateway-wireguard
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh gateway-primary gateway-reconciler
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh gateway-standby gateway-wireguard
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh gateway-standby gateway-reconciler
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh platform anvil
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh control control-reconciler
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh control control-checkers
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh repository repository
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform volume-initialize
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume gateway-primary volume-initialize
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume gateway-standby volume-initialize
+  SUDOERS
+  operations_commission_runcmd             = <<-YAML
+        - |
+          set -eu
+          printf '%s' '${base64encode(local.operations_commission_script)}' | base64 -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-volume
+          temporary=$(mktemp /etc/sudoers.d/.finals-operations-commissioning.XXXXXX)
+          printf '%s' '${base64encode(local.operations_commission_sudoers)}' | base64 -d > "$temporary"
+          chmod 0440 "$temporary"
+          visudo -cf "$temporary" >/dev/null
+          mv "$temporary" /etc/sudoers.d/finals-operations-commissioning
+  YAML
+
+  cloud_init_base_by_role = {
     for role in keys(local.hosts) : role => <<-YAML
       #cloud-config
       ssh_deletekeys: true
@@ -105,6 +179,13 @@ locals {
         - ["/usr/local/sbin/finals-host-recipient"]
         - ["/usr/local/sbin/finals-platform-activate", "${role}"]
     YAML
+  }
+  cloud_init_by_role = {
+    for role, content in local.cloud_init_base_by_role : role => role == "operations" ? replace(
+      content,
+      "        - [\"/usr/local/sbin/finals-platform-activate\", \"operations\"]\n",
+      "        - [\"/usr/local/sbin/finals-platform-activate\", \"operations\"]\n${local.operations_commission_runcmd}",
+    ) : content
   }
 }
 
@@ -144,10 +225,6 @@ resource "oci_core_instance" "host" {
 
   instance_options {
     are_legacy_imds_endpoints_disabled = true
-  }
-
-  lifecycle {
-    prevent_destroy = true
   }
 
 }
