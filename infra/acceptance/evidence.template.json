@@ -1,5 +1,6 @@
 {
   "schema_version": 1,
+  "model": "C",
   "candidate": {
     "infrastructure_commit": "REPLACE_WITH_40_HEX_COMMIT",
     "anvil_commit": "REPLACE_WITH_40_HEX_COMMIT",

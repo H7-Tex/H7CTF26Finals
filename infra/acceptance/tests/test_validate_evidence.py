@@ -14,7 +14,7 @@ SPEC.loader.exec_module(MODULE)
 
 
 class AcceptanceTests(unittest.TestCase):
-    def fixture(self, directory):
+    def fixture(self, directory, model="C"):
         root = Path(directory)
         image = "sha256:" + "1" * 64
         ad = [
@@ -157,9 +157,68 @@ class AcceptanceTests(unittest.TestCase):
                 "individual_identity_attributed": True,
                 "cross_team_denied": True,
             },
+            "production-key-access": {
+                "teams": 15,
+                "username": "ubuntu",
+                "access_enabled": True,
+                "access_revoked": True,
+                "old_keys_removed": True,
+                "ed25519_keys_only": True,
+                "fingerprints_unique": True,
+                "team_key_attribution_verified": True,
+                "organizer_breakglass_preserved": True,
+                "password_authentication_disabled": True,
+                "root_login_disabled": True,
+            },
+            "anvil-backup-restore": {
+                "targets": ["anvil-postgres"],
+                "restored_to_new_target": True,
+                "digest_verified": True,
+                "source_preserved": True,
+                "live_path_independent_of_gcp": True,
+                "login_verified": True,
+                "game_state_verified": True,
+            },
+            "model-a-one-team-recovery": {
+                "teams": 1,
+                "services": 6,
+                "production_reset_or_reimage_observed": True,
+                "fixed_ip_preserved": True,
+                "service_data_preserved": True,
+                "access_reestablished": True,
+                "services_healthy": True,
+                "cross_team_accesses": 0,
+            },
+            "model-a-fifteen-team-isolation": {
+                "teams": 15,
+                "successful_own_team_ssh": 15,
+                "production_ssh_port": 22,
+                "cross_team_ssh_attempts": 210,
+                "cross_team_ssh_successes": 0,
+                "vpn_peer_attribution_verified": True,
+                "organizer_management_isolated": True,
+            },
+            "model-a-player-journey": {
+                "steps": [
+                    "vpn",
+                    "production-ssh",
+                    "attack",
+                    "flag-submit",
+                    "patch",
+                    "service-restart",
+                    "checker-recovery",
+                    "hill-claim",
+                    "hill-lock",
+                    "access-revocation",
+                ],
+                "individual_identity_attributed": True,
+                "own_production_only": True,
+                "cross_team_denied": True,
+                "service_data_preserved": True,
+            },
         }
         checks = []
-        for index, label in enumerate(sorted(MODULE.REQUIRED_CHECKS)):
+        for index, label in enumerate(sorted(MODULE.REQUIRED_CHECKS[model])):
             artifact = root / f"{label}.log"
             artifact.write_text(f"{label} completed\n", encoding="utf-8")
             data = artifact.read_bytes()
@@ -182,6 +241,7 @@ class AcceptanceTests(unittest.TestCase):
             )
         return {
             "schema_version": 1,
+            "model": model,
             "candidate": {
                 "infrastructure_commit": "1" * 40,
                 "anvil_commit": "2" * 40,
@@ -209,6 +269,91 @@ class AcceptanceTests(unittest.TestCase):
     def test_complete_bundle_passes(self):
         with tempfile.TemporaryDirectory() as directory:
             self.validate(self.fixture(directory), directory)
+
+    def test_complete_model_a_bundle_passes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.validate(self.fixture(directory, "A"), directory)
+
+    def test_profiles_are_exact_and_model_c_contract_is_unchanged(self):
+        self.assertEqual(
+            MODULE.REQUIRED_CHECKS["C"],
+            {
+                "inventory",
+                "release-closed",
+                "checker-reference-attack",
+                "deployment-lifecycle",
+                "redaction",
+                "backup-restore",
+                "gateway-failover",
+                "one-team-load",
+                "fifteen-team-load",
+                "two-hundred-round-soak",
+                "night-watch-boundaries",
+                "secret-isolation",
+                "player-journey",
+            },
+        )
+        self.assertEqual(len(MODULE.REQUIRED_CHECKS["A"]), 13)
+
+    def test_model_is_explicit_and_known(self):
+        with tempfile.TemporaryDirectory() as directory:
+            document = self.fixture(directory)
+            document.pop("model")
+            with self.assertRaisesRegex(MODULE.AcceptanceError, "model"):
+                self.validate(document, directory)
+            document["model"] = "B"
+            with self.assertRaisesRegex(MODULE.AcceptanceError, "model"):
+                self.validate(document, directory)
+
+    def test_cross_profile_check_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            document = self.fixture(directory, "A")
+            self.check(document, "production-key-access")["id"] = "deployment-lifecycle"
+            with self.assertRaisesRegex(MODULE.AcceptanceError, "model A"):
+                self.validate(document, directory)
+
+    def test_model_a_requires_key_revocation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            document = self.fixture(directory, "A")
+            self.check(document, "production-key-access")["facts"]["access_revoked"] = (
+                False
+            )
+            with self.assertRaisesRegex(MODULE.AcceptanceError, "access_revoked"):
+                self.validate(document, directory)
+
+    def test_model_a_rejects_cross_team_ssh(self):
+        with tempfile.TemporaryDirectory() as directory:
+            document = self.fixture(directory, "A")
+            self.check(document, "model-a-fifteen-team-isolation")["facts"][
+                "cross_team_ssh_successes"
+            ] = 1
+            with self.assertRaisesRegex(
+                MODULE.AcceptanceError, "cross_team_ssh_successes"
+            ):
+                self.validate(document, directory)
+
+    def test_model_a_requires_recovery_to_preserve_ip_and_data(self):
+        with tempfile.TemporaryDirectory() as directory:
+            document = self.fixture(directory, "A")
+            facts = self.check(document, "model-a-one-team-recovery")["facts"]
+            facts["fixed_ip_preserved"] = False
+            with self.assertRaisesRegex(MODULE.AcceptanceError, "fixed_ip_preserved"):
+                self.validate(document, directory)
+            facts["fixed_ip_preserved"] = True
+            facts["service_data_preserved"] = False
+            with self.assertRaisesRegex(
+                MODULE.AcceptanceError, "service_data_preserved"
+            ):
+                self.validate(document, directory)
+
+    def test_model_a_restore_is_anvil_only(self):
+        with tempfile.TemporaryDirectory() as directory:
+            document = self.fixture(directory, "A")
+            self.check(document, "anvil-backup-restore")["facts"]["targets"].append(
+                "gitea"
+            )
+            with self.assertRaisesRegex(MODULE.AcceptanceError, "targets"):
+                self.validate(document, directory)
 
     def test_inventory_drift_fails(self):
         with tempfile.TemporaryDirectory() as directory:

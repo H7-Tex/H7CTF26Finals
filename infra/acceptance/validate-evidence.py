@@ -26,20 +26,33 @@ HILLS = {
     "HILL2": ("majority-rules", 7102, 2),
     "HILL3": ("tag-youre-it", 7103, 1),
 }
-REQUIRED_CHECKS = {
+COMMON_CHECKS = {
     "inventory",
     "release-closed",
     "checker-reference-attack",
-    "deployment-lifecycle",
     "redaction",
-    "backup-restore",
     "gateway-failover",
-    "one-team-load",
-    "fifteen-team-load",
     "two-hundred-round-soak",
     "night-watch-boundaries",
     "secret-isolation",
-    "player-journey",
+}
+REQUIRED_CHECKS = {
+    "C": COMMON_CHECKS
+    | {
+        "deployment-lifecycle",
+        "backup-restore",
+        "one-team-load",
+        "fifteen-team-load",
+        "player-journey",
+    },
+    "A": COMMON_CHECKS
+    | {
+        "production-key-access",
+        "anvil-backup-restore",
+        "model-a-one-team-recovery",
+        "model-a-fifteen-team-isolation",
+        "model-a-player-journey",
+    },
 }
 SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 COMMIT = re.compile(r"[0-9a-f]{40}\Z")
@@ -384,6 +397,84 @@ def validate_check(label, facts):
         exact(facts.get("steps"), expected, f"{label}.steps")
         true(facts, "individual_identity_attributed", label)
         true(facts, "cross_team_denied", label)
+    elif label == "production-key-access":
+        exact(facts.get("teams"), 15, f"{label}.teams")
+        exact(facts.get("username"), "ubuntu", f"{label}.username")
+        for key in (
+            "access_enabled",
+            "access_revoked",
+            "old_keys_removed",
+            "ed25519_keys_only",
+            "fingerprints_unique",
+            "team_key_attribution_verified",
+            "organizer_breakglass_preserved",
+            "password_authentication_disabled",
+            "root_login_disabled",
+        ):
+            true(facts, key, label)
+    elif label == "anvil-backup-restore":
+        exact(facts.get("targets"), ["anvil-postgres"], f"{label}.targets")
+        for key in (
+            "restored_to_new_target",
+            "digest_verified",
+            "source_preserved",
+            "live_path_independent_of_gcp",
+            "login_verified",
+            "game_state_verified",
+        ):
+            true(facts, key, label)
+    elif label == "model-a-one-team-recovery":
+        exact(facts.get("teams"), 1, f"{label}.teams")
+        exact(facts.get("services"), 6, f"{label}.services")
+        for key in (
+            "production_reset_or_reimage_observed",
+            "fixed_ip_preserved",
+            "service_data_preserved",
+            "access_reestablished",
+            "services_healthy",
+        ):
+            true(facts, key, label)
+        zero(facts, "cross_team_accesses", label)
+    elif label == "model-a-fifteen-team-isolation":
+        exact(facts.get("teams"), 15, f"{label}.teams")
+        exact(
+            facts.get("successful_own_team_ssh"),
+            15,
+            f"{label}.successful_own_team_ssh",
+        )
+        exact(facts.get("production_ssh_port"), 22, f"{label}.production_ssh_port")
+        attempts = facts.get("cross_team_ssh_attempts")
+        if not isinstance(attempts, int) or attempts < 210:
+            raise AcceptanceError(
+                "model-a-fifteen-team-isolation.cross_team_ssh_attempts must cover all 210 directed cross-team paths"
+            )
+        zero(facts, "cross_team_ssh_successes", label)
+        for key in (
+            "vpn_peer_attribution_verified",
+            "organizer_management_isolated",
+        ):
+            true(facts, key, label)
+    elif label == "model-a-player-journey":
+        expected = [
+            "vpn",
+            "production-ssh",
+            "attack",
+            "flag-submit",
+            "patch",
+            "service-restart",
+            "checker-recovery",
+            "hill-claim",
+            "hill-lock",
+            "access-revocation",
+        ]
+        exact(facts.get("steps"), expected, f"{label}.steps")
+        for key in (
+            "individual_identity_attributed",
+            "own_production_only",
+            "cross_team_denied",
+            "service_data_preserved",
+        ):
+            true(facts, key, label)
     else:
         raise AcceptanceError(f"unknown acceptance check {label!r}")
 
@@ -392,6 +483,9 @@ def validate(document, root, now=None):
     if not isinstance(document, dict):
         raise AcceptanceError("evidence manifest is not an object")
     exact(document.get("schema_version"), 1, "schema_version")
+    model = document.get("model")
+    if model not in REQUIRED_CHECKS:
+        raise AcceptanceError("model must be 'A' or 'C'")
     candidate = document.get("candidate")
     if not isinstance(candidate, dict):
         raise AcceptanceError("candidate is absent")
@@ -399,9 +493,10 @@ def validate(document, root, now=None):
         digest(candidate.get(key), COMMIT, f"candidate.{key}")
     validate_inventory(document.get("inventory"))
     checks = document.get("checks")
-    if not isinstance(checks, list) or len(checks) != len(REQUIRED_CHECKS):
+    required = REQUIRED_CHECKS[model]
+    if not isinstance(checks, list) or len(checks) != len(required):
         raise AcceptanceError(
-            f"checks must contain exactly {len(REQUIRED_CHECKS)} entries"
+            f"model {model} checks must contain exactly {len(required)} entries"
         )
     by_id = {}
     for check in checks:
@@ -410,7 +505,7 @@ def validate(document, root, now=None):
                 "acceptance checks contain an invalid or duplicate id"
             )
         by_id[check.get("id")] = check
-    exact(set(by_id), REQUIRED_CHECKS, "acceptance check ids")
+    exact(set(by_id), required, f"model {model} acceptance check ids")
     used_paths = set()
     current = now or datetime.now(timezone.utc)
     for label in sorted(by_id):
