@@ -504,12 +504,12 @@ locals {
         case "$router" in active|standby) router_category=$router ;; "") router_category=absent ;; *) router_category=unexpected ;; esac
         printf "platform=%s router=%s\n" "$platform_category" "$router_category"'
   SCRIPT
-  operations_commission_production_keys_script    = <<-SCRIPT
+  # model a: put one team's ssh keys on its own production box. stdin is a header
+  # line "production-NN apply|rollback", then for apply the box's host key line
+  # "known-host 10.60.N.2 ssh-ed25519 ..." and the authorized_keys lines.
+  operations_commission_production_keys_script = <<-SCRIPT
     #!/usr/bin/env bash
     set -euo pipefail
-    # model a: put one team's ssh keys on its own production box. stdin is a header
-    # line "production-NN apply|rollback", then for apply the box's host key line
-    # "known-host 10.60.N.2 ssh-ed25519 ..." and the authorized_keys lines.
     [[ $EUID -eq 0 && $(cat /etc/finals-platform/role 2>/dev/null) == '{"role":"operations"}' ]] || exit 1
     central=/run/finals-commissioning/central_id_ed25519
     [[ -f $central && ! -L $central && $# -eq 0 ]] || exit 2
@@ -541,12 +541,12 @@ locals {
     (( organizer == 1 && lines >= 2 && lines <= 64 )) || { echo "keys must keep the organizer and add 1-63 team keys" >&2; exit 1; }
     ssh_to 'set -eu; umask 077; mkdir -p "$HOME/.ssh"; cd "$HOME/.ssh"; cat > authorized_keys.next; if [ -f authorized_keys ]; then cp -p authorized_keys authorized_keys.prev; fi; mv authorized_keys.next authorized_keys; ssh-keygen -lf authorized_keys | wc -l' < "$work/authorized_keys"
   SCRIPT
-  operations_commission_gateway_model_a_script    = <<-SCRIPT
+  # event-time exception to the gateway image: stage the reviewed model a router
+  # files (hash pinned), activate them, or flip the production-ssh switch.
+  # stdin header: "gateway-primary|gateway-standby stage NAME|activate|enable|disable" or "control stage render|validator"
+  operations_commission_gateway_model_a_script = <<-SCRIPT
     #!/usr/bin/env bash
     set -euo pipefail
-    # event-time exception to the gateway image: stage the reviewed model a router
-    # files (hash pinned), activate them, or flip the production-ssh switch.
-    # stdin header: "gateway-primary|gateway-standby stage NAME|activate|enable|disable" or "control stage render|validator"
     [[ $EUID -eq 0 && $(cat /etc/finals-platform/role 2>/dev/null) == '{"role":"operations"}' ]] || exit 1
     central=/run/finals-commissioning/central_id_ed25519
     [[ -f $central && ! -L $central && $# -eq 0 ]] || exit 2
@@ -606,7 +606,7 @@ locals {
       *) echo "unsupported model a action" >&2; exit 2 ;;
     esac
   SCRIPT
-  operations_commission_sudoers                   = <<-SUDOERS
+  operations_commission_sudoers                = <<-SUDOERS
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh gateway-primary gateway-wireguard
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh gateway-primary gateway-reconciler
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh gateway-standby gateway-wireguard
