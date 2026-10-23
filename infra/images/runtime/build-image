@@ -92,6 +92,17 @@ if [[ $role == production ]]; then
   systemctl enable finals-host-firewall.service
   record_phase passed
 
+  # model a: bake the verified release in; each box installs it for itself at first boot
+  run_phase model-a-tests 10m "$source_dir/model-a-runtime/tests/run.sh"
+  run_phase model-a-release 30m "$source_dir/fetch-model-a-release" "$source_dir/model-a-release.json" /var/lib/finals-model-a/release
+  run_phase model-a-tools 5m "$source_dir/model-a-runtime/install.sh"
+  phase=model-a-firstboot
+  record_phase started
+  install -D -m 0755 "$source_dir/model-a-runtime/rootfs/usr/local/sbin/finals-model-a-firstboot" /usr/local/sbin/finals-model-a-firstboot
+  install -D -m 0644 "$source_dir/model-a-runtime/rootfs/etc/systemd/system/finals-model-a-firstboot.service" /etc/systemd/system/finals-model-a-firstboot.service
+  systemctl enable finals-model-a-firstboot.service
+  record_phase passed
+
   phase=production-cleanup
   record_phase started
   timeout --signal=TERM --kill-after=30s 15m apt-get purge --yes --auto-remove build-essential golang-go gcc

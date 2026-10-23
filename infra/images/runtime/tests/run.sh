@@ -105,6 +105,15 @@ if [[ $role == production ]]; then
   [[ $(grep -Ec '^10\.60\.200\.10[[:space:]]+finals\.h7tex\.com([[:space:]]|$)' /etc/hosts) == 1 ]]
   systemctl is-enabled finals-host-firewall.service >/dev/null
   /usr/local/libexec/finals-platform/firewall --render production | nft --check --file -
+  # model a: the verified release is baked, the par is gone, each box installs at first boot
+  [[ $(cat /etc/finals-model-a/release.sha256) =~ ^[0-9a-f]{64}$ ]]
+  for object in release.json archives/player-bundles.tar archives/factory-images.tar archives/base-images.tar; do
+    [[ -s /var/lib/finals-model-a/release/$object ]]
+  done
+  [[ ! -e /opt/runtime-image/model-a-release.json ]]
+  command -v finals-model-a-install h7 >/dev/null
+  systemctl is-enabled finals-model-a-firstboot.service >/dev/null
+  [[ ! -e /var/lib/finals-model-a/firstboot.done ]]
   ! command -v go >/dev/null
   ! command -v gcc >/dev/null
 fi

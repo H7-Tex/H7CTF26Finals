@@ -1,0 +1,33 @@
+{
+  "firewall_path": {
+    "base_commit": "418843ea99d7b7d277e63040c085ec3ac36ae9e1",
+    "checked_at": "2026-10-23T22:51:00+05:30",
+    "required_output_rule": "ip daddr 172.31.60.0/24 accept",
+    "result": "GREEN"
+  },
+  "local_acceptance": {
+    "command": "infra/model-a-runtime/tests/local-acceptance.py /home/abu/Main/Projects/CTF26/ops/finals/model-a-runtime-c901df9 /home/abu/Main/Projects/H7CTF26Finals-challenges /home/abu/Main/Projects/CTF26/ops/finals/model-a-runtime-c901df9/local-acceptance.json",
+    "evidence": "local-acceptance.json",
+    "result": "GREEN"
+  },
+  "player_export_audit": {
+    "archive_entries": 123,
+    "exact_manifest_allowlists": "GREEN",
+    "forbidden_path_scan": "GREEN",
+    "result": "GREEN"
+  },
+  "release_manifest": {
+    "sha256": "c78b158472194e9ba208a94a90a77deba89bbb0b5f75dd22f067477131f0cac8",
+    "source_commit": "c901df95b3fad91349c66e40a631a633b92e9241"
+  },
+  "source_validation": {
+    "git_diff_check": "GREEN",
+    "nop_team_16_installer_and_proxy": "GREEN",
+    "ruff_check": "GREEN",
+    "ruff_format": "GREEN",
+    "shell_syntax": "GREEN",
+    "sudoers_parse": "GREEN",
+    "tests": 9,
+    "unit_and_export_tests": "GREEN"
+  }
+}

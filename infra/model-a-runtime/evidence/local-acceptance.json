@@ -1,0 +1,53 @@
+{
+  "archives": {
+    "base-images.tar": {
+      "bytes": 1300224000,
+      "sha256": "bf428c66c5fd42272137e7cfa5e1275c4e91c463b0dd8862e059ce23038b8db3"
+    },
+    "factory-images.tar": {
+      "bytes": 280236544,
+      "sha256": "c023e38602499aa3a5ee6b059dec29baa7d8296b888510ed4bd02b6ce4452b49"
+    },
+    "player-bundles.tar": {
+      "bytes": 95928320,
+      "sha256": "738e3664efae0df5940c718c9705d62703fb4d2d53f5c10243cb4cad21cfd190"
+    }
+  },
+  "buildx_version": "github.com/docker/buildx 0.37.0 ac30b249211430b85fb8f37b6e7154b5c47ba0b6",
+  "checker_image_ids": {
+    "book-me-if-you-can": "sha256:d250960e44420425566df9c4c45dff443299e54b173d47a9c8d6b69b16ff9d9f",
+    "can-we-settle-this": "sha256:0efa78f2ca2c8b5b75ad92c2d7d7fba27dc051bafe8cb21e250e6919d68f484a",
+    "ship-it": "sha256:f898b6b397bcd5fd11b1ce867a44a991a698a7ef90d03db567582884e98583e7",
+    "sign-me-in": "sha256:b13b563b383d9694face3fbdff5f3f045c29566f61e671cbdfbfaa776284dc16",
+    "terms-may-apply": "sha256:426154a7168e4cb7f92298a69a6e406bbf98304abfda3c3070ec080fcda226d7",
+    "update-pending": "sha256:d25d711fef7e18d6077e46e7269d651f774f3cbee81555764aac9cb4cd109754"
+  },
+  "checks": {
+    "all_service_healthchecks": "GREEN",
+    "book-me-if-you-can_checker": "GREEN",
+    "can-we-settle-this_checker": "GREEN",
+    "cleanup": "GREEN",
+    "edited_rebuild_and_retention": "GREEN",
+    "factory_reset_and_data_retention": "GREEN",
+    "instance_secret_precreation": "GREEN",
+    "ship-it_checker": "GREEN",
+    "sign-me-in_checker": "GREEN",
+    "terms-may-apply_checker": "GREEN",
+    "update-pending_checker": "GREEN"
+  },
+  "docker_version": "29.7.2",
+  "elapsed_seconds": 302.334,
+  "ended_at": "2026-10-23T22:48:06+05:30",
+  "factory_image_ids": {
+    "book-me-if-you-can": "sha256:1173a2e4077f80fc2767737f3baff6ba69f9f2c2250d11a1db6a0f917d2e3c05",
+    "can-we-settle-this": "sha256:d7058d5b1b76a2ca970c7e6c14e27da67a1a073a08bab317d14ae0c54e813f10",
+    "ship-it": "sha256:68637fe89701a1d7fe6ad875fdb43d3f72cbeda7c8d221fe8aec75fcc7f9eca3",
+    "sign-me-in": "sha256:d1cfddc9e759895d05b28ee53f0edd1e567655e4b8b01d5f5543e79ff14108b9",
+    "terms-may-apply": "sha256:3be7019bc210ef0f8753751fbf71bbd2d8d634eaec83df375c5012cd65f0338b",
+    "update-pending": "sha256:483b59934f38badccaaed591187c740455511d274f66c649a7af428bcdb992bb"
+  },
+  "result": "GREEN",
+  "schema_version": 1,
+  "source_commit": "c901df95b3fad91349c66e40a631a633b92e9241",
+  "started_at": "2026-10-23T22:43:04+05:30"
+}

@@ -1,0 +1,18 @@
+[Unit]
+Description=Install the baked Model A services on this production box
+Requires=finals-volume@production.service docker.service
+After=finals-volume@production.service docker.service finals-host-firewall.service network-online.target
+Wants=network-online.target
+ConditionPathExists=!/var/lib/finals-model-a/firstboot.done
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/finals-model-a-firstboot
+RemainAfterExit=yes
+Restart=on-failure
+RestartSec=30s
+TimeoutStartSec=30min
+
+[Install]
+WantedBy=multi-user.target

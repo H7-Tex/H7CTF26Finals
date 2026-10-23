@@ -1,0 +1,184 @@
+#!/usr/bin/env python3
+import json
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+sys.path.insert(0, "/usr/local/lib/finals-model-a")
+
+from model_a import SERVICE_BY_SLUG, ModelAError, read_json, run
+
+
+STATE_ROOT = Path("/var/lib/finals-model-a")
+WORK_ROOT = Path("/opt/finals/services")
+
+
+def record(slug):
+    release = read_json(STATE_ROOT / "release.json")
+    for value in release.get("services", []):
+        if value.get("slug") == slug:
+            return value
+    raise ModelAError("service is missing from the installed release")
+
+
+def service_root(slug):
+    if slug not in SERVICE_BY_SLUG:
+        raise ModelAError("unknown service")
+    root = WORK_ROOT / slug
+    if root.is_symlink() or not root.is_dir() or not (root / "compose.yaml").is_file():
+        raise ModelAError("service workspace is unsafe")
+    return root
+
+
+def active_image(slug):
+    value = (STATE_ROOT / "active" / slug).read_text(encoding="utf-8").strip()
+    if not value.startswith("sha256:") or len(value) != 71:
+        raise ModelAError("active image ID is invalid")
+    return value
+
+
+def compose(slug, image, arguments, check=True, capture_output=False):
+    root = service_root(slug)
+    environment = dict(os.environ)
+    environment["H7_IMAGE"] = image
+    command = ["docker", "compose", "--project-directory", str(root), "-f", str(root / "compose.yaml"), *arguments]
+    if check:
+        return run(command, env=environment, capture_output=capture_output, text=capture_output)
+    return subprocess.run(command, env=environment, check=False, capture_output=capture_output, text=capture_output)
+
+
+def atomic_image(slug, image):
+    path = STATE_ROOT / "active" / slug
+    temporary = path.with_name(f".{slug}.{os.getpid()}")
+    temporary.write_text(image + "\n", encoding="utf-8")
+    temporary.chmod(0o600)
+    os.replace(temporary, path)
+
+
+def chown_editable(root, uid, gid):
+    for name in ("service", "player"):
+        path = root / name
+        if not path.exists():
+            continue
+        if path.is_symlink():
+            raise ModelAError("factory bundle is unsafe")
+        os.chown(path, uid, gid)
+        for child in path.rglob("*"):
+            if child.is_symlink():
+                raise ModelAError("factory bundle is unsafe")
+            os.chown(child, uid, gid)
+
+
+def replace_from_factory(slug):
+    factory = STATE_ROOT / "factory" / slug
+    current = service_root(slug)
+    if factory.is_symlink() or not factory.is_dir():
+        raise ModelAError("factory bundle is unsafe")
+    staged = WORK_ROOT / f".{slug}.new.{os.getpid()}"
+    previous = WORK_ROOT / f".{slug}.old.{os.getpid()}"
+    shutil.rmtree(staged, ignore_errors=True)
+    shutil.rmtree(previous, ignore_errors=True)
+    editable = current / "service"
+    if editable.is_symlink() or not editable.is_dir():
+        raise ModelAError("service workspace is unsafe")
+    owner = editable.stat()
+    shutil.copytree(factory, staged, symlinks=False)
+    staged.chmod(0o755)
+    chown_editable(staged, owner.st_uid, owner.st_gid)
+    (staged / "compose.yaml").chmod(0o644)
+    (staged / "BUNDLE.json").chmod(0o444)
+    os.replace(current, previous)
+    os.replace(staged, current)
+    shutil.rmtree(previous, ignore_errors=True)
+
+
+def status():
+    for slug in SERVICE_BY_SLUG:
+        image = active_image(slug)
+        result = compose(slug, image, ["ps", "--quiet", "service"], check=False, capture_output=True)
+        container = result.stdout.strip() if result.returncode == 0 else ""
+        if not container:
+            print(f"{slug} down")
+            continue
+        inspected = subprocess.run(
+            ["docker", "inspect", "--format", "{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} {{.Image}}", container],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        value = inspected.stdout.strip() if inspected.returncode == 0 else "unknown"
+        print(f"{slug} {value}")
+
+
+def rebuild(slug):
+    root = service_root(slug)
+    tag = f"finals/model-a/{slug}:team"
+    compose(slug, tag, ["build", "--pull=false", "service"])
+    image = run(["docker", "image", "inspect", "--format", "{{.Id}}", tag], capture_output=True, text=True).stdout.strip()
+    if not image.startswith("sha256:") or len(image) != 71:
+        raise ModelAError("rebuilt image ID is invalid")
+    atomic_image(slug, image)
+    compose(slug, image, ["up", "--detach", "--wait", "--wait-timeout", "90", "service"])
+    print(f"{slug} rebuilt {image}")
+
+
+def restart(slug):
+    image = active_image(slug)
+    compose(slug, image, ["restart", "service"])
+    compose(slug, image, ["up", "--detach", "--wait", "--wait-timeout", "90", "service"])
+    print(f"{slug} restarted")
+
+
+def reset(slug):
+    release = record(slug)
+    replace_from_factory(slug)
+    atomic_image(slug, release["factory_image_id"])
+    compose(slug, release["factory_image_id"], ["up", "--detach", "--wait", "--wait-timeout", "90", "service"])
+    print(f"{slug} reset; data kept")
+
+
+def diff(slug):
+    factory = STATE_ROOT / "factory" / slug
+    current = service_root(slug)
+    result = subprocess.run(
+        ["diff", "--recursive", "--unified", "--new-file", "--exclude", "BUNDLE.json", "--exclude", "compose.yaml", str(factory), str(current)],
+        check=False,
+    )
+    if result.returncode not in (0, 1):
+        raise ModelAError("diff failed")
+    return result.returncode
+
+
+def main():
+    if os.geteuid() != 0:
+        print("h7 control must run as root", file=sys.stderr)
+        return 2
+    arguments = sys.argv[1:]
+    try:
+        if arguments == ["status"]:
+            status()
+            return 0
+        if len(arguments) != 2 or arguments[0] not in {"logs", "rebuild", "restart", "reset", "diff"}:
+            raise ModelAError("usage: h7 status | h7 {logs|rebuild|restart|reset|diff} SERVICE")
+        command, slug = arguments
+        service_root(slug)
+        if command == "logs":
+            compose(slug, active_image(slug), ["logs", "--no-color", "--tail", "100", "service"])
+        elif command == "rebuild":
+            rebuild(slug)
+        elif command == "restart":
+            restart(slug)
+        elif command == "reset":
+            reset(slug)
+        else:
+            return diff(slug)
+    except (ModelAError, OSError, KeyError) as error:
+        print(f"h7 refused: {error}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

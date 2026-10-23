@@ -49,6 +49,26 @@ class BuilderMetadataTests(unittest.TestCase):
             second_path = Path(subprocess.run(command, cwd=checkout, check=True, capture_output=True, text=True).stdout.splitlines()[0])
             self.assertEqual(first, second_path.read_bytes())
 
+    def test_production_image_bakes_the_pinned_model_a_release(self):
+        builders = ROOT / "terraform/environments/production/oci-runtime-builders"
+        main = (builders / "main.tf").read_text(encoding="utf-8")
+        variables = (builders / "variables.tf").read_text(encoding="utf-8")
+        package = (ROOT / "terraform/scripts/package-oci-stack.sh").read_text(encoding="utf-8")
+        build = (ROOT / "images/runtime/build-image").read_text(encoding="utf-8")
+        self.assertIn('role == "production" ? local.model_a_release_file : []', main)
+        self.assertIn('check "model_a_release"', main)
+        self.assertIn('"fetch-model-a-release"', main)
+        self.assertIn('model-a-runtime  = "${path.module}/../../../../model-a-runtime"', main)
+        self.assertIn('startswith(path, "evidence/")', main)
+        self.assertIn("sensitive   = true", variables.split('variable "model_a_release_url"', 1)[1].split("}", 1)[0])
+        self.assertIn("infra/model-a-runtime", package)
+        release = json.loads((ROOT / "model-a-runtime/evidence/release-gates.json").read_text(encoding="utf-8")) if (ROOT / "model-a-runtime/evidence/release-gates.json").exists() else None
+        for digest in ("c78b158472194e9ba208a94a90a77deba89bbb0b5f75dd22f067477131f0cac8", "bf428c66c5fd42272137e7cfa5e1275c4e91c463b0dd8862e059ce23038b8db3"):
+            self.assertIn(digest, variables)
+        # the release is fetched only after the production policy phase and before tools and first boot
+        self.assertLess(build.index("phase=production-policy"), build.index("run_phase model-a-release"))
+        self.assertLess(build.index("run_phase model-a-release"), build.index("systemctl enable finals-model-a-firstboot.service"))
+
     def test_bootstrap_metadata_stays_below_oci_limit(self):
         substitutions = {
             "installer_base64": base64.b64encode(INSTALLER.read_bytes()).decode(),
@@ -213,6 +233,7 @@ class BuilderMetadataTests(unittest.TestCase):
             ROOT / "checkers": "checkers",
             ROOT / "deployment": "deployment",
             ROOT / "hills": "hills",
+            ROOT / "model-a-runtime": "model-a-runtime",
             ROOT / "images/runtime": "",
             ROOT / "platform": "platform",
             ROOT / "reconciler": "reconciler",

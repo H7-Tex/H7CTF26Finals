@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# first boot of a production box: install the release baked into the image for this
+# box. each box runs the installer itself, so every box gets its own secrets.
+
+[[ $EUID -eq 0 ]] || { echo "must run as root" >&2; exit 1; }
+done_marker=/var/lib/finals-model-a/firstboot.done
+[[ ! -e $done_marker ]] || exit 0
+release=/var/lib/finals-model-a/release
+read -r expected < /etc/finals-model-a/release.sha256
+[[ $expected =~ ^[0-9a-f]{64}$ ]] || { echo "baked release hash is invalid" >&2; exit 1; }
+
+# the fixed display name decides the team; the fixed address must agree with it
+name=$(curl --fail --silent --show-error --max-time 5 -H 'Authorization: Bearer Oracle' \
+  http://169.254.169.254/opc/v2/instance/displayName)
+[[ $name =~ ^production-(0[1-9]|1[0-6])$ ]] || { echo "unexpected instance name" >&2; exit 1; }
+team=$((10#${BASH_REMATCH[1]}))
+ip -4 -o address show | grep -Fq " 10.60.$team.2/" || { echo "address does not match production-$team" >&2; exit 1; }
+mountpoint -q /srv/finals/service-data || { echo "service data volume is not mounted" >&2; exit 1; }
+
+/usr/local/sbin/finals-model-a-install "$release" "$team" "$expected"
+install -D -m 0644 /dev/null "$done_marker"
+echo "model a services installed for production-$team"

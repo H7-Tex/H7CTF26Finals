@@ -22,13 +22,14 @@ locals {
   runtime_files = setunion(
     fileset(local.runtime_dir, "rootfs/**"),
     fileset(local.runtime_dir, "tests/**"),
-    toset(["build-image", "install.sh", "runtime-image-seal.service", "seal-image"])
+    toset(["build-image", "fetch-model-a-release", "install.sh", "runtime-image-seal.service", "seal-image"])
   )
   auxiliary_sources = {
     archive          = "${path.module}/../../../../archive"
     checkers         = "${path.module}/../../../../checkers"
     deployment       = "${path.module}/../../../../deployment"
     hills            = "${path.module}/../../../../hills"
+    model-a-runtime  = "${path.module}/../../../../model-a-runtime"
     platform         = "${path.module}/../../../../platform"
     reconciler       = "${path.module}/../../../../reconciler"
     secret-bootstrap = "${path.module}/../../../../secrets"
@@ -37,6 +38,7 @@ locals {
   }
   executable_files = toset([
     "build-image",
+    "fetch-model-a-release",
     "install.sh",
     "seal-image",
     "tests/run.sh",
@@ -52,6 +54,15 @@ locals {
     "hills/credential_sync.py",
     "hills/install.sh",
     "hills/tests/run.sh",
+    "model-a-runtime/install.sh",
+    "model-a-runtime/prepare-release.py",
+    "model-a-runtime/rootfs/usr/local/bin/h7",
+    "model-a-runtime/rootfs/usr/local/sbin/finals-model-a-control",
+    "model-a-runtime/rootfs/usr/local/sbin/finals-model-a-firstboot",
+    "model-a-runtime/rootfs/usr/local/sbin/finals-model-a-install",
+    "model-a-runtime/tests/firewall-path.py",
+    "model-a-runtime/tests/local-acceptance.py",
+    "model-a-runtime/tests/run.sh",
     "checkers/install.sh",
     "checkers/rootfs/usr/local/libexec/checker-runtime/runtime.py",
     "checkers/rootfs/usr/local/sbin/checker-runtime-commission",
@@ -93,10 +104,20 @@ locals {
       path           = "${prefix}/${path}"
       permissions    = contains(local.executable_files, "${prefix}/${path}") ? "0755" : "0644"
       content_base64 = filebase64("${directory}/${path}")
-    } if !endswith(path, ".pyc") && !contains(split("/", path), "__pycache__")]
+    } if !endswith(path, ".pyc") && !contains(split("/", path), "__pycache__") && !(prefix == "model-a-runtime" && startswith(path, "evidence/"))]
   ]))
+  # production bakes the model a release; the par lives only in this one payload file
+  model_a_release_file = [{
+    path        = "model-a-release.json"
+    permissions = "0600"
+    content_base64 = base64encode(jsonencode({
+      base_url       = var.model_a_release_url
+      release_sha256 = var.model_a_release.release_sha256
+      objects        = var.model_a_release.objects
+    }))
+  }]
   payload_files = {
-    for role, profile in local.profiles : role => concat(local.files, [{
+    for role, profile in local.profiles : role => concat(local.files, role == "production" ? local.model_a_release_file : [], [{
       path        = "image-manifest.json"
       permissions = "0644"
       content_base64 = base64encode(jsonencode({
@@ -130,6 +151,13 @@ locals {
       role             = role
       anvil_revision   = var.anvil_revision
     }))
+  }
+}
+
+check "model_a_release" {
+  assert {
+    condition     = var.model_a_release_url != "" && var.model_a_release.objects["release.json"].sha256 == var.model_a_release.release_sha256
+    error_message = "production images bake the model a release: set model_a_release_url and keep release.json pinned to release_sha256."
   }
 }
 
