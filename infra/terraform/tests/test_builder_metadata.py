@@ -282,6 +282,13 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn("sha256(local.bootstrap_user_data[each.key])", source)
         self.assertIn("terraform_data.builder_generation[each.key]", source)
 
+    def test_runtime_builder_metadata_limit_is_an_instance_precondition(self):
+        source = (ROOT / "terraform/environments/production/oci-runtime-builders/main.tf").read_text(encoding="utf-8")
+        self.assertNotIn('check "bootstrap_metadata_limit"', source)
+        instance = source.split('resource "oci_core_instance" "builder"', 1)[1]
+        self.assertIn("precondition {", instance)
+        self.assertIn("length(local.bootstrap_user_data[each.key]) < 16384", instance)
+
     def test_runtime_builder_pins_reviewed_anvil(self):
         root = ROOT / "terraform/environments/production/oci-runtime-builders"
         variables = (root / "variables.tf").read_text(encoding="utf-8")

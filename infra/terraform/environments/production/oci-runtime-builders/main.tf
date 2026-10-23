@@ -174,13 +174,6 @@ check "packaged_source_revision" {
   }
 }
 
-check "bootstrap_metadata_limit" {
-  assert {
-    condition     = alltrue([for content in values(local.bootstrap_user_data) : length(content) < 16384])
-    error_message = "Every encoded runtime builder user_data payload must remain below the 16 KiB OCI metadata limit."
-  }
-}
-
 check "fixed_payload_paths" {
   assert {
     condition = (
