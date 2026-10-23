@@ -82,9 +82,9 @@ locals {
   operations_relay_authorized_key = "restrict,command=\"/usr/local/sbin/finals-secret-relay-receive\" ${var.operations_relay_ssh_public_key}"
   operations_relay_roles          = toset(["platform", "control", "repository"])
 
-  operations_commission_initializer_sha256        = "eaeb4c33d2c94f59dee9b01b2b6dbce8e8f8adf720e4108f713456f7cf4f69ab"
-  operations_commission_anvil_sha256              = "c760f5097b671cfa1423bd30b407cbbc9cb415fe4a82510d84c9120818143a19"
-  operations_commission_script                    = <<-SCRIPT
+  operations_commission_initializer_sha256         = "eaeb4c33d2c94f59dee9b01b2b6dbce8e8f8adf720e4108f713456f7cf4f69ab"
+  operations_commission_anvil_sha256               = "c760f5097b671cfa1423bd30b407cbbc9cb415fe4a82510d84c9120818143a19"
+  operations_commission_script                     = <<-SCRIPT
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -133,7 +133,7 @@ locals {
       'sudo install -D -m 0755 /dev/stdin /usr/local/sbin/finals-initialize-volume' < "$temporary"
     /usr/bin/ssh "$${ssh_options[@]}" -- "ubuntu@$address" "$post_command"
   SCRIPT
-  operations_commission_secret_script             = <<-SCRIPT
+  operations_commission_secret_script              = <<-SCRIPT
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -162,7 +162,7 @@ locals {
       -- ubuntu@10.60.200.10 \
       'sudo chmod 0644 /etc/ssh/operations_relay_authorized_keys_ubuntu && sudo /usr/sbin/sshd -t && sudo systemctl reload ssh.service && sudo /usr/local/sbin/finals-install-secret-bundle anvil' < "$temporary"
   SCRIPT
-  operations_commission_control_action_script     = <<-SCRIPT
+  operations_commission_control_action_script      = <<-SCRIPT
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -193,7 +193,7 @@ locals {
       -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts \
       -- ubuntu@10.60.201.20 "$remote"
   SCRIPT
-  operations_commission_control_secret_script     = <<-SCRIPT
+  operations_commission_control_secret_script      = <<-SCRIPT
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -220,7 +220,50 @@ locals {
       -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts \
       -- ubuntu@10.60.201.20 "sudo -n /usr/local/sbin/finals-install-secret-bundle $bundle" < "$temporary"
   SCRIPT
-  operations_commission_stage_central_script      = <<-SCRIPT
+  operations_commission_platform_diagnostic_script = <<-SCRIPT
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    [[ $EUID -eq 0 ]] || { echo "platform diagnostic must run as root" >&2; exit 1; }
+    [[ $(cat /etc/finals-platform/role 2>/dev/null) == '{"role":"operations"}' ]] || exit 1
+    [[ -f /run/finals-commissioning/central_id_ed25519 && ! -L /run/finals-commissioning/central_id_ed25519 ]] || exit 1
+    [[ $# -eq 1 && $1 == diagnose ]] || { echo "usage: finals-commission-platform-diagnostic diagnose" >&2; exit 2; }
+    remote='set -euo pipefail
+      printf "%s\n" "[systemd]"
+      sudo -n systemctl show anvil-finals.service \
+        --property=Id --property=LoadState --property=ActiveState --property=SubState \
+        --property=Result --property=ExecMainCode --property=ExecMainStatus --no-pager
+      printf "%s\n" "[containers]"
+      sudo -n docker ps --all --filter label=com.docker.compose.project=anvil-finals \
+        --format "{{.Names}}\t{{.Image}}\t{{.Status}}" | head -n 12
+      for container in \
+        anvil-finals-postgres-1 \
+        anvil-finals-api-1 \
+        anvil-finals-web-1 \
+        anvil-finals-ingress-1; do
+        printf "[container:%s]\n" "$container"
+        if sudo -n docker inspect --format "state={{.State.Status}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} streak={{if .State.Health}}{{.State.Health.FailingStreak}}{{else}}0{{end}}" "$container" 2>/dev/null; then
+          sudo -n docker logs --tail 40 "$container" 2>&1 | awk "BEGIN {in_key=0} /-----BEGIN [^-]*PRIVATE KEY-----/ {print \"PRIVATE KEY=REDACTED\"; in_key=1; next} /-----END [^-]*PRIVATE KEY-----/ {in_key=0; next} in_key==0 {print}" | sed -E \
+            -e "s/H7CTF\\{[^}]*\\}/H7CTF{REDACTED}/g" \
+            -e "s#(postgres(ql)?://[^:/[:space:]]+:)[^@/[:space:]]+@#\\1REDACTED@#gI" \
+            -e "s#(Authorization:[[:space:]]*Bearer[[:space:]]+)[^[:space:]]+#\\1REDACTED#gI" \
+            -e "s#((password|token|secret|private[_-]?key)[\"[:space:]]*[:=][\"[:space:]]*)[^,\"[:space:]]+#\\1REDACTED#gI"
+        else
+          echo absent
+        fi
+      done'
+    exec /usr/bin/ssh \
+      -F /dev/null \
+      -i /run/finals-commissioning/central_id_ed25519 \
+      -o BatchMode=yes \
+      -o ConnectTimeout=10 \
+      -o IdentitiesOnly=yes \
+      -o PasswordAuthentication=no \
+      -o StrictHostKeyChecking=yes \
+      -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts \
+      -- ubuntu@10.60.200.10 "$remote"
+  SCRIPT
+  operations_commission_stage_central_script       = <<-SCRIPT
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -278,7 +321,7 @@ locals {
     install -o root -g root -m 0600 "$work/key" /run/finals-commissioning/central_id_ed25519
     echo central-staged-in-tmpfs
   SCRIPT
-  operations_commission_clear_central_script      = <<-SCRIPT
+  operations_commission_clear_central_script       = <<-SCRIPT
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -288,7 +331,7 @@ locals {
     rm -f -- /run/finals-commissioning/central_id_ed25519
     test ! -e /run/finals-commissioning/central_id_ed25519
   SCRIPT
-  operations_commission_gateway_secret_script     = <<-SCRIPT
+  operations_commission_gateway_secret_script      = <<-SCRIPT
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -312,7 +355,7 @@ locals {
       -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts \
       -- "ubuntu@$address" "sudo -n /usr/local/sbin/finals-install-secret-bundle $bundle" < "$temporary"
   SCRIPT
-  operations_commission_gateway_authorizer_script = <<-SCRIPT
+  operations_commission_gateway_authorizer_script  = <<-SCRIPT
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -338,7 +381,7 @@ locals {
       -- "ubuntu@$address" \
       'sudo -n /usr/local/sbin/event-router-authorize-reconciler /etc/event-router/reconciler_authorized_key'
   SCRIPT
-  operations_commission_gateway_role_script       = <<-SCRIPT
+  operations_commission_gateway_role_script        = <<-SCRIPT
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -400,7 +443,7 @@ locals {
         [[ $(sudo -n cat /etc/event-router/role) == "'$expected'" ]]
         sudo -n systemctl is-active --quiet event-router.target'
   SCRIPT
-  operations_commission_gateway_role_audit_script = <<-SCRIPT
+  operations_commission_gateway_role_audit_script  = <<-SCRIPT
     #!/usr/bin/env bash
     set -euo pipefail
     [[ $EUID -eq 0 && $(cat /etc/finals-platform/role 2>/dev/null) == '{"role":"operations"}' ]] || exit 1
@@ -432,7 +475,7 @@ locals {
         case "$router" in active|standby) router_category=$router ;; "") router_category=absent ;; *) router_category=unexpected ;; esac
         printf "platform=%s router=%s\n" "$platform_category" "$router_category"'
   SCRIPT
-  operations_commission_sudoers                   = <<-SUDOERS
+  operations_commission_sudoers                    = <<-SUDOERS
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh gateway-primary gateway-wireguard
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh gateway-primary gateway-reconciler
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh gateway-standby gateway-wireguard
@@ -448,6 +491,7 @@ locals {
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-action control-status
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-secret control-reconciler
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-secret control-checkers
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-platform-diagnostic diagnose
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume gateway-primary volume-initialize
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume gateway-standby volume-initialize
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-stage-central
@@ -470,6 +514,7 @@ locals {
     "    printf '%s' '${base64gzip(local.operations_commission_secret_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-secret",
     "    printf '%s' '${base64gzip(local.operations_commission_control_action_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-control-action",
     "    printf '%s' '${base64gzip(local.operations_commission_control_secret_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-control-secret",
+    "    printf '%s' '${base64gzip(local.operations_commission_platform_diagnostic_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-platform-diagnostic",
     "    printf '%s' '${base64gzip(local.operations_commission_stage_central_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-stage-central",
     "    printf '%s' '${base64gzip(local.operations_commission_clear_central_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-clear-central",
     "    printf '%s' '${base64gzip(local.operations_commission_gateway_secret_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-gateway-secret",

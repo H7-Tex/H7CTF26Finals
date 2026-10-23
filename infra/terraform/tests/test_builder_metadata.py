@@ -406,6 +406,40 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertNotIn('"$@"', control_secret)
         self.assertNotIn("eval ", control_secret)
         self.assertNotIn("bash -c", control_secret)
+        platform_diagnostic = platform[
+            platform.index("operations_commission_platform_diagnostic_script"):
+            platform.index("operations_commission_stage_central_script")
+        ]
+        fixed_diagnostic = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-platform-diagnostic diagnose"
+        self.assertEqual(platform.count(fixed_diagnostic), 1)
+        self.assertNotIn("finals-commission-platform-diagnostic *", platform)
+        self.assertIn("-- ubuntu@10.60.200.10", platform_diagnostic)
+        self.assertIn("StrictHostKeyChecking=yes", platform_diagnostic)
+        self.assertIn("UserKnownHostsFile=/etc/finals-platform/operations/known_hosts", platform_diagnostic)
+        self.assertIn("$1 == diagnose", platform_diagnostic)
+        self.assertIn("--tail 40", platform_diagnostic)
+        self.assertIn("H7CTF{REDACTED}", platform_diagnostic)
+        self.assertIn("REDACTED@", platform_diagnostic)
+        self.assertIn("PRIVATE KEY=REDACTED", platform_diagnostic)
+        self.assertIn("Authorization:[[:space:]]*Bearer", platform_diagnostic)
+        for container in (
+            "anvil-finals-postgres-1",
+            "anvil-finals-api-1",
+            "anvil-finals-web-1",
+            "anvil-finals-ingress-1",
+        ):
+            self.assertEqual(platform_diagnostic.count(container), 1)
+        for forbidden in (
+            '"$@"',
+            "eval ",
+            "bash -c",
+            "/etc/anvil/finals.env",
+            "docker compose config",
+            ".Config",
+            " inspect /",
+        ):
+            self.assertNotIn(forbidden, platform_diagnostic)
+        self.assertIn("base64gzip(local.operations_commission_platform_diagnostic_script)", platform)
         self.assertIn("relay_authorized_keys_readable_roles", platform)
         self.assertIn("finals-commission-volume gateway-primary volume-initialize", platform)
         self.assertIn("finals-commission-volume gateway-standby volume-initialize", platform)
