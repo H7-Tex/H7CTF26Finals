@@ -3,7 +3,11 @@ import gzip
 import hashlib
 import json
 import re
+import shutil
 import stat
+import subprocess
+import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -17,6 +21,34 @@ TEMPLATES = (
 
 
 class BuilderMetadataTests(unittest.TestCase):
+    def test_oci_stack_packages_are_byte_reproducible(self):
+        repository = ROOT.parent
+        package_script = ROOT / "terraform/scripts/package-oci-stack.sh"
+        with tempfile.TemporaryDirectory() as temporary:
+            checkout = Path(temporary) / "checkout"
+            subprocess.run(
+                ["git", "clone", "--quiet", "--no-hardlinks", str(repository), str(checkout)],
+                check=True,
+            )
+            candidate = checkout / package_script.relative_to(repository)
+            shutil.copy2(package_script, candidate)
+            subprocess.run(["git", "-C", str(checkout), "add", str(candidate)], check=True)
+            subprocess.run(
+                [
+                    "git", "-C", str(checkout),
+                    "-c", "user.name=Package Test",
+                    "-c", "user.email=package-test@example.invalid",
+                    "commit", "--quiet", "-m", "package test",
+                ],
+                check=True,
+            )
+            command = [str(candidate), "oci-runtime-builders"]
+            first_path = Path(subprocess.run(command, cwd=checkout, check=True, capture_output=True, text=True).stdout.splitlines()[0])
+            first = first_path.read_bytes()
+            time.sleep(2.1)
+            second_path = Path(subprocess.run(command, cwd=checkout, check=True, capture_output=True, text=True).stdout.splitlines()[0])
+            self.assertEqual(first, second_path.read_bytes())
+
     def test_bootstrap_metadata_stays_below_oci_limit(self):
         substitutions = {
             "installer_base64": base64.b64encode(INSTALLER.read_bytes()).decode(),

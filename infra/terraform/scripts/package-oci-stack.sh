@@ -16,6 +16,7 @@ esac
 [[ -z $(git -C "$ROOT" status --porcelain --untracked-files=normal) ]] || { echo "refusing to package a dirty worktree" >&2; exit 1; }
 COMMIT=$(git -C "$ROOT" rev-parse --verify 'HEAD^{commit}')
 SHORT_COMMIT=$(git -C "$ROOT" rev-parse --short=12 "$COMMIT")
+COMMIT_EPOCH=$(git -C "$ROOT" show -s --format=%ct "$COMMIT")
 OUTPUT_DIR="$ROOT/build/terraform"
 OUTPUT="$OUTPUT_DIR/${STACK}-${SHORT_COMMIT}.zip"
 TEMP_DIR=$(mktemp -d)
@@ -35,9 +36,11 @@ git -C "$ROOT" archive --format=tar "$COMMIT" "${PATHS[@]}" | tar -xf - -C "$PAC
 case "$STACK" in
   oci-gateway-builder | oci-runtime-builders)
     printf '%s\n' "$COMMIT" > "$PACKAGE_DIR/infra/terraform/environments/production/$STACK/packaged-source-revision"
+    touch --date="@$COMMIT_EPOCH" "$PACKAGE_DIR/infra/terraform/environments/production/$STACK/packaged-source-revision"
     ;;
 esac
-(cd "$PACKAGE_DIR" && zip -q -r "$OUTPUT" .)
+rm -f -- "$OUTPUT"
+(cd "$PACKAGE_DIR" && zip -X -q -r "$OUTPUT" .)
 sha256sum "$OUTPUT" >"$OUTPUT.sha256"
 
 echo "$OUTPUT"
