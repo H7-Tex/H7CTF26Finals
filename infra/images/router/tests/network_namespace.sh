@@ -214,11 +214,12 @@ sysctl -q -w net.ipv4.ip_forward=1
 sysctl -q -w net.ipv4.conf.all.rp_filter=0
 nft -f "$RULESET"
 EVENT_ROUTER_INTERFACE=wan-r "$ADDRESS_TOOL" active
-ip address show dev wan-r | grep -Fq '10.60.250.100/24'
-ip address show dev wan-r | grep -Fq '10.60.250.101/24'
-ip address show dev wan-r | grep -Fq '10.60.250.120/24'
-ip address show dev wan-r | grep -Fq '10.60.250.121/24'
-ip address show dev wan-r | grep -Fq '10.60.250.135/24'
+wan_addresses=$(ip address show dev wan-r)
+grep -Fq '10.60.250.100/24' <<<"$wan_addresses"
+grep -Fq '10.60.250.101/24' <<<"$wan_addresses"
+grep -Fq '10.60.250.120/24' <<<"$wan_addresses"
+grep -Fq '10.60.250.121/24' <<<"$wan_addresses"
+grep -Fq '10.60.250.135/24' <<<"$wan_addresses"
 
 nft add element inet event_router peer_addresses '{ 10.80.1.200 }'
 nft add element inet event_router peer_snat '{ 10.80.1.200 : 10.60.250.121 }'
@@ -488,11 +489,12 @@ wait "$peer_server_pid" 2>/dev/null || true
 
 set_challenge_access open "$test_tmp/challenge-access" nft
 EVENT_ROUTER_INTERFACE=wan-r "$ADDRESS_TOOL" standby
-if ip address show dev wan-r | grep -Fq '10.60.250.100/24'; then
+wan_addresses=$(ip address show dev wan-r)
+if grep -Fq '10.60.250.100/24' <<<"$wan_addresses"; then
   echo "standby retained ingress addresses" >&2
   exit 1
 fi
-if ip address show dev wan-r | grep -Fq '10.60.250.120/24'; then
+if grep -Fq '10.60.250.120/24' <<<"$wan_addresses"; then
   echo "standby retained the normalized service identity" >&2
   exit 1
 fi

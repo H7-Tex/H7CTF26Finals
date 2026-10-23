@@ -25,7 +25,8 @@ variable "builder_instance_id" {
       var.builder_instance_id != "ocid1.instance.oc1.ap-hyderabad-1.anuhsljrgek2goacptf4hmhhjlqee2ucownqcd6amop4lye7j3m3z27z2uqq" &&
       var.builder_instance_id != "ocid1.instance.oc1.ap-hyderabad-1.anuhsljrgek2goac4ydsjdkbgos2khrmbkfcaof3auparnd66bkinjgnkgiq" &&
       var.builder_instance_id != "ocid1.instance.oc1.ap-hyderabad-1.anuhsljrgek2goaccuukzrd6z3cb5mkyrxfuxep4dgdhb2hfvseo25l7fizq" &&
-      var.builder_instance_id != "ocid1.instance.oc1.ap-hyderabad-1.anuhsljrgek2goackghwgzi5kmx47jm27ifbvo4lamzmyhltr6gfikylkllq"
+      var.builder_instance_id != "ocid1.instance.oc1.ap-hyderabad-1.anuhsljrgek2goackghwgzi5kmx47jm27ifbvo4lamzmyhltr6gfikylkllq" &&
+      var.builder_instance_id != "ocid1.instance.oc1.ap-hyderabad-1.anuhsljrgek2goackhel3yztpwcpfg2dygvuo3f3tzmf2aoayodhlug5scqq"
     )
     error_message = "builder_instance_id must be an approved instance OCID in ap-hyderabad-1."
   }

@@ -364,6 +364,7 @@ class BuilderMetadataTests(unittest.TestCase):
             "ocid1.instance.oc1.ap-hyderabad-1.anuhsljrgek2goac4ydsjdkbgos2khrmbkfcaof3auparnd66bkinjgnkgiq",
             "ocid1.instance.oc1.ap-hyderabad-1.anuhsljrgek2goaccuukzrd6z3cb5mkyrxfuxep4dgdhb2hfvseo25l7fizq",
             "ocid1.instance.oc1.ap-hyderabad-1.anuhsljrgek2goackghwgzi5kmx47jm27ifbvo4lamzmyhltr6gfikylkllq",
+            "ocid1.instance.oc1.ap-hyderabad-1.anuhsljrgek2goackhel3yztpwcpfg2dygvuo3f3tzmf2aoayodhlug5scqq",
         )
         docs = "\n".join(
             (ROOT / f"terraform/environments/production/{root}/README.md").read_text(encoding="utf-8")
