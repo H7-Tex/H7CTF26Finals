@@ -361,8 +361,14 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn('local.cloud_init_by_role[role] == local.cloud_init_base_by_role[role]', platform)
         self.assertIn("StrictHostKeyChecking=yes", platform)
         self.assertIn("UserKnownHostsFile=/etc/finals-platform/operations/known_hosts", platform)
-        self.assertNotIn("ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform volume-initialize", platform)
-        self.assertNotIn("ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-secret platform anvil", platform)
+        platform_secret = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-secret platform anvil"
+        platform_volume = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform volume-initialize"
+        self.assertEqual(platform.count(platform_secret), 1)
+        self.assertEqual(platform.count(platform_volume), 1)
+        self.assertNotIn("finals-commission-secret platform *", platform)
+        self.assertNotIn("finals-commission-volume platform *", platform)
+        self.assertIn("operations_commission_secret_script", platform)
+        self.assertIn("base64encode(local.operations_commission_secret_script)", platform)
         self.assertIn("c760f5097b671cfa1423bd30b407cbbc9cb415fe4a82510d84c9120818143a19", platform)
         self.assertIn("relay_authorized_keys_readable_roles", platform)
         self.assertIn("finals-commission-volume gateway-primary volume-initialize", platform)

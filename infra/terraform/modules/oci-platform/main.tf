@@ -375,6 +375,8 @@ locals {
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh control control-reconciler
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh control control-checkers
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh repository repository
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-secret platform anvil
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform volume-initialize
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume gateway-primary volume-initialize
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume gateway-standby volume-initialize
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-stage-central
@@ -394,6 +396,7 @@ locals {
     "  - |",
     "    set -eu",
     "    printf '%s' '${base64encode(local.operations_commission_script)}' | base64 -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-volume",
+    "    printf '%s' '${base64encode(local.operations_commission_secret_script)}' | base64 -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-secret",
     "    printf '%s' '${base64encode(local.operations_commission_stage_central_script)}' | base64 -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-stage-central",
     "    printf '%s' '${base64encode(local.operations_commission_clear_central_script)}' | base64 -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-clear-central",
     "    printf '%s' '${base64encode(local.operations_commission_gateway_secret_script)}' | base64 -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-gateway-secret",
