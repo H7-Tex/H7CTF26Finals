@@ -110,6 +110,10 @@ func serve(cfg *orchestrator.Config, manifest *orchestrator.Manifest, manifestHa
 		orchestrator.CommandRunner{Command: cfg.RunnerCommand},
 		orchestrator.HTTPQuietWindow{URL: cfg.TickURL},
 	)
+	reporter, err := orchestrator.NewDeploymentEventReporter(cfg, store)
+	if err != nil {
+		return err
+	}
 	server := (&orchestrator.Server{Config: cfg, Store: store, Engine: engine}).HTTPServer()
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -117,6 +121,11 @@ func serve(cfg *orchestrator.Config, manifest *orchestrator.Manifest, manifestHa
 	go func() {
 		defer close(engineDone)
 		engine.Run(ctx)
+	}()
+	reporterDone := make(chan struct{})
+	go func() {
+		defer close(reporterDone)
+		reporter.Run(ctx)
 	}()
 	errorsChannel := make(chan error, 1)
 	go func() {
@@ -136,6 +145,7 @@ func serve(cfg *orchestrator.Config, manifest *orchestrator.Manifest, manifestHa
 	defer cancel()
 	shutdownErr := server.Shutdown(shutdownContext)
 	<-engineDone
+	<-reporterDone
 	if listenerErr != nil {
 		return listenerErr
 	}

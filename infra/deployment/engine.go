@@ -177,14 +177,22 @@ func (e *Engine) discover(ctx context.Context) error {
 			return nil
 		})
 	}
-	return e.Store.Update(AuditEvent{Action: "repository", Outcome: "queued", ActorID: "gitea", TraceID: traceID, Commit: head}, func(next *PersistentState) error {
+	if err := e.Store.Update(AuditEvent{Action: "repository", Outcome: "queued", ActorID: "gitea", TraceID: traceID, Commit: head}, func(next *PersistentState) error {
 		next.RepositoryHead = head
 		next.RejectedHead = ""
 		for _, service := range services {
 			next.Pending[service] = head
 		}
 		return nil
-	})
+	}); err != nil {
+		return err
+	}
+	for _, service := range services {
+		if err := e.Store.Update(AuditEvent{Service: service, Action: "candidate", Outcome: "queued", ActorID: "gitea", TraceID: traceID, Commit: head}, nil); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (e *Engine) resumeService(ctx context.Context, slug string) error {

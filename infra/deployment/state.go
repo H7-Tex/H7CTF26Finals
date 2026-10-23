@@ -65,16 +65,17 @@ type DeliveryRecord struct {
 }
 
 type PersistentState struct {
-	SchemaVersion  int                     `json:"schema_version"`
-	TeamNumber     int                     `json:"team_number"`
-	TeamID         string                  `json:"team_id"`
-	ManifestSHA256 string                  `json:"manifest_sha256"`
-	RepositoryHead string                  `json:"repository_head"`
-	RejectedHead   string                  `json:"rejected_repository_head,omitempty"`
-	Pending        map[string]string       `json:"pending"`
-	Services       map[string]ServiceState `json:"services"`
-	Deliveries     []DeliveryRecord        `json:"deliveries"`
-	NextSequence   uint64                  `json:"next_sequence"`
+	SchemaVersion    int                     `json:"schema_version"`
+	TeamNumber       int                     `json:"team_number"`
+	TeamID           string                  `json:"team_id"`
+	ManifestSHA256   string                  `json:"manifest_sha256"`
+	RepositoryHead   string                  `json:"repository_head"`
+	RejectedHead     string                  `json:"rejected_repository_head,omitempty"`
+	Pending          map[string]string       `json:"pending"`
+	Services         map[string]ServiceState `json:"services"`
+	Deliveries       []DeliveryRecord        `json:"deliveries"`
+	NextSequence     uint64                  `json:"next_sequence"`
+	ReportedSequence uint64                  `json:"reported_sequence,omitempty"`
 }
 
 type AuditEvent struct {
@@ -255,6 +256,9 @@ func OpenStore(cfg *Config, manifestHash string) (*Store, error) {
 	if state.SchemaVersion != stateSchemaVersion || state.TeamID != cfg.TeamID || state.TeamNumber != cfg.TeamNumber || state.ManifestSHA256 != manifestHash {
 		return nil, errors.New("state identity or manifest hash does not match configuration")
 	}
+	if state.ReportedSequence > state.NextSequence {
+		return nil, errors.New("reported audit sequence is ahead of durable state")
+	}
 	if err := validateIntents(state, cfg); err != nil {
 		return nil, err
 	}
@@ -278,6 +282,28 @@ func (s *Store) Healthy() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.poisoned == nil
+}
+
+func (s *Store) AcknowledgeReported(sequence uint64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.poisoned != nil {
+		return s.poisoned
+	}
+	if sequence == s.state.ReportedSequence {
+		return nil
+	}
+	if sequence != s.state.ReportedSequence+1 || sequence > s.state.NextSequence {
+		return errors.New("invalid reported audit sequence")
+	}
+	next := cloneState(s.state)
+	next.ReportedSequence = sequence
+	if err := writeState(s.statePath, next); err != nil {
+		s.poisoned = fmt.Errorf("persist reported audit sequence %d: %w", sequence, err)
+		return s.poisoned
+	}
+	s.state = next
+	return nil
 }
 
 func (s *Store) Update(event AuditEvent, mutate func(*PersistentState) error) error {
