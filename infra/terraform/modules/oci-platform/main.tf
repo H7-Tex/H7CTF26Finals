@@ -220,49 +220,6 @@ locals {
       -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts \
       -- ubuntu@10.60.201.20 "sudo -n /usr/local/sbin/finals-install-secret-bundle $bundle" < "$temporary"
   SCRIPT
-  operations_commission_platform_diagnostic_script = <<-SCRIPT
-    #!/usr/bin/env bash
-    set -euo pipefail
-
-    [[ $EUID -eq 0 ]] || { echo "platform diagnostic must run as root" >&2; exit 1; }
-    [[ $(cat /etc/finals-platform/role 2>/dev/null) == '{"role":"operations"}' ]] || exit 1
-    [[ -f /run/finals-commissioning/central_id_ed25519 && ! -L /run/finals-commissioning/central_id_ed25519 ]] || exit 1
-    [[ $# -eq 1 && $1 == diagnose ]] || { echo "usage: finals-commission-platform-diagnostic diagnose" >&2; exit 2; }
-    remote='set -euo pipefail
-      printf "%s\n" "[systemd]"
-      sudo -n systemctl show anvil-finals.service \
-        --property=Id --property=LoadState --property=ActiveState --property=SubState \
-        --property=Result --property=ExecMainCode --property=ExecMainStatus --no-pager
-      printf "%s\n" "[containers]"
-      sudo -n docker ps --all --filter label=com.docker.compose.project=anvil-finals \
-        --format "{{.Names}}\t{{.Image}}\t{{.Status}}" | head -n 12
-      for container in \
-        anvil-finals-postgres-1 \
-        anvil-finals-api-1 \
-        anvil-finals-web-1 \
-        anvil-finals-ingress-1; do
-        printf "[container:%s]\n" "$container"
-        if sudo -n docker inspect --format "state={{.State.Status}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} streak={{if .State.Health}}{{.State.Health.FailingStreak}}{{else}}0{{end}}" "$container" 2>/dev/null; then
-          sudo -n docker logs --tail 40 "$container" 2>&1 | awk "BEGIN {in_key=0} /-----BEGIN [^-]*PRIVATE KEY-----/ {print \"PRIVATE KEY=REDACTED\"; in_key=1; next} /-----END [^-]*PRIVATE KEY-----/ {in_key=0; next} in_key==0 {print}" | sed -E \
-            -e "s/H7CTF\\{[^}]*\\}/H7CTF{REDACTED}/g" \
-            -e "s#(postgres(ql)?://[^:/[:space:]]+:)[^@/[:space:]]+@#\\1REDACTED@#gI" \
-            -e "s#(Authorization:[[:space:]]*Bearer[[:space:]]+)[^[:space:]]+#\\1REDACTED#gI" \
-            -e "s#((password|token|secret|private[_-]?key)[\"[:space:]]*[:=][\"[:space:]]*)[^,\"[:space:]]+#\\1REDACTED#gI"
-        else
-          echo absent
-        fi
-      done'
-    exec /usr/bin/ssh \
-      -F /dev/null \
-      -i /run/finals-commissioning/central_id_ed25519 \
-      -o BatchMode=yes \
-      -o ConnectTimeout=10 \
-      -o IdentitiesOnly=yes \
-      -o PasswordAuthentication=no \
-      -o StrictHostKeyChecking=yes \
-      -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts \
-      -- ubuntu@10.60.200.10 "$remote"
-  SCRIPT
   operations_commission_host_firewall_script       = <<-SCRIPT
     #!/usr/bin/env bash
     set -euo pipefail
@@ -647,7 +604,6 @@ locals {
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-action control-status
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-secret control-reconciler
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-secret control-checkers
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-platform-diagnostic diagnose
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall platform
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall control
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall repository
@@ -695,7 +651,6 @@ locals {
     "    printf '%s' '${base64gzip(local.operations_commission_secret_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-secret",
     "    printf '%s' '${base64gzip(local.operations_commission_control_action_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-control-action",
     "    printf '%s' '${base64gzip(local.operations_commission_control_secret_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-control-secret",
-    "    printf '%s' '${base64gzip(local.operations_commission_platform_diagnostic_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-platform-diagnostic",
     "    printf '%s' '${base64gzip(local.operations_commission_host_firewall_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-host-firewall",
     "    printf '%s' '${base64gzip(local.operations_commission_stage_central_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-stage-central",
     "    printf '%s' '${base64gzip(local.operations_commission_clear_central_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-clear-central",
@@ -753,7 +708,10 @@ check "operations_commission_cloud_init" {
   }
 
   assert {
-    condition     = length(local.cloud_init_by_role["operations"]) < 24576
+    condition = (
+      length(base64encode(local.cloud_init_by_role["operations"])) +
+      length(trimspace(var.organizer_ssh_authorized_keys)) < 31488
+    )
     error_message = "Operations cloud-init must fit the OCI base64 metadata limit."
   }
 
