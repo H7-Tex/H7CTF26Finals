@@ -331,6 +331,9 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn('* ) echo "gateway has an unexpected platform role marker"', platform)
         self.assertIn('printf "%s\\n" "\'$expected\'" | sudo install -D -m 0644 /dev/stdin /etc/event-router/role', platform)
         self.assertIn('* ) echo "gateway has an unexpected router role marker"', platform)
+        self.assertIn('[[ -f /etc/event-router/reconciler_authorized_key && ! -L /etc/event-router/reconciler_authorized_key ]]', platform)
+        self.assertIn('sudo /usr/local/sbin/event-router-authorize-reconciler /etc/event-router/reconciler_authorized_key', platform)
+        self.assertNotIn('event-router-authorize-reconciler "$1"', platform)
         self.assertIn("peer-reconciler@$address", platform)
         standby = platform[platform.index("gateway-standby)"):platform.index("esac", platform.index("gateway-standby)"))]
         self.assertIn("sha256sum -c -", standby)

@@ -236,7 +236,10 @@ locals {
           * ) echo "gateway has an unexpected router role marker" >&2; exit 1 ;;
         esac
         [[ ! -e /etc/finals-platform/role ]]
-        [[ $(cat /etc/event-router/role) == "'$expected'" ]]'
+        [[ $(cat /etc/event-router/role) == "'$expected'" ]]
+        if [[ -f /etc/event-router/reconciler_authorized_key && ! -L /etc/event-router/reconciler_authorized_key ]]; then
+          sudo /usr/local/sbin/event-router-authorize-reconciler /etc/event-router/reconciler_authorized_key
+        fi'
   SCRIPT
   operations_commission_sudoers             = <<-SUDOERS
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh gateway-primary gateway-wireguard
