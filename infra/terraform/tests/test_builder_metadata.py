@@ -436,6 +436,8 @@ class BuilderMetadataTests(unittest.TestCase):
             'filesha256("${path.module}/../../../platform/rootfs/usr/local/libexec/finals-platform/firewall")',
             firewall_wrapper,
         )
+        self.assertIn("read -r host type key extra", firewall_wrapper)
+        self.assertNotIn("IFS= read -r host type key extra", firewall_wrapper)
         targets = [
             "platform",
             "control",

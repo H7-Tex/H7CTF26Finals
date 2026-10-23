@@ -82,9 +82,9 @@ locals {
   operations_relay_authorized_key = "restrict,command=\"/usr/local/sbin/finals-secret-relay-receive\" ${var.operations_relay_ssh_public_key}"
   operations_relay_roles          = toset(["platform", "control", "repository"])
 
-  operations_commission_initializer_sha256         = "eaeb4c33d2c94f59dee9b01b2b6dbce8e8f8adf720e4108f713456f7cf4f69ab"
-  operations_commission_anvil_sha256               = "c760f5097b671cfa1423bd30b407cbbc9cb415fe4a82510d84c9120818143a19"
-  operations_commission_script                     = <<-SCRIPT
+  operations_commission_initializer_sha256        = "eaeb4c33d2c94f59dee9b01b2b6dbce8e8f8adf720e4108f713456f7cf4f69ab"
+  operations_commission_anvil_sha256              = "c760f5097b671cfa1423bd30b407cbbc9cb415fe4a82510d84c9120818143a19"
+  operations_commission_script                    = <<-SCRIPT
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -133,7 +133,7 @@ locals {
       'sudo install -D -m 0755 /dev/stdin /usr/local/sbin/finals-initialize-volume' < "$temporary"
     /usr/bin/ssh "$${ssh_options[@]}" -- "ubuntu@$address" "$post_command"
   SCRIPT
-  operations_commission_secret_script              = <<-SCRIPT
+  operations_commission_secret_script             = <<-SCRIPT
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -162,7 +162,7 @@ locals {
       -- ubuntu@10.60.200.10 \
       'sudo chmod 0644 /etc/ssh/operations_relay_authorized_keys_ubuntu && sudo /usr/sbin/sshd -t && sudo systemctl reload ssh.service && sudo /usr/local/sbin/finals-install-secret-bundle anvil' < "$temporary"
   SCRIPT
-  operations_commission_control_action_script      = <<-SCRIPT
+  operations_commission_control_action_script     = <<-SCRIPT
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -193,7 +193,7 @@ locals {
       -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts \
       -- ubuntu@10.60.201.20 "$remote"
   SCRIPT
-  operations_commission_control_secret_script      = <<-SCRIPT
+  operations_commission_control_secret_script     = <<-SCRIPT
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -220,7 +220,7 @@ locals {
       -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts \
       -- ubuntu@10.60.201.20 "sudo -n /usr/local/sbin/finals-install-secret-bundle $bundle" < "$temporary"
   SCRIPT
-  operations_commission_host_firewall_script       = <<-SCRIPT
+  operations_commission_host_firewall_script      = <<-SCRIPT
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -252,7 +252,7 @@ locals {
     [[ $port -eq 22 ]] || expected_host="[$address]:$port"
     work=$(mktemp -d /run/finals-host-firewall.XXXXXX)
     trap 'rm -rf -- "$work"' EXIT
-    IFS= read -r host type key extra
+    read -r host type key extra
     [[ $host == "$expected_host" && $type == ssh-ed25519 && $key =~ ^[A-Za-z0-9+/]{68}$ && -z $${extra:-} ]] || {
       echo "host key line is invalid for the fixed target" >&2
       exit 1
@@ -284,7 +284,7 @@ locals {
       -o UserKnownHostsFile="$work/known_hosts" \
       -- "ubuntu@$address" "$remote" < "$work/firewall"
   SCRIPT
-  operations_commission_stage_central_script       = <<-SCRIPT
+  operations_commission_stage_central_script      = <<-SCRIPT
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -342,7 +342,7 @@ locals {
     install -o root -g root -m 0600 "$work/key" /run/finals-commissioning/central_id_ed25519
     echo central-staged-in-tmpfs
   SCRIPT
-  operations_commission_clear_central_script       = <<-SCRIPT
+  operations_commission_clear_central_script      = <<-SCRIPT
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -352,7 +352,7 @@ locals {
     rm -f -- /run/finals-commissioning/central_id_ed25519
     test ! -e /run/finals-commissioning/central_id_ed25519
   SCRIPT
-  operations_commission_gateway_secret_script      = <<-SCRIPT
+  operations_commission_gateway_secret_script     = <<-SCRIPT
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -376,7 +376,7 @@ locals {
       -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts \
       -- "ubuntu@$address" "sudo -n /usr/local/sbin/finals-install-secret-bundle $bundle" < "$temporary"
   SCRIPT
-  operations_commission_gateway_authorizer_script  = <<-SCRIPT
+  operations_commission_gateway_authorizer_script = <<-SCRIPT
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -402,7 +402,7 @@ locals {
       -- "ubuntu@$address" \
       'sudo -n /usr/local/sbin/event-router-authorize-reconciler /etc/event-router/reconciler_authorized_key'
   SCRIPT
-  operations_commission_gateway_role_script        = <<-SCRIPT
+  operations_commission_gateway_role_script       = <<-SCRIPT
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -464,7 +464,7 @@ locals {
         [[ $(sudo -n cat /etc/event-router/role) == "'$expected'" ]]
         sudo -n systemctl is-active --quiet event-router.target'
   SCRIPT
-  operations_commission_gateway_role_audit_script  = <<-SCRIPT
+  operations_commission_gateway_role_audit_script = <<-SCRIPT
     #!/usr/bin/env bash
     set -euo pipefail
     [[ $EUID -eq 0 && $(cat /etc/finals-platform/role 2>/dev/null) == '{"role":"operations"}' ]] || exit 1
@@ -496,7 +496,7 @@ locals {
         case "$router" in active|standby) router_category=$router ;; "") router_category=absent ;; *) router_category=unexpected ;; esac
         printf "platform=%s router=%s\n" "$platform_category" "$router_category"'
   SCRIPT
-  operations_commission_production_keys_script     = <<-SCRIPT
+  operations_commission_production_keys_script    = <<-SCRIPT
     #!/usr/bin/env bash
     set -euo pipefail
     # model a: put one team's ssh keys on its own production box. stdin is a header
@@ -533,7 +533,7 @@ locals {
     (( organizer == 1 && lines >= 2 && lines <= 64 )) || { echo "keys must keep the organizer and add 1-63 team keys" >&2; exit 1; }
     ssh_to 'set -eu; umask 077; mkdir -p "$HOME/.ssh"; cd "$HOME/.ssh"; cat > authorized_keys.next; if [ -f authorized_keys ]; then cp -p authorized_keys authorized_keys.prev; fi; mv authorized_keys.next authorized_keys; ssh-keygen -lf authorized_keys | wc -l' < "$work/authorized_keys"
   SCRIPT
-  operations_commission_gateway_model_a_script     = <<-SCRIPT
+  operations_commission_gateway_model_a_script    = <<-SCRIPT
     #!/usr/bin/env bash
     set -euo pipefail
     # event-time exception to the gateway image: stage the reviewed model a router
@@ -588,7 +588,7 @@ locals {
       *) echo "unsupported model a action" >&2; exit 2 ;;
     esac
   SCRIPT
-  operations_commission_sudoers                    = <<-SUDOERS
+  operations_commission_sudoers                   = <<-SUDOERS
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh gateway-primary gateway-wireguard
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh gateway-primary gateway-reconciler
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh gateway-standby gateway-wireguard
