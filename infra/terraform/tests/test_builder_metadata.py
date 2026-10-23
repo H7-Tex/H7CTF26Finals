@@ -325,13 +325,23 @@ class BuilderMetadataTests(unittest.TestCase):
         root = (ROOT / "terraform/environments/production/oci-fleet/main.tf").read_text(encoding="utf-8")
         self.assertIn("for team in var.production_numbers", source)
         self.assertIn("for team in var.workbench_numbers", source)
+        self.assertIn('team == 16 ? "admin-workbench" : team == 17 ? "spare-workbench"', source)
+        self.assertIn("each.value.team > 15 || trimspace", source)
         self.assertIn('variable "production_numbers"', variables)
         self.assertIn('variable "workbench_numbers"', variables)
         self.assertIn("number >= 1 && number <= 16", variables)
-        self.assertIn("number >= 1 && number <= 15", variables)
+        self.assertIn("number >= 1 && number <= 17", variables)
         self.assertIn("Every enabled workbench requires", source)
         self.assertIn("production_numbers                 = var.production_numbers", root)
         self.assertIn("workbench_numbers                  = var.workbench_numbers", root)
+
+    def test_support_workbenches_have_isolated_fixed_subnets(self):
+        network = (ROOT / "terraform/modules/oci-network/main.tf").read_text(encoding="utf-8")
+        self.assertIn('cidr         = "10.61.16.0/24"', network)
+        self.assertIn('display_name = "admin-workbench"', network)
+        self.assertIn('cidr         = "10.61.17.0/24"', network)
+        self.assertIn('display_name = "spare-workbench"', network)
+        self.assertIn("local.support_workbench_subnets", network)
 
     def test_obsolete_gateway_image_and_plan_are_prohibited(self):
         failed_builders = (

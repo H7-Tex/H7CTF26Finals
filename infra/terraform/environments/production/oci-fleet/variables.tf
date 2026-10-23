@@ -25,7 +25,7 @@ variable "production_subnet_ids" {
 }
 
 variable "workbench_subnet_ids" {
-  description = "Workbench subnet OCIDs keyed w01 through w15."
+  description = "Workbench subnet OCIDs keyed w01 through w17."
   type        = map(string)
 }
 
@@ -57,14 +57,14 @@ variable "production_numbers" {
 }
 
 variable "workbench_numbers" {
-  description = "Workbench numbers to create; expand monotonically from the canary to 1 through 15."
+  description = "Workbench numbers to create; 1 through 15 are teams, 16 is admin and 17 is the unassigned spare."
   type        = set(number)
   default     = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
   nullable    = false
 
   validation {
-    condition     = alltrue([for number in var.workbench_numbers : number >= 1 && number <= 15 && number == floor(number)])
-    error_message = "workbench_numbers may contain only integers from 1 through 15."
+    condition     = alltrue([for number in var.workbench_numbers : number >= 1 && number <= 17 && number == floor(number)])
+    error_message = "workbench_numbers may contain only integers from 1 through 17."
   }
 }
 

@@ -9,7 +9,7 @@ locals {
   }
 
   workbenches = {
-    for team in var.workbench_numbers : format("workbench-%02d", team) => {
+    for team in var.workbench_numbers : team == 16 ? "admin-workbench" : team == 17 ? "spare-workbench" : format("workbench-%02d", team) => {
       private_ip = format("10.61.%d.2", team)
       subnet     = format("w%02d", team)
       team       = team
@@ -125,8 +125,8 @@ resource "oci_core_instance" "workbench" {
   display_name        = each.key
   shape               = "VM.Standard.E4.Flex"
   freeform_tags = merge(local.tags, {
-    role = "workbench"
-    team = format("team-%02d", each.value.team)
+    role = each.value.team == 16 ? "admin-workbench" : each.value.team == 17 ? "spare-workbench" : "workbench"
+    team = each.value.team == 16 ? "organizers" : each.value.team == 17 ? "unassigned" : format("team-%02d", each.value.team)
   })
 
   shape_config {
@@ -152,7 +152,7 @@ resource "oci_core_instance" "workbench" {
   metadata = {
     ssh_authorized_keys = join("\n", compact([
       var.organizer_ssh_authorized_keys,
-      lookup(var.team_workbench_ssh_authorized_keys, format("team-%02d", each.value.team), "")
+      each.value.team <= 15 ? lookup(var.team_workbench_ssh_authorized_keys, format("team-%02d", each.value.team), "") : ""
     ]))
     user_data = base64encode(var.workbench_cloud_init)
   }
@@ -165,7 +165,7 @@ resource "oci_core_instance" "workbench" {
     prevent_destroy = true
 
     precondition {
-      condition     = trimspace(lookup(var.team_workbench_ssh_authorized_keys, format("team-%02d", each.value.team), "")) != ""
+      condition     = each.value.team > 15 || trimspace(lookup(var.team_workbench_ssh_authorized_keys, format("team-%02d", each.value.team), "")) != ""
       error_message = "Every enabled workbench requires a non-empty team SSH public-key set."
     }
   }

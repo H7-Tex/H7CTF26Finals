@@ -14,7 +14,7 @@ variable "production_subnet_ids" {
 }
 
 variable "workbench_subnet_ids" {
-  description = "Workbench subnet OCIDs keyed w01 through w15."
+  description = "Workbench subnet OCIDs keyed w01 through w17."
   type        = map(string)
 }
 
@@ -50,8 +50,8 @@ variable "workbench_numbers" {
   nullable    = false
 
   validation {
-    condition     = alltrue([for number in var.workbench_numbers : number >= 1 && number <= 15 && number == floor(number)])
-    error_message = "workbench_numbers may contain only integers from 1 through 15."
+    condition     = alltrue([for number in var.workbench_numbers : number >= 1 && number <= 17 && number == floor(number)])
+    error_message = "workbench_numbers may contain only integers from 1 through 17."
   }
 }
 

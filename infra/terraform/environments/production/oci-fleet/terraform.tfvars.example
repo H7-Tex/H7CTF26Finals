@@ -47,6 +47,8 @@ workbench_subnet_ids = {
   w13 = "ocid1.subnet.oc1.ap-hyderabad-1.replace-me"
   w14 = "ocid1.subnet.oc1.ap-hyderabad-1.replace-me"
   w15 = "ocid1.subnet.oc1.ap-hyderabad-1.replace-me"
+  w16 = "ocid1.subnet.oc1.ap-hyderabad-1.replace-me"
+  w17 = "ocid1.subnet.oc1.ap-hyderabad-1.replace-me"
 }
 
 team_workbench_ssh_authorized_keys = {

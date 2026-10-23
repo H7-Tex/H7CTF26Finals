@@ -57,7 +57,24 @@ locals {
     }
   }
 
-  subnets = merge(local.fixed_subnets, local.production_subnets, local.workbench_subnets)
+  support_workbench_subnets = {
+    w16 = {
+      cidr         = "10.61.16.0/24"
+      dns_label    = "adminworkbench"
+      display_name = "admin-workbench"
+      route_class  = "isolated"
+      public       = false
+    }
+    w17 = {
+      cidr         = "10.61.17.0/24"
+      dns_label    = "spareworkbench"
+      display_name = "spare-workbench"
+      route_class  = "isolated"
+      public       = false
+    }
+  }
+
+  subnets = merge(local.fixed_subnets, local.production_subnets, local.workbench_subnets, local.support_workbench_subnets)
 
   route_tables = {
     edge     = oci_core_route_table.edge.id
