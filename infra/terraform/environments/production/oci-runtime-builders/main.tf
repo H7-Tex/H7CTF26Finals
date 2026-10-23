@@ -97,11 +97,16 @@ locals {
     "volumes/rehearse-production-quota",
     "volumes/tests/run.sh",
   ])
+  router_validator_file = [{
+    path           = "images/router/rootfs/usr/local/libexec/event-router/render_inventory.py"
+    permissions    = "0755"
+    content_base64 = filebase64("${path.module}/../../../../images/router/rootfs/usr/local/libexec/event-router/render_inventory.py")
+  }]
   files = concat([for path in local.runtime_files : {
     path           = path
     permissions    = contains(local.executable_files, path) ? "0755" : "0644"
     content_base64 = filebase64("${local.runtime_dir}/${path}")
-    }], flatten([for prefix, directory in local.auxiliary_sources : [for path in fileset(directory, "**") : {
+    }], local.router_validator_file, flatten([for prefix, directory in local.auxiliary_sources : [for path in fileset(directory, "**") : {
       path           = "${prefix}/${path}"
       permissions    = contains(local.executable_files, "${prefix}/${path}") ? "0755" : "0644"
       content_base64 = filebase64("${directory}/${path}")

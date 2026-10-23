@@ -146,6 +146,18 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn("install -d -m 0755 /run/sshd", installer)
         self.assertLess(installer.index("install -d -m 0755 /run/sshd"), installer.index("sshd -t"))
 
+    def test_control_reconciler_ships_the_canonical_router_validator(self):
+        reconciler = (ROOT / "reconciler/install.sh").read_text(encoding="utf-8")
+        builders = (ROOT / "terraform/environments/production/oci-runtime-builders/main.tf").read_text(encoding="utf-8")
+        platform = (ROOT / "terraform/modules/oci-platform/main.tf").read_text(encoding="utf-8")
+        package = (ROOT / "terraform/scripts/package-oci-stack.sh").read_text(encoding="utf-8")
+        path = "images/router/rootfs/usr/local/libexec/event-router/render_inventory.py"
+        self.assertIn(f"../{path}", reconciler)
+        self.assertIn(path, builders)
+        self.assertIn(path, package)
+        self.assertIn('check "control_validator_cloud_init"', platform)
+        self.assertIn("/usr/local/libexec/event-router/render_inventory.py", platform)
+
     def test_production_go_build_uses_and_removes_an_explicit_cache(self):
         builder = (ROOT / "images/runtime/build-image").read_text(encoding="utf-8")
         cache = "export GOCACHE=/var/cache/finals-image-builder/go-build"

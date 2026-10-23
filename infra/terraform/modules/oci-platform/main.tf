@@ -676,6 +676,12 @@ locals {
     "    mv \"$temporary\" /etc/sudoers.d/finals-operations-commissioning",
     "",
   ])
+  control_validator_runcmd = join("\n", [
+    "  - |",
+    "    set -eu",
+    "    printf '%s' '${base64gzip(file("${path.module}/../../../images/router/rootfs/usr/local/libexec/event-router/render_inventory.py"))}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/libexec/event-router/render_inventory.py",
+    "    printf '%s  %s\\n' '${filesha256("${path.module}/../../../images/router/rootfs/usr/local/libexec/event-router/render_inventory.py")}' /usr/local/libexec/event-router/render_inventory.py | sha256sum -c --quiet",
+  ])
 
   cloud_init_base_by_role = {
     for role in keys(local.hosts) : role => <<-YAML
@@ -706,6 +712,10 @@ locals {
       content,
       "  - [\"/usr/local/sbin/finals-platform-activate\", \"operations\"]\n",
       "  - [\"/usr/local/sbin/finals-platform-activate\", \"operations\"]\n${local.operations_commission_runcmd}",
+      ) : role == "control" ? replace(
+      content,
+      "  - [\"/usr/local/sbin/finals-platform-activate\", \"control\"]\n",
+      "${local.control_validator_runcmd}\n  - [\"/usr/local/sbin/finals-platform-activate\", \"control\"]\n",
     ) : content
   }
 }
@@ -726,9 +736,20 @@ check "operations_commission_cloud_init" {
 
   assert {
     condition = alltrue([
-      for role in keys(local.hosts) : role == "operations" || local.cloud_init_by_role[role] == local.cloud_init_base_by_role[role]
+      for role in keys(local.hosts) : contains(["operations", "control"], role) || local.cloud_init_by_role[role] == local.cloud_init_base_by_role[role]
     ])
-    error_message = "The commissioning window must not alter any non-operations cloud-init payload."
+    error_message = "The commissioning window must not alter any non-operations/non-control cloud-init payload."
+  }
+}
+
+check "control_validator_cloud_init" {
+  assert {
+    condition = (
+      length(regexall("/usr/local/libexec/event-router/render_inventory.py", local.cloud_init_by_role["control"])) == 2 &&
+      length(base64encode(local.cloud_init_by_role["control"])) +
+      length(trimspace(var.organizer_ssh_authorized_keys)) < 31488
+    )
+    error_message = "Control cloud-init must install the pinned peer inventory validator within the OCI metadata limit."
   }
 }
 

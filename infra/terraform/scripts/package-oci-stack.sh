@@ -27,8 +27,8 @@ PATHS=(infra/terraform)
 case "$STACK" in
   oci-gateway-builder) PATHS+=(infra/archive infra/images/router infra/platform infra/secrets infra/volumes) ;;
   oci-ingress) PATHS+=(infra/images/router) ;;
-  oci-platform) PATHS+=(infra/platform/rootfs/usr/local/libexec/finals-platform/firewall) ;;
-  oci-runtime-builders) PATHS+=(infra/archive infra/checkers infra/deployment infra/hills infra/images/runtime infra/model-a-runtime infra/platform infra/reconciler infra/secrets infra/team-access infra/volumes) ;;
+  oci-platform) PATHS+=(infra/platform/rootfs/usr/local/libexec/finals-platform/firewall); PATHS+=(infra/images/router/rootfs/usr/local/libexec/event-router/render_inventory.py) ;;
+  oci-runtime-builders) PATHS+=(infra/archive infra/checkers infra/deployment infra/hills infra/images/runtime infra/images/router/rootfs/usr/local/libexec/event-router/render_inventory.py infra/model-a-runtime infra/platform infra/reconciler infra/secrets infra/team-access infra/volumes) ;;
 esac
 
 mkdir -p "$OUTPUT_DIR"
