@@ -232,7 +232,7 @@ class BuilderMetadataTests(unittest.TestCase):
         attachment_start = storage.index('resource "oci_core_volume_attachment" "data"')
         policy_start = storage.index('resource "oci_core_volume_backup_policy"')
         self.assertIn("prevent_destroy = true", storage[volume_start:attachment_start])
-        self.assertIn("prevent_destroy = true", storage[attachment_start:policy_start])
+        self.assertNotIn("prevent_destroy = true", storage[attachment_start:policy_start])
         self.assertIn("offset_seconds    = 0", storage[policy_start:])
         self.assertIn('period            = "ONE_DAY"', storage[policy_start:])
         self.assertIn("retention_seconds = 604800", storage[policy_start:])
@@ -246,6 +246,7 @@ class BuilderMetadataTests(unittest.TestCase):
         rotation = (ROOT / "terraform/GATEWAY-ROTATION-WINDOW.md").read_text(encoding="utf-8")
         self.assertIn("primary and standby gateways", rotation)
         self.assertIn("reserved public addresses remain protected", rotation)
+        self.assertIn("captures volume remains unchanged", rotation)
 
         ingress = (ROOT / "terraform/modules/oci-ingress/main.tf").read_text(encoding="utf-8")
         self.assertNotIn("prevent_destroy = true", ingress)
