@@ -153,12 +153,19 @@ class VolumeSelectionTests(unittest.TestCase):
     def test_anvil_layout_is_fixed_and_idempotent(self):
         with tempfile.TemporaryDirectory() as directory:
             mount = Path(directory)
-            MODULE.ensure_anvil_layout(mount)
-            MODULE.ensure_anvil_layout(mount)
-            for name in MODULE.ANVIL_DIRECTORIES:
+            ownership = []
+            change_owner = lambda path, uid, gid: ownership.append((path.name, uid, gid))
+            MODULE.ensure_anvil_layout(mount, change_owner)
+            MODULE.ensure_anvil_layout(mount, change_owner)
+            for name, (mode, _, _) in MODULE.ANVIL_LAYOUT.items():
                 path = mount / name
                 self.assertTrue(path.is_dir())
-                self.assertEqual(path.stat().st_mode & 0o777, 0o750)
+                self.assertEqual(path.stat().st_mode & 0o777, mode)
+            self.assertEqual(ownership, [
+                ("postgres", 70, 70),
+                ("storage", 0, 0),
+                ("backups", 0, 0),
+            ] * 2)
 
     def test_anvil_layout_rejects_symlinks(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -167,7 +174,7 @@ class VolumeSelectionTests(unittest.TestCase):
             target.mkdir()
             (mount / "postgres").symlink_to(target)
             with self.assertRaisesRegex(MODULE.VolumeError, "not a fixed Anvil directory"):
-                MODULE.ensure_anvil_layout(mount)
+                MODULE.ensure_anvil_layout(mount, lambda *_: None)
 
     def test_service_quota_layout_and_commands_are_idempotent(self):
         with tempfile.TemporaryDirectory() as directory:

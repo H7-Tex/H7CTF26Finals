@@ -19,7 +19,11 @@ ROLES = {
 }
 
 VOLUME_POLICY = Path("/etc/finals-release/volume-policy.json")
-ANVIL_DIRECTORIES = ("postgres", "storage", "backups")
+ANVIL_LAYOUT = {
+    "postgres": (0o700, 70, 70),
+    "storage": (0o700, 0, 0),
+    "backups": (0o700, 0, 0),
+}
 
 
 class VolumeError(Exception):
@@ -141,18 +145,19 @@ def mount_if_needed(path, is_mount=os.path.ismount, runner=command):
     return True
 
 
-def ensure_anvil_layout(mount):
-    for name in ANVIL_DIRECTORIES:
+def ensure_anvil_layout(mount, chowner=os.chown):
+    for name, (mode, uid, gid) in ANVIL_LAYOUT.items():
         path = mount / name
         if path.is_symlink():
             raise VolumeError(f"{path} is not a fixed Anvil directory")
         try:
-            path.mkdir(mode=0o750, exist_ok=True)
+            path.mkdir(mode=mode, exist_ok=True)
         except OSError as error:
             raise VolumeError(f"{path} is not a fixed Anvil directory") from error
         if not stat.S_ISDIR(path.stat().st_mode):
             raise VolumeError(f"{path} is not a fixed Anvil directory")
-        path.chmod(0o750)
+        path.chmod(mode)
+        chowner(path, uid, gid)
 
 
 def ensure_mappings(path, desired):
