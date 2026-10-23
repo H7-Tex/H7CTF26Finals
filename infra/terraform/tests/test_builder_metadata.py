@@ -238,14 +238,17 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn("retention_seconds = 604800", storage[policy_start:])
         for relative in (
             "terraform/modules/oci-platform/main.tf",
-            "terraform/modules/oci-ingress/main.tf",
             "terraform/modules/oci-compute-fleet/main.tf",
         ):
             source = (ROOT / relative).read_text(encoding="utf-8")
             self.assertIn("prevent_destroy = true", source)
 
+        rotation = (ROOT / "terraform/GATEWAY-ROTATION-WINDOW.md").read_text(encoding="utf-8")
+        self.assertIn("primary and standby gateways", rotation)
+        self.assertIn("reserved public addresses remain protected", rotation)
+
         ingress = (ROOT / "terraform/modules/oci-ingress/main.tf").read_text(encoding="utf-8")
-        self.assertGreaterEqual(ingress.count("prevent_destroy = true"), 3)
+        self.assertNotIn("prevent_destroy = true", ingress)
         self.assertIn('resource "oci_core_private_ip" "service_ingress"', ingress)
         self.assertIn('ip_address   = "10.60.250.120"', ingress)
         fleet = (ROOT / "terraform/modules/oci-compute-fleet/main.tf").read_text(encoding="utf-8")
