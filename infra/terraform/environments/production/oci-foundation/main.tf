@@ -14,6 +14,30 @@ resource "oci_identity_compartment" "finals" {
   }
 }
 
+resource "oci_identity_dynamic_group" "finals_run_command" {
+  compartment_id = var.tenancy_ocid
+  name           = "finals_run_command"
+  description    = "Finals instances authorized to acknowledge only their own Run Command executions"
+  matching_rule  = "ALL {instance.compartment.id = '${oci_identity_compartment.finals.id}'}"
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "oci_identity_policy" "finals_run_command" {
+  compartment_id = var.tenancy_ocid
+  name           = "FinalsRunCommand"
+  description    = "Permit finals instances to acknowledge only their own Run Command executions"
+  statements = [
+    "Allow dynamic-group id ${oci_identity_dynamic_group.finals_run_command.id} to use instance-agent-command-execution-family in compartment id ${oci_identity_compartment.finals.id} where request.instance.id=target.instance.id",
+  ]
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
 locals {
   budget_alert_thresholds = {
     advisory = 175

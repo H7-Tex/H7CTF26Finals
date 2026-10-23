@@ -309,6 +309,19 @@ class BuilderMetadataTests(unittest.TestCase):
             variables = (ROOT / relative).read_text(encoding="utf-8")
             self.assertIn("var.routing_private_ip_id == null ? true : startswith", variables)
 
+    def test_run_command_identity_is_compartment_scoped_and_self_only(self):
+        root = ROOT / "terraform/environments/production/oci-foundation"
+        source = (root / "main.tf").read_text(encoding="utf-8")
+        outputs = (root / "outputs.tf").read_text(encoding="utf-8")
+        self.assertIn('resource "oci_identity_dynamic_group" "finals_run_command"', source)
+        self.assertIn("ALL {instance.compartment.id = '${oci_identity_compartment.finals.id}'}", source)
+        self.assertIn('resource "oci_identity_policy" "finals_run_command"', source)
+        self.assertIn("use instance-agent-command-execution-family", source)
+        self.assertIn("where request.instance.id=target.instance.id", source)
+        self.assertNotIn("manage all-resources", source)
+        self.assertIn('output "run_command_dynamic_group_id"', outputs)
+        self.assertIn('output "run_command_policy_id"', outputs)
+
     def test_private_oci_management_route_is_fixed_and_guarded(self):
         network = (ROOT / "terraform/modules/oci-network/main.tf").read_text(encoding="utf-8")
         self.assertIn('resource "oci_core_service_gateway" "management"', network)
