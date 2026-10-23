@@ -1,6 +1,6 @@
 # OCI runtime image builders
 
-This temporary Resource Manager stack creates four outbound-only builders in the public edge subnet. The builders accept no ingress or SSH key. Each installs and tests one runtime role from the reviewed repository revision, seals its state and powers off. The platform-x86 build also pins, tests and prebuilds Anvil v0.361.0 at `9a99b025748bf0ff823b9e134bf330d59d858059`.
+This temporary Resource Manager stack creates four outbound-only builders in the public edge subnet. The builders accept no ingress or SSH key. Each installs and tests one runtime role from the reviewed repository revision, seals its state and powers off. The platform-x86 build also pins, tests and prebuilds Anvil v0.362.0 at `6b8a77845a8d72672aaa1b7a76a5d96d7b7332b9`.
 
 The production builder tests the deployment package with Ubuntu 24.04's Go 1.22 toolchain, installs four static binaries and their default-off units, then purges Go and the C toolchain before the resolved package manifest is recorded. The generic image includes the unprivileged runner adapter and socket executor boundary but deliberately omits the executor policy, five real effect commands, service manifests, repository material and credentials.
 

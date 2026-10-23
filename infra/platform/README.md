@@ -21,7 +21,7 @@ For a gateway failover, first stop `event-router-flow-log.service` and record th
 
 ## Image and DNS gates
 
-The runtime builder accepts only Anvil v0.361.0 commit `9a99b025748bf0ff823b9e134bf330d59d858059`. It clones that public revision during the outbound-only build, runs its finals checks, prebuilds the API and web layers, pulls every pinned compose image and installs the exact tree at `/opt/anvil/current`. No service, certificate or secret is embedded in the image.
+The runtime builder accepts only Anvil v0.362.0 commit `6b8a77845a8d72672aaa1b7a76a5d96d7b7332b9`. It clones that public revision during the outbound-only build, runs its finals checks, prebuilds the API and web layers, pulls every pinned compose image and installs the exact tree at `/opt/anvil/current`. No service, certificate or secret is embedded in the image.
 
 Builder source is stored as fixed-path executable payloads in a private transient OCI Object Storage bucket. Per-role object-read PARs use an explicit reviewed expiry no more than 24 hours away. Tiny cloud-init runs a bounded downloader that verifies exact byte length and SHA-256 before executing the payload; it does not recursively invoke cloud-init. Capture only stopped, tested builders. Destroy the builder stack after capture to revoke the PARs and delete the source objects. The production image capture must use the final repository revision containing the reviewed Deployment Orchestrator, runner adapter, socket executor and state helper with all hardened units disabled. The real effect commands, executor policy, manifests, credentials and initialized state are separate commissioning artifacts and are never embedded in the generic image.
 
