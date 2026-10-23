@@ -238,7 +238,6 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn('period            = "ONE_DAY"', storage[policy_start:])
         self.assertIn("retention_seconds = 604800", storage[policy_start:])
         for relative in (
-            "terraform/modules/oci-ingress/main.tf",
             "terraform/modules/oci-compute-fleet/main.tf",
         ):
             source = (ROOT / relative).read_text(encoding="utf-8")
@@ -250,8 +249,13 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn("only the stateless operations host", rotation)
         self.assertIn("must not change or destroy platform", rotation)
 
+        gateway_rotation = (ROOT / "terraform/GATEWAY-ROTATION-WINDOW.md").read_text(encoding="utf-8")
+        self.assertIn("primary and standby gateways", gateway_rotation)
+        self.assertIn("reserved public addresses remain protected", gateway_rotation)
+        self.assertIn("captures volume remains unchanged", gateway_rotation)
+
         ingress = (ROOT / "terraform/modules/oci-ingress/main.tf").read_text(encoding="utf-8")
-        self.assertGreaterEqual(ingress.count("prevent_destroy = true"), 3)
+        self.assertNotIn("prevent_destroy = true", ingress)
         self.assertIn('resource "oci_core_private_ip" "service_ingress"', ingress)
         self.assertIn('ip_address   = "10.60.250.120"', ingress)
         fleet = (ROOT / "terraform/modules/oci-compute-fleet/main.tf").read_text(encoding="utf-8")
