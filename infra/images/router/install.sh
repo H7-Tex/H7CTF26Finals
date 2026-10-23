@@ -25,3 +25,4 @@ chmod 0440 "$root/etc/sudoers.d/peer-reconciler"
 install -d -m 0700 "$root/etc/event-router" "$root/etc/wireguard" "$root/var/lib/event-router"
 systemd-sysusers --root="$root"
 systemctl --root="$root" enable nftables.service systemd-timesyncd.service event-router.target
+systemctl --root="$root" mask apt-daily.service apt-daily-upgrade.service apt-daily.timer apt-daily-upgrade.timer update-notifier-download.service update-notifier-download.timer

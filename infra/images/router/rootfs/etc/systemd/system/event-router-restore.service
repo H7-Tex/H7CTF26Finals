@@ -3,7 +3,7 @@ Description=Restore competition router addresses and active peer state
 Wants=network-online.target
 After=network-online.target nftables.service
 Requires=nftables.service
-Before=event-router-flow-log.service event-router-activate.service event-router-inventory.path
+Before=event-router-flow-log.service event-router-activate.service
 
 [Service]
 Type=oneshot

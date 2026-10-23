@@ -50,8 +50,12 @@ record_phase passed
 phase=cleanup
 record_phase started
 logger --tag gateway-image-seal -- "package_manifest_sha256=$package_sha"
-systemctl stop apt-daily.service apt-daily-upgrade.service update-notifier-download.service || true
-timeout --signal=TERM --kill-after=5s 2m apt-get -o DPkg::Lock::Timeout=120 clean
+timeout --signal=TERM --kill-after=5s 30s systemctl stop apt-daily.service apt-daily-upgrade.service update-notifier-download.service || true
+timeout --signal=TERM --kill-after=5s 2m bash -ceu '
+  until apt-get -o DPkg::Lock::Timeout=10 clean; do
+    sleep 2
+  done
+'
 find /var/lib/apt/lists -mindepth 1 -delete
 rm -f /etc/ssh/ssh_host_*
 unlink /etc/systemd/system/gateway-image-seal.service

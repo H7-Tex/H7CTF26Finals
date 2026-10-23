@@ -1,7 +1,7 @@
 [Unit]
 Description=Apply the active WireGuard peer inventory
-After=nftables.service
-Requires=nftables.service
+After=nftables.service event-router-restore.service
+Requires=nftables.service event-router-restore.service
 ConditionPathExists=/etc/event-router/peers.json
 ConditionPathExists=/etc/wireguard/private.key
 
