@@ -289,14 +289,25 @@ locals {
       echo "gateway role repair is restricted to the operations host" >&2
       exit 1
     }
+    [[ -f /run/finals-commissioning/central_id_ed25519 && ! -L /run/finals-commissioning/central_id_ed25519 ]] || exit 1
     [[ $# -eq 1 ]] || { echo "usage: finals-commission-gateway-role {gateway-primary|gateway-standby}" >&2; exit 2; }
     case "$1" in
-      gateway-primary) address=10.60.250.10; expected=active ;;
-      gateway-standby) address=10.60.250.11; expected=standby ;;
+      gateway-primary)
+        address=10.60.250.10
+        expected=active
+        expected_instance=ocid1.instance.oc1.ap-hyderabad-1.anuhsljrgek2goac3ig6mf6qsd4ax7yacftguhu2qhvn3rjeili2qhmw2kjq
+        expected_name=gateway-primary
+        ;;
+      gateway-standby)
+        address=10.60.250.11
+        expected=standby
+        expected_instance=ocid1.instance.oc1.ap-hyderabad-1.anuhsljrgek2goacxgdwf25buf5ollmxlnw4e77g4y6coln6aqw2uvmovssq
+        expected_name=gateway-standby
+        ;;
       *) echo "unsupported fixed gateway target" >&2; exit 2 ;;
     esac
 
-    exec /usr/bin/ssh \
+    /usr/bin/ssh \
       -F /dev/null \
       -i /run/finals-commissioning/central_id_ed25519 \
       -o BatchMode=yes \
@@ -306,19 +317,28 @@ locals {
       -o StrictHostKeyChecking=yes \
       -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts \
       -- "ubuntu@$address" 'set -euo pipefail
-        platform_role=$(cat /etc/finals-platform/role 2>/dev/null || true)
-        router_role=$(cat /etc/event-router/role 2>/dev/null || true)
-        repair=none
-        case "$platform_role|$router_role" in
-          "|'$expected'" ) ;;
-          "{\"role\":\"production\"}|'$expected'" ) repair=remove-production ;;
-          * ) echo "gateway role tuple is not authorized" >&2; exit 1 ;;
-        esac
-        if [[ $repair == remove-production ]]; then
-          sudo rm -f -- /etc/finals-platform/role
+        metadata=$(curl --fail --silent --show-error --connect-timeout 2 --max-time 5 \
+          -H "Authorization: Bearer Oracle" http://169.254.169.254/opc/v2/instance/)
+        python3 -c "import json,sys; d=json.load(sys.stdin); expected=dict(zip((\"id\",\"image\",\"displayName\"),sys.argv[1:])); raise SystemExit(0 if all(d.get(k)==v for k,v in expected.items()) else 1)" \
+          "'$expected_instance'" \
+          ocid1.image.oc1.ap-hyderabad-1.aaaaaaaaoufvtqzgsc5kacdw6vlxmvre7mvozuwucuyknlm72mhrrojf5hsa \
+          "'$expected_name'" <<<"$metadata"
+        initializer=/usr/local/sbin/event-router-initialize
+        [[ -f $initializer && ! -L $initializer ]]
+        read -r initializer_sha _ < <(sha256sum "$initializer")
+        [[ $initializer_sha == 9e070c898e68e95f6329c8af6e8e62055673a2b8f9e6deb78e030a94f6b24aa0 ]]
+        if [[ ! -e /etc/finals-platform/role && ! -L /etc/finals-platform/role && ! -e /etc/event-router/role && ! -L /etc/event-router/role ]]; then
+          :
+        elif [[ ! -e /etc/finals-platform/role && ! -L /etc/finals-platform/role && -f /etc/event-router/role && ! -L /etc/event-router/role && $(cat /etc/event-router/role) == "'$expected'" ]]; then
+          :
+        else
+          echo "gateway role tuple is not authorized" >&2
+          exit 1
         fi
-        [[ ! -e /etc/finals-platform/role ]]
-        [[ $(cat /etc/event-router/role) == "'$expected'" ]]'
+        sudo -n /usr/local/sbin/event-router-initialize "'$expected'"
+        [[ ! -e /etc/finals-platform/role && ! -L /etc/finals-platform/role ]]
+        [[ -f /etc/event-router/role && ! -L /etc/event-router/role && $(cat /etc/event-router/role) == "'$expected'" ]]
+        sudo -n systemctl is-active --quiet event-router.target'
   SCRIPT
   operations_commission_gateway_role_audit_script = <<-SCRIPT
     #!/usr/bin/env bash
