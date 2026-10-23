@@ -66,6 +66,20 @@ def volume_policy(mount):
 
 
 class VolumeSelectionTests(unittest.TestCase):
+    def test_lsblk_requests_name_to_preserve_parent_child_topology(self):
+        result = subprocess.CompletedProcess(
+            ["lsblk"],
+            0,
+            json.dumps({"blockdevices": []}),
+            "",
+        )
+        with mock.patch.object(MODULE.subprocess, "run", return_value=result) as runner:
+            self.assertEqual(MODULE.lsblk(), {"blockdevices": []})
+        self.assertEqual(
+            runner.call_args.args[0],
+            ["lsblk", "--json", "--bytes", "--output", "NAME,PATH,TYPE,SIZE,FSTYPE,LABEL,MOUNTPOINTS"],
+        )
+
     def test_selects_only_blank_non_root_disk_in_role_range(self):
         document = {"blockdevices": [
             disk("/dev/sda", 50 * MODULE.GIB, root=True),

@@ -69,7 +69,7 @@ def select_data_disk(document, role):
 def lsblk():
     try:
         result = subprocess.run(
-            ["lsblk", "--json", "--bytes", "--output", "PATH,TYPE,SIZE,FSTYPE,LABEL,MOUNTPOINTS"],
+            ["lsblk", "--json", "--bytes", "--output", "NAME,PATH,TYPE,SIZE,FSTYPE,LABEL,MOUNTPOINTS"],
             check=True,
             capture_output=True,
             text=True,
