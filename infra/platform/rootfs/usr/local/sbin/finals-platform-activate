@@ -38,6 +38,9 @@ install_relay_sudoers() {
 
 systemctl enable --now finals-host-firewall.service
 case "$role" in
+  operations)
+    install_relay_sudoers operations-relay
+    ;;
   platform)
     install_relay_sudoers anvil
     for unit in anvil-finals.service anvil-finals-backup.service anvil-finals-backup.timer; do
