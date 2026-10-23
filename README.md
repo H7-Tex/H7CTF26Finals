@@ -9,6 +9,8 @@ Private source repository for the H7CTF'26 Finals: a 24-hour Attack–Defense ev
 - `infra/terraform/` — reproducible OCI-primary, GCP-backup, and Cloudflare infrastructure.
 - `infra/images/` — image-building and host-bootstrap inputs.
 - `infra/checkers/` — default-off private checker import, supervision and commissioning.
+- `infra/integration/` — static challenge/platform contract validation before image creation.
+- `infra/acceptance/` — fail-closed validation of the complete private staging evidence bundle.
 - `infra/reconciler/` — private desired-state distribution from Anvil to both VPN gateways.
 - `ops/` — runbooks, rehearsals, monitoring, recovery, and event configuration.
 - `docs/` — author contracts and internal architecture decisions.

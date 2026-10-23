@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "candidate": {
+    "infrastructure_commit": "REPLACE_WITH_40_HEX_COMMIT",
+    "anvil_commit": "REPLACE_WITH_40_HEX_COMMIT",
+    "challenge_commit": "REPLACE_WITH_40_HEX_COMMIT"
+  },
+  "inventory": {
+    "attack_defense": [],
+    "hills": []
+  },
+  "checks": []
+}
