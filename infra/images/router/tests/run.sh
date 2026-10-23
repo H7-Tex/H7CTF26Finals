@@ -41,6 +41,7 @@ grep -Fq 'ip daddr @production_addresses tcp dport @service_ports snat to 10.60.
 grep -Fq 'ip daddr @staging_addresses tcp dport @service_ports snat to 10.60.250.120' "$ROUTER_DIR/rootfs/etc/nftables.conf"
 grep -Fq 'set archive_https_ports {' "$ROUTER_DIR/rootfs/etc/nftables.conf"
 grep -Fq 'set archive_imds_ports {' "$ROUTER_DIR/rootfs/etc/nftables.conf"
+grep -Fq 'ip daddr 169.254.169.254 tcp dport 80 accept' "$ROUTER_DIR/rootfs/etc/nftables.conf"
 grep -Fq 'ip daddr 169.254.169.254 tcp dport @archive_imds_ports accept' "$ROUTER_DIR/rootfs/etc/nftables.conf"
 grep -Fq 'tcp dport @archive_https_ports accept' "$ROUTER_DIR/rootfs/etc/nftables.conf"
 grep -Fq 'tcp dport @archive_https_ports snat ip to 10.60.250.101' "$ROUTER_DIR/rootfs/etc/nftables.conf"
