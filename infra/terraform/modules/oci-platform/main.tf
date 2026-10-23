@@ -162,6 +162,41 @@ locals {
       -- ubuntu@10.60.200.10 \
       'sudo chmod 0644 /etc/ssh/operations_relay_authorized_keys_ubuntu && sudo /usr/sbin/sshd -t && sudo systemctl reload ssh.service && sudo /usr/local/sbin/finals-install-secret-bundle anvil' < "$temporary"
   SCRIPT
+  operations_commission_inventory_script   = <<-SCRIPT
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    [[ $EUID -eq 0 ]] || { echo "inventory commissioning wrapper must run as root" >&2; exit 1; }
+    [[ $(cat /etc/finals-platform/role 2>/dev/null) == '{"role":"operations"}' ]] || {
+      echo "inventory commissioning wrapper is restricted to the operations host" >&2
+      exit 1
+    }
+    [[ $# -eq 1 ]] || { echo "usage: finals-commission-inventory {gateway-primary|gateway-standby}" >&2; exit 2; }
+    case "$1" in
+      gateway-primary) address=10.60.250.10 ;;
+      gateway-standby) address=10.60.250.11 ;;
+      *) echo "unsupported fixed inventory target" >&2; exit 2 ;;
+    esac
+
+    temporary=$(mktemp /run/finals-peer-inventory.XXXXXX)
+    trap 'rm -f -- "$temporary"' EXIT
+    dd bs=262145 count=1 status=none > "$temporary"
+    [[ -s $temporary && $(stat -c '%s' "$temporary") -le 262144 ]] || {
+      echo "inventory has an invalid size" >&2
+      exit 1
+    }
+
+    exec /usr/bin/ssh \
+      -F /dev/null \
+      -i /etc/finals-platform/operations/id_ed25519 \
+      -o BatchMode=yes \
+      -o ConnectTimeout=10 \
+      -o IdentitiesOnly=yes \
+      -o PasswordAuthentication=no \
+      -o StrictHostKeyChecking=yes \
+      -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts \
+      -- "peer-reconciler@$address" < "$temporary"
+  SCRIPT
   operations_commission_sudoers            = <<-SUDOERS
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh gateway-primary gateway-wireguard
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh gateway-primary gateway-reconciler
@@ -175,12 +210,15 @@ locals {
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume gateway-primary volume-initialize
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume gateway-standby volume-initialize
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-secret platform anvil
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-inventory gateway-primary
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-inventory gateway-standby
   SUDOERS
   operations_commission_runcmd = join("\n", [
     "  - |",
     "    set -eu",
     "    printf '%s' '${base64encode(local.operations_commission_script)}' | base64 -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-volume",
     "    printf '%s' '${base64encode(local.operations_commission_secret_script)}' | base64 -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-secret",
+    "    printf '%s' '${base64encode(local.operations_commission_inventory_script)}' | base64 -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-inventory",
     "    temporary=$(mktemp /etc/sudoers.d/.finals-operations-commissioning.XXXXXX)",
     "    printf '%s' '${base64encode(local.operations_commission_sudoers)}' | base64 -d > \"$temporary\"",
     "    chmod 0440 \"$temporary\"",
