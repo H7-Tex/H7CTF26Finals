@@ -368,8 +368,44 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertNotIn("finals-commission-secret platform *", platform)
         self.assertNotIn("finals-commission-volume platform *", platform)
         self.assertIn("operations_commission_secret_script", platform)
-        self.assertIn("base64encode(local.operations_commission_secret_script)", platform)
+        self.assertIn("base64gzip(local.operations_commission_secret_script)", platform)
+        self.assertNotIn("base64encode(local.operations_commission_", platform)
+        self.assertIn("| gzip -d | install", platform)
         self.assertIn("c760f5097b671cfa1423bd30b407cbbc9cb415fe4a82510d84c9120818143a19", platform)
+        for action in (
+            "reconcile-once",
+            "reconciler-enable",
+            "control-status",
+        ):
+            fixed = f"ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-action {action}"
+            self.assertEqual(platform.count(fixed), 1)
+        self.assertNotIn("finals-commission-control-action *", platform)
+        control_wrapper = platform[
+            platform.index("operations_commission_control_action_script"):
+            platform.index("operations_commission_control_secret_script")
+        ]
+        self.assertIn("-- ubuntu@10.60.201.20", control_wrapper)
+        self.assertIn("unsupported fixed control action", control_wrapper)
+        self.assertNotIn('"$@"', control_wrapper)
+        self.assertNotIn("eval ", control_wrapper)
+        self.assertNotIn("bash -c", control_wrapper)
+        for bundle in ("control-reconciler", "control-checkers"):
+            fixed = f"ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-secret {bundle}"
+            self.assertEqual(platform.count(fixed), 1)
+        self.assertNotIn("finals-commission-control-secret *", platform)
+        control_secret = platform[
+            platform.index("operations_commission_control_secret_script"):
+            platform.index("operations_commission_stage_central_script")
+        ]
+        self.assertIn("dd bs=65537 count=1", control_secret)
+        self.assertIn("-le 65536", control_secret)
+        self.assertIn("StrictHostKeyChecking=yes", control_secret)
+        self.assertIn("-- ubuntu@10.60.201.20", control_secret)
+        self.assertIn('case "$1" in', control_secret)
+        self.assertIn("control-reconciler|control-checkers", control_secret)
+        self.assertNotIn('"$@"', control_secret)
+        self.assertNotIn("eval ", control_secret)
+        self.assertNotIn("bash -c", control_secret)
         self.assertIn("relay_authorized_keys_readable_roles", platform)
         self.assertIn("finals-commission-volume gateway-primary volume-initialize", platform)
         self.assertIn("finals-commission-volume gateway-standby volume-initialize", platform)
@@ -377,6 +413,10 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn("sudo /opt/anvil/current/deployments/finals/preflight.sh", platform)
         self.assertIn("sudo systemctl is-active --quiet anvil-finals.service", platform)
         self.assertIn("--resolve finals.h7tex.com:443:10.60.200.10", platform)
+        self.assertIn("COUNT(*) FILTER (WHERE name IS NULL OR checksum IS NULL)", platform)
+        self.assertIn("systemctl start anvil-finals-backup.service", platform)
+        self.assertIn("backup_after -gt $backup_before", platform)
+        self.assertIn('test -s "$latest_backup/SHA256SUMS"', platform)
         self.assertIn('stat -c \"%u:%g:%a\" /srv/anvil/postgres) == 70:70:700', platform)
         self.assertIn('stat -c \"%u:%g:%a\" /srv/anvil/storage) == 0:0:700', platform)
         self.assertIn('stat -c \"%u:%g:%a\" /srv/anvil/backups) == 0:0:700', platform)
@@ -420,14 +460,23 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertEqual(platform.count("sudo -n /usr/local/sbin/event-router-initialize"), 1)
         self.assertIn("sudo -n systemctl is-active --quiet event-router.target", platform)
         self.assertIn("! -e /etc/finals-platform/role && ! -L /etc/finals-platform/role", platform)
-        self.assertIn("! -e /etc/event-router/role && ! -L /etc/event-router/role", platform)
+        self.assertIn("sudo -n test ! -e /etc/event-router/role", platform)
+        self.assertIn("sudo -n test -f /etc/event-router/role", platform)
+        self.assertIn("sudo -n test ! -L /etc/event-router/role", platform)
+        self.assertIn("sudo -n cat /etc/event-router/role", platform)
+        self.assertNotIn("$(cat /etc/event-router/role)", platform)
+        self.assertNotIn("router=$(cat /etc/event-router/role", platform)
         self.assertIn('echo "gateway role tuple is not authorized"', platform)
         self.assertNotIn("repair=remove-production", platform)
         self.assertNotIn("sudo rm -f -- /etc/finals-platform/role", platform)
         self.assertNotIn('install -D -m 0644 /dev/stdin /etc/event-router/role', platform)
-        self.assertIn('test ! -L /etc/event-router/reconciler_authorized_key', platform)
-        self.assertIn('sudo -n /usr/local/sbin/event-router-authorize-reconciler /etc/event-router/reconciler_authorized_key', platform)
+        authorizer = 'sudo -n /usr/local/sbin/event-router-authorize-reconciler /etc/event-router/reconciler_authorized_key'
+        self.assertEqual(platform.count(authorizer), 1)
+        self.assertNotIn('test -f /etc/event-router/reconciler_authorized_key', platform)
+        self.assertNotIn('test ! -L /etc/event-router/reconciler_authorized_key', platform)
         self.assertNotIn('event-router-authorize-reconciler "$1"', platform)
+        self.assertNotIn('event-router-authorize-reconciler "$@"', platform)
+        self.assertNotRegex(platform, r"sudo -n (?:/bin/)?(?:ba)?sh(?:\\s|$)")
         self.assertNotIn("peer-reconciler@$address", platform)
         standby = platform[platform.index("gateway-standby)"):platform.index("esac", platform.index("gateway-standby)"))]
         self.assertIn("sha256sum -c -", standby)

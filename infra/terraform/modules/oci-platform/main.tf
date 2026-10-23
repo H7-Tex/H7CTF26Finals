@@ -102,7 +102,7 @@ locals {
     case "$target" in
       platform)
         address=10.60.200.10
-        post_command='set -Eeuo pipefail; sudo systemctl restart finals-volume@anvil.service; mountpoint -q /srv/anvil; [[ $(sudo stat -c "%u:%g:%a" /srv/anvil/postgres) == 70:70:700 ]]; [[ $(sudo stat -c "%u:%g:%a" /srv/anvil/storage) == 0:0:700 ]]; [[ $(sudo stat -c "%u:%g:%a" /srv/anvil/backups) == 0:0:700 ]]; sudo test -s /etc/anvil/finals.env; sudo test -s /etc/anvil/tls/fullchain.pem; sudo test -s /etc/anvil/tls/privkey.pem; sudo /opt/anvil/current/deployments/finals/preflight.sh; sudo systemctl enable anvil-finals.service anvil-finals-backup.timer; sudo systemctl restart anvil-finals.service; sudo systemctl start anvil-finals-backup.timer; sudo systemctl is-active --quiet anvil-finals.service; curl --fail --silent --show-error --output /dev/null --connect-timeout 5 --max-time 15 --proto "=https" --tlsv1.2 --resolve finals.h7tex.com:443:10.60.200.10 https://finals.h7tex.com/'
+        post_command='set -Eeuo pipefail; sudo systemctl restart finals-volume@anvil.service; mountpoint -q /srv/anvil; [[ $(sudo stat -c "%u:%g:%a" /srv/anvil/postgres) == 70:70:700 ]]; [[ $(sudo stat -c "%u:%g:%a" /srv/anvil/storage) == 0:0:700 ]]; [[ $(sudo stat -c "%u:%g:%a" /srv/anvil/backups) == 0:0:700 ]]; sudo test -s /etc/anvil/finals.env; sudo test -s /etc/anvil/tls/fullchain.pem; sudo test -s /etc/anvil/tls/privkey.pem; sudo /opt/anvil/current/deployments/finals/preflight.sh; sudo systemctl enable anvil-finals.service anvil-finals-backup.timer; sudo systemctl restart anvil-finals.service; sudo systemctl start anvil-finals-backup.timer; sudo systemctl is-active --quiet anvil-finals.service; curl --fail --silent --show-error --output /dev/null --connect-timeout 5 --max-time 15 --proto "=https" --tlsv1.2 --resolve finals.h7tex.com:443:10.60.200.10 https://finals.h7tex.com/; migration_ok=$(sudo /usr/bin/docker compose --project-name anvil-finals --project-directory /opt/anvil/current/deployments/finals --env-file /etc/anvil/finals.env -f /opt/anvil/current/deployments/finals/compose.yaml exec -T postgres psql --username anvil --dbname anvil --tuples-only --no-align --command "SELECT (COUNT(*) > 0 AND COUNT(*) FILTER (WHERE name IS NULL OR checksum IS NULL) = 0)::text FROM schema_migrations;"); [[ $migration_ok == t ]]; backup_before=$(sudo find /srv/anvil/backups -mindepth 1 -maxdepth 1 -type d -name "anvil-*" -printf "." | wc -c); sudo systemctl start anvil-finals-backup.service; [[ $(sudo systemctl show --property=Result --value anvil-finals-backup.service) == success ]]; backup_after=$(sudo find /srv/anvil/backups -mindepth 1 -maxdepth 1 -type d -name "anvil-*" -printf "." | wc -c); [[ $backup_after -gt $backup_before ]]; latest_backup=$(sudo find /srv/anvil/backups -mindepth 1 -maxdepth 1 -type d -name "anvil-*" -printf "%T@ %p\n" | sort -n | tail -n 1 | cut -d " " -f 2-); [[ -n $latest_backup && $(sudo stat -c "%u:%g:%a" "$latest_backup") == 0:0:700 ]]; sudo test -s "$latest_backup/database.dump"; sudo test -s "$latest_backup/storage.tar.gz"; sudo test -s "$latest_backup/SHA256SUMS"'
         ;;
       gateway-primary)
         address=10.60.250.10
@@ -150,7 +150,7 @@ locals {
     trap 'rm -f -- "$temporary"' EXIT
     cat > "$temporary"
     printf '%s  %s\n' "${local.operations_commission_anvil_sha256}" "$temporary" | sha256sum -c - >/dev/null
-    /usr/bin/ssh \
+    exec /usr/bin/ssh \
       -F /dev/null \
       -i /run/finals-commissioning/central_id_ed25519 \
       -o BatchMode=yes \
@@ -161,6 +161,64 @@ locals {
       -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts \
       -- ubuntu@10.60.200.10 \
       'sudo chmod 0644 /etc/ssh/operations_relay_authorized_keys_ubuntu && sudo /usr/sbin/sshd -t && sudo systemctl reload ssh.service && sudo /usr/local/sbin/finals-install-secret-bundle anvil' < "$temporary"
+  SCRIPT
+  operations_commission_control_action_script     = <<-SCRIPT
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    [[ $EUID -eq 0 ]] || { echo "control action wrapper must run as root" >&2; exit 1; }
+    [[ $(cat /etc/finals-platform/role 2>/dev/null) == '{"role":"operations"}' ]] || exit 1
+    [[ -f /run/finals-commissioning/central_id_ed25519 && ! -L /run/finals-commissioning/central_id_ed25519 ]] || exit 1
+    [[ $# -eq 1 ]] || { echo "usage: finals-commission-control-action ACTION" >&2; exit 2; }
+    case "$1" in
+      reconcile-once)
+        remote='set -euo pipefail; sudo -n systemctl start peer-reconciler.service; [[ $(sudo -n systemctl show --property=Result --value peer-reconciler.service) == success ]]; echo peer-reconciler-once=success'
+        ;;
+      reconciler-enable)
+        remote='set -euo pipefail; sudo -n systemctl enable --now peer-reconciler.timer >/dev/null; sudo -n systemctl is-active --quiet peer-reconciler.timer; echo peer-reconciler-timer=active'
+        ;;
+      control-status)
+        remote='set -euo pipefail; for unit in checker-runtime.service peer-reconciler.service peer-reconciler.timer; do state=$(sudo -n systemctl is-active "$unit" 2>/dev/null || true); case "$state" in active|inactive|failed|activating|deactivating) ;; *) state=unknown ;; esac; printf "%s=%s\n" "$unit" "$state"; done; if curl --fail --silent --output /dev/null --connect-timeout 2 --max-time 3 http://127.0.0.1:9160/readyz; then echo checker-ready=yes; else echo checker-ready=no; fi'
+        ;;
+      *) echo "unsupported fixed control action" >&2; exit 2 ;;
+    esac
+    /usr/bin/ssh \
+      -F /dev/null \
+      -i /run/finals-commissioning/central_id_ed25519 \
+      -o BatchMode=yes \
+      -o ConnectTimeout=10 \
+      -o IdentitiesOnly=yes \
+      -o PasswordAuthentication=no \
+      -o StrictHostKeyChecking=yes \
+      -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts \
+      -- ubuntu@10.60.201.20 "$remote"
+  SCRIPT
+  operations_commission_control_secret_script     = <<-SCRIPT
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    [[ $EUID -eq 0 ]] || { echo "control secret commissioning must run as root" >&2; exit 1; }
+    [[ $(cat /etc/finals-platform/role 2>/dev/null) == '{"role":"operations"}' ]] || exit 1
+    [[ -f /run/finals-commissioning/central_id_ed25519 && ! -L /run/finals-commissioning/central_id_ed25519 ]] || exit 1
+    [[ $# -eq 1 ]] || { echo "usage: finals-commission-control-secret BUNDLE" >&2; exit 2; }
+    case "$1" in
+      control-reconciler|control-checkers) bundle=$1 ;;
+      *) echo "unsupported fixed control secret bundle" >&2; exit 2 ;;
+    esac
+    temporary=$(mktemp /run/finals-control-secret.XXXXXX)
+    trap 'rm -f -- "$temporary"' EXIT
+    dd bs=65537 count=1 status=none > "$temporary"
+    [[ -s $temporary && $(stat -c '%s' "$temporary") -le 65536 ]] || exit 1
+    /usr/bin/ssh \
+      -F /dev/null \
+      -i /run/finals-commissioning/central_id_ed25519 \
+      -o BatchMode=yes \
+      -o ConnectTimeout=10 \
+      -o IdentitiesOnly=yes \
+      -o PasswordAuthentication=no \
+      -o StrictHostKeyChecking=yes \
+      -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts \
+      -- ubuntu@10.60.201.20 "sudo -n /usr/local/sbin/finals-install-secret-bundle $bundle" < "$temporary"
   SCRIPT
   operations_commission_stage_central_script      = <<-SCRIPT
     #!/usr/bin/env bash
@@ -278,7 +336,7 @@ locals {
       -o StrictHostKeyChecking=yes \
       -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts \
       -- "ubuntu@$address" \
-      'set -euo pipefail; test -f /etc/event-router/reconciler_authorized_key; test ! -L /etc/event-router/reconciler_authorized_key; sudo -n /usr/local/sbin/event-router-authorize-reconciler /etc/event-router/reconciler_authorized_key'
+      'sudo -n /usr/local/sbin/event-router-authorize-reconciler /etc/event-router/reconciler_authorized_key'
   SCRIPT
   operations_commission_gateway_role_script       = <<-SCRIPT
     #!/usr/bin/env bash
@@ -327,9 +385,9 @@ locals {
         [[ -f $initializer && ! -L $initializer ]]
         read -r initializer_sha _ < <(sha256sum "$initializer")
         [[ $initializer_sha == 9e070c898e68e95f6329c8af6e8e62055673a2b8f9e6deb78e030a94f6b24aa0 ]]
-        if [[ ! -e /etc/finals-platform/role && ! -L /etc/finals-platform/role && ! -e /etc/event-router/role && ! -L /etc/event-router/role ]]; then
+        if [[ ! -e /etc/finals-platform/role && ! -L /etc/finals-platform/role ]] && sudo -n test ! -e /etc/event-router/role && sudo -n test ! -L /etc/event-router/role; then
           :
-        elif [[ ! -e /etc/finals-platform/role && ! -L /etc/finals-platform/role && -f /etc/event-router/role && ! -L /etc/event-router/role && $(cat /etc/event-router/role) == "'$expected'" ]]; then
+        elif [[ ! -e /etc/finals-platform/role && ! -L /etc/finals-platform/role ]] && sudo -n test -f /etc/event-router/role && sudo -n test ! -L /etc/event-router/role && [[ $(sudo -n cat /etc/event-router/role) == "'$expected'" ]]; then
           :
         else
           echo "gateway role tuple is not authorized" >&2
@@ -337,7 +395,9 @@ locals {
         fi
         sudo -n /usr/local/sbin/event-router-initialize "'$expected'"
         [[ ! -e /etc/finals-platform/role && ! -L /etc/finals-platform/role ]]
-        [[ -f /etc/event-router/role && ! -L /etc/event-router/role && $(cat /etc/event-router/role) == "'$expected'" ]]
+        sudo -n test -f /etc/event-router/role
+        sudo -n test ! -L /etc/event-router/role
+        [[ $(sudo -n cat /etc/event-router/role) == "'$expected'" ]]
         sudo -n systemctl is-active --quiet event-router.target'
   SCRIPT
   operations_commission_gateway_role_audit_script = <<-SCRIPT
@@ -356,7 +416,13 @@ locals {
       -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts \
       -- "ubuntu@$address" 'set -euo pipefail
         platform=$(cat /etc/finals-platform/role 2>/dev/null || true)
-        router=$(cat /etc/event-router/role 2>/dev/null || true)
+        if sudo -n test ! -e /etc/event-router/role && sudo -n test ! -L /etc/event-router/role; then
+          router=
+        elif sudo -n test -f /etc/event-router/role && sudo -n test ! -L /etc/event-router/role; then
+          router=$(sudo -n cat /etc/event-router/role)
+        else
+          router=__unexpected__
+        fi
         case "$platform" in
           "") platform_category=absent ;;
           "{\"role\":\"production\"}") platform_category=production ;;
@@ -377,6 +443,11 @@ locals {
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh repository repository
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-secret platform anvil
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform volume-initialize
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-action reconcile-once
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-action reconciler-enable
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-action control-status
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-secret control-reconciler
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-secret control-checkers
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume gateway-primary volume-initialize
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume gateway-standby volume-initialize
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-stage-central
@@ -395,16 +466,18 @@ locals {
   operations_commission_runcmd = join("\n", [
     "  - |",
     "    set -eu",
-    "    printf '%s' '${base64encode(local.operations_commission_script)}' | base64 -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-volume",
-    "    printf '%s' '${base64encode(local.operations_commission_secret_script)}' | base64 -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-secret",
-    "    printf '%s' '${base64encode(local.operations_commission_stage_central_script)}' | base64 -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-stage-central",
-    "    printf '%s' '${base64encode(local.operations_commission_clear_central_script)}' | base64 -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-clear-central",
-    "    printf '%s' '${base64encode(local.operations_commission_gateway_secret_script)}' | base64 -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-gateway-secret",
-    "    printf '%s' '${base64encode(local.operations_commission_gateway_authorizer_script)}' | base64 -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-gateway-authorizer",
-    "    printf '%s' '${base64encode(local.operations_commission_gateway_role_script)}' | base64 -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-gateway-role",
-    "    printf '%s' '${base64encode(local.operations_commission_gateway_role_audit_script)}' | base64 -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-gateway-role-audit",
+    "    printf '%s' '${base64gzip(local.operations_commission_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-volume",
+    "    printf '%s' '${base64gzip(local.operations_commission_secret_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-secret",
+    "    printf '%s' '${base64gzip(local.operations_commission_control_action_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-control-action",
+    "    printf '%s' '${base64gzip(local.operations_commission_control_secret_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-control-secret",
+    "    printf '%s' '${base64gzip(local.operations_commission_stage_central_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-stage-central",
+    "    printf '%s' '${base64gzip(local.operations_commission_clear_central_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-clear-central",
+    "    printf '%s' '${base64gzip(local.operations_commission_gateway_secret_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-gateway-secret",
+    "    printf '%s' '${base64gzip(local.operations_commission_gateway_authorizer_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-gateway-authorizer",
+    "    printf '%s' '${base64gzip(local.operations_commission_gateway_role_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-gateway-role",
+    "    printf '%s' '${base64gzip(local.operations_commission_gateway_role_audit_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-gateway-role-audit",
     "    temporary=$(mktemp /etc/sudoers.d/.finals-operations-commissioning.XXXXXX)",
-    "    printf '%s' '${base64encode(local.operations_commission_sudoers)}' | base64 -d > \"$temporary\"",
+    "    printf '%s' '${base64gzip(local.operations_commission_sudoers)}' | base64 -d | gzip -d > \"$temporary\"",
     "    chmod 0440 \"$temporary\"",
     "    visudo -cf \"$temporary\" >/dev/null",
     "    mv \"$temporary\" /etc/sudoers.d/finals-operations-commissioning",
