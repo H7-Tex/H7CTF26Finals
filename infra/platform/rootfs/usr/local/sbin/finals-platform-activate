@@ -26,10 +26,12 @@ else
 fi
 
 install_relay_sudoers() {
-  local temporary bundle
+  local account=$1 temporary bundle
+  shift
+  [[ $account == ubuntu || $account == ocarun ]] || { echo "unsupported secret relay account" >&2; exit 1; }
   temporary=$(mktemp /etc/sudoers.d/.finals-secret-relay.XXXXXX)
   for bundle in "$@"; do
-    printf 'ubuntu ALL=(root) NOPASSWD: /usr/local/sbin/finals-install-secret-bundle %s\n' "$bundle"
+    printf '%s ALL=(root) NOPASSWD: /usr/local/sbin/finals-install-secret-bundle %s\n' "$account" "$bundle"
   done > "$temporary"
   chmod 0440 "$temporary"
   visudo -cf "$temporary" >/dev/null
@@ -39,10 +41,10 @@ install_relay_sudoers() {
 systemctl enable --now finals-host-firewall.service
 case "$role" in
   operations)
-    install_relay_sudoers operations-relay
+    install_relay_sudoers ocarun operations-relay
     ;;
   platform)
-    install_relay_sudoers anvil
+    install_relay_sudoers ubuntu anvil
     for unit in anvil-finals.service anvil-finals-backup.service anvil-finals-backup.timer; do
       install -D -m 0644 "/opt/anvil/current/deployments/finals/$unit" "/etc/systemd/system/$unit"
     done
@@ -50,7 +52,7 @@ case "$role" in
     systemctl start finals-volume@anvil.service || true
     ;;
   repository)
-    install_relay_sudoers repository
+    install_relay_sudoers ubuntu repository
     install -D -m 0644 /dev/null /etc/ssh/sshd_config.d/95-repository-management.conf
     printf 'Port 2222\n' > /etc/ssh/sshd_config.d/95-repository-management.conf
     sshd -t
@@ -65,7 +67,7 @@ case "$role" in
     systemctl disable finals-mirror.service apt-cacher-ng.service >/dev/null 2>&1 || true
     ;;
   control)
-    install_relay_sudoers control-reconciler control-checkers
+    install_relay_sudoers ubuntu control-reconciler control-checkers
     grep -Eq '^10\.60\.200\.10[[:space:]]+finals\.h7tex\.com([[:space:]]|$)' /etc/hosts || printf '10.60.200.10 finals.h7tex.com\n' >> /etc/hosts
     systemctl disable peer-reconciler.timer checker-runtime.service finals-checkers-ready.service >/dev/null 2>&1 || true
     ;;
