@@ -32,6 +32,7 @@ locals {
     platform         = "${path.module}/../../../../platform"
     reconciler       = "${path.module}/../../../../reconciler"
     secret-bootstrap = "${path.module}/../../../../secrets"
+    team-access      = "${path.module}/../../../../team-access"
     volumes          = "${path.module}/../../../../volumes"
   }
   executable_files = toset([
@@ -77,6 +78,9 @@ locals {
     "secret-bootstrap/install-secret-bundle.py",
     "secret-bootstrap/tests/run.sh",
     "secret-bootstrap/tests/test_relay_receiver.sh",
+    "team-access/install.sh",
+    "team-access/team-access.py",
+    "team-access/tests/run.sh",
     "volumes/initialize-volume.py",
     "volumes/rehearse-production-quota",
     "volumes/tests/run.sh",

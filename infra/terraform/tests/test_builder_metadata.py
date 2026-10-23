@@ -161,11 +161,15 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn('deployment       = "${path.module}/../../../../deployment"', source)
         self.assertIn('checkers         = "${path.module}/../../../../checkers"', source)
         self.assertIn('hills            = "${path.module}/../../../../hills"', source)
+        self.assertIn('team-access      = "${path.module}/../../../../team-access"', source)
         self.assertIn('"deployment/install.sh"', source)
         self.assertIn('"deployment/tests/run.sh"', source)
         self.assertIn('"hills/install.sh"', source)
         self.assertIn('"hills/tests/run.sh"', source)
+        self.assertIn('"team-access/install.sh"', source)
+        self.assertIn('"team-access/tests/run.sh"', source)
         self.assertIn("infra/archive infra/checkers infra/deployment infra/hills infra/images/runtime", package_script)
+        self.assertIn("infra/secrets infra/team-access infra/volumes", package_script)
 
     def test_runtime_builder_preserves_every_source_executable(self):
         source = (ROOT / "terraform/environments/production/oci-runtime-builders/main.tf").read_text(encoding="utf-8")
@@ -181,6 +185,7 @@ class BuilderMetadataTests(unittest.TestCase):
             ROOT / "platform": "platform",
             ROOT / "reconciler": "reconciler",
             ROOT / "secrets": "secret-bootstrap",
+            ROOT / "team-access": "team-access",
             ROOT / "volumes": "volumes",
         }
         expected = set()

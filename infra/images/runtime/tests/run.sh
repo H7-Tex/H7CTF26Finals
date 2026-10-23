@@ -28,6 +28,9 @@ if [[ $role == workbench ]]; then
     command -v "$command" >/dev/null || { echo "missing required workbench command: $command" >&2; exit 1; }
   done
   id -nG ubuntu | tr ' ' '\n' | grep -Fxq docker
+  command -v finals-team-access >/dev/null
+  grep -Fxq 'ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-team-access apply' /etc/sudoers.d/finals-team-access
+  grep -Fxq 'ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-team-access rollback' /etc/sudoers.d/finals-team-access
 else
   ! id -nG ubuntu | tr ' ' '\n' | grep -Fxq docker
 fi

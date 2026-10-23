@@ -98,6 +98,10 @@ if [[ $role == production ]]; then
   rm -rf /var/cache/finals-image-builder /root/.cache/go-build /root/go
   record_phase passed
 fi
+if [[ $role == workbench ]]; then
+  run_phase team-access-tests 5m "$source_dir/team-access/tests/run.sh"
+  run_phase team-access-install 5m "$source_dir/team-access/install.sh"
+fi
 if [[ $role == platform-x86 || $role == platform-arm ]]; then
   run_phase archive-install 10m "$source_dir/archive/install.sh"
   phase=platform-files
