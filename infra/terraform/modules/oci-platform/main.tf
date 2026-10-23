@@ -180,7 +180,7 @@ locals {
     [[ $# -eq 1 ]] || { echo "usage: finals-commission-control-action ACTION" >&2; exit 2; }
     case "$1" in
       reconcile-once)
-        remote='set -uo pipefail; if sudo -n systemctl start peer-reconciler.service && [[ $(sudo -n systemctl show --property=Result --value peer-reconciler.service) == success ]]; then echo peer-reconciler-once=success; else sudo -n systemctl show peer-reconciler.service --property=ActiveState,SubState,Result,ExecMainStatus --no-pager; sudo -n journalctl --unit=peer-reconciler.service --lines=30 --no-pager --output=short-iso; exit 1; fi'
+        remote='set -uo pipefail; if sudo -n systemctl start peer-reconciler.service && [[ $(sudo -n systemctl show --property=Result --value peer-reconciler.service) == success ]]; then echo peer-reconciler-once=success; else sudo -n systemctl show peer-reconciler.service --property=ActiveState,SubState,Result,ExecMainStatus --no-pager; curl -so /dev/null -m 5 https://finals.h7tex.com/api/v1/internal/arena/vpn/peers; echo endpoint-curl=$?; sudo -n journalctl --unit=peer-reconciler.service --lines=30 --no-pager --output=short-iso; exit 1; fi'
         ;;
       reconciler-enable)
         remote='set -euo pipefail; sudo -n systemctl enable --now peer-reconciler.timer >/dev/null; sudo -n systemctl is-active --quiet peer-reconciler.timer; echo peer-reconciler-timer=active'
@@ -546,7 +546,7 @@ locals {
     set -euo pipefail
     # event-time exception to the gateway image: stage the reviewed model a router
     # files (hash pinned), activate them, or flip the production-ssh switch.
-    # stdin header: "gateway-primary|gateway-standby stage NAME|activate|enable|disable"
+    # stdin header: "gateway-primary|gateway-standby stage NAME|activate|enable|disable" or "control stage render|validator"
     [[ $EUID -eq 0 && $(cat /etc/finals-platform/role 2>/dev/null) == '{"role":"operations"}' ]] || exit 1
     central=/run/finals-commissioning/central_id_ed25519
     [[ -f $central && ! -L $central && $# -eq 0 ]] || exit 2
@@ -558,8 +558,10 @@ locals {
     case "$target" in
       gateway-primary) address=10.60.250.10 ;;
       gateway-standby) address=10.60.250.11 ;;
+      control) address=10.60.201.20 ;;
       *) echo "unsupported fixed gateway target" >&2; exit 2 ;;
     esac
+    [[ $target != control || $action == validator || "$action $name" == "stage render" ]] && [[ $target == control || $action != validator ]] || { echo "control takes only the validator" >&2; exit 2; }
     declare -A pinned=(
       [nftables]=b3122786466030efae9b2cb29903116d42aa824d6c703235968222f52807a269
       [render]=a40b74f027e0137442f1f6ddfa1ce4f86b2a490c29716a5716aa9af8c1aa4dc6
@@ -592,6 +594,14 @@ locals {
         ssh_to "set -eu; if [ $action = enable ]; then echo enabled | sudo -n tee /etc/event-router/production-ssh >/dev/null; else sudo -n rm -f /etc/event-router/production-ssh; fi
           sudo -n test ! -f /var/lib/event-router/active-peers.json || sudo -n /usr/local/sbin/event-router-apply-inventory /var/lib/event-router/active-peers.json
           sudo -n nft list set inet event_router peer_production_access | grep -c ' \. ' || true"
+        ;;
+      validator)
+        ssh_to "set -eu; d=/var/lib/event-router/model-a
+          echo '$${pinned[render]}  '\$d/render | sudo -n sha256sum -c --quiet
+          sudo -n install -d -o root -g root -m 0755 /usr/local/libexec/event-router
+          sudo -n install -o root -g root -m 0755 \$d/render /usr/local/libexec/event-router/render_inventory.py
+          echo '$${pinned[render]}  /usr/local/libexec/event-router/render_inventory.py' | sudo -n sha256sum -c --quiet
+          sudo -n -u peer-reconciler test -x /usr/local/libexec/event-router/render_inventory.py && echo validator=installed"
         ;;
       *) echo "unsupported model a action" >&2; exit 2 ;;
     esac
@@ -676,13 +686,6 @@ locals {
     "    mv \"$temporary\" /etc/sudoers.d/finals-operations-commissioning",
     "",
   ])
-  control_validator_runcmd = join("\n", [
-    "  - |",
-    "    set -eu",
-    "    printf '%s' '${base64gzip(file("${path.module}/../../../images/router/rootfs/usr/local/libexec/event-router/render_inventory.py"))}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/libexec/event-router/render_inventory.py",
-    "    printf '%s  %s\\n' '${filesha256("${path.module}/../../../images/router/rootfs/usr/local/libexec/event-router/render_inventory.py")}' /usr/local/libexec/event-router/render_inventory.py | sha256sum -c --quiet",
-  ])
-
   cloud_init_base_by_role = {
     for role in keys(local.hosts) : role => <<-YAML
       #cloud-config
@@ -712,10 +715,6 @@ locals {
       content,
       "  - [\"/usr/local/sbin/finals-platform-activate\", \"operations\"]\n",
       "  - [\"/usr/local/sbin/finals-platform-activate\", \"operations\"]\n${local.operations_commission_runcmd}",
-      ) : role == "control" ? replace(
-      content,
-      "  - [\"/usr/local/sbin/finals-platform-activate\", \"control\"]\n",
-      "${local.control_validator_runcmd}\n  - [\"/usr/local/sbin/finals-platform-activate\", \"control\"]\n",
     ) : content
   }
 }
@@ -736,20 +735,9 @@ check "operations_commission_cloud_init" {
 
   assert {
     condition = alltrue([
-      for role in keys(local.hosts) : contains(["operations", "control"], role) || local.cloud_init_by_role[role] == local.cloud_init_base_by_role[role]
+      for role in keys(local.hosts) : role == "operations" || local.cloud_init_by_role[role] == local.cloud_init_base_by_role[role]
     ])
-    error_message = "The commissioning window must not alter any non-operations/non-control cloud-init payload."
-  }
-}
-
-check "control_validator_cloud_init" {
-  assert {
-    condition = (
-      length(regexall("/usr/local/libexec/event-router/render_inventory.py", local.cloud_init_by_role["control"])) == 2 &&
-      length(base64encode(local.cloud_init_by_role["control"])) +
-      length(trimspace(var.organizer_ssh_authorized_keys)) < 31488
-    )
-    error_message = "Control cloud-init must install the pinned peer inventory validator within the OCI metadata limit."
+    error_message = "The commissioning window must not alter any non-operations cloud-init payload."
   }
 }
 
