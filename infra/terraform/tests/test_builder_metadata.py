@@ -209,7 +209,7 @@ class BuilderMetadataTests(unittest.TestCase):
         root = ROOT / "terraform/environments/production/oci-runtime-builders"
         variables = (root / "variables.tf").read_text(encoding="utf-8")
         example = (root / "terraform.tfvars.example").read_text(encoding="utf-8")
-        revision = "2385596058c0d861981132572f9b3359f0a8a869"
+        revision = "9a99b025748bf0ff823b9e134bf330d59d858059"
         self.assertIn(f'var.anvil_revision == "{revision}"', variables)
         self.assertIn(f'anvil_revision      = "{revision}"', example)
 
