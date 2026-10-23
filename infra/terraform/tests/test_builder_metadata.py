@@ -425,6 +425,7 @@ class BuilderMetadataTests(unittest.TestCase):
         ):
             fixed = f"ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-action {action}"
             self.assertEqual(platform.count(fixed), 1)
+        self.assertIn("journalctl --unit=peer-reconciler.service --lines=30", platform)
         self.assertNotIn("finals-commission-control-action *", platform)
         control_wrapper = platform[
             platform.index("operations_commission_control_action_script"):
