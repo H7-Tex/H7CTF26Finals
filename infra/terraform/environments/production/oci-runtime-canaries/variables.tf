@@ -48,11 +48,11 @@ variable "image_source_revision" {
 
 variable "anvil_revision" {
   type    = string
-  default = "26cbd9a88d53d199ff2f3a0e6d1c9c4c4e8ecbed"
+  default = "764d7bc2be5ca8cb6c62edbb357a87d9924c3fb7"
 
   validation {
-    condition     = var.anvil_revision == "26cbd9a88d53d199ff2f3a0e6d1c9c4c4e8ecbed"
-    error_message = "anvil_revision must be the reviewed Anvil v0.362.1 commit."
+    condition     = var.anvil_revision == "764d7bc2be5ca8cb6c62edbb357a87d9924c3fb7"
+    error_message = "anvil_revision must be the reviewed Anvil v0.365.0 commit."
   }
 }
 
