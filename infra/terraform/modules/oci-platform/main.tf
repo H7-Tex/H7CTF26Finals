@@ -82,9 +82,9 @@ locals {
   operations_relay_authorized_key = "restrict,command=\"/usr/local/sbin/finals-secret-relay-receive\" ${var.operations_relay_ssh_public_key}"
   operations_relay_roles          = toset(["platform", "control", "repository"])
 
-  operations_commission_initializer_sha256 = "eaeb4c33d2c94f59dee9b01b2b6dbce8e8f8adf720e4108f713456f7cf4f69ab"
-  operations_commission_anvil_sha256       = "c760f5097b671cfa1423bd30b407cbbc9cb415fe4a82510d84c9120818143a19"
-  operations_commission_script             = <<-SCRIPT
+  operations_commission_initializer_sha256  = "eaeb4c33d2c94f59dee9b01b2b6dbce8e8f8adf720e4108f713456f7cf4f69ab"
+  operations_commission_anvil_sha256        = "c760f5097b671cfa1423bd30b407cbbc9cb415fe4a82510d84c9120818143a19"
+  operations_commission_script              = <<-SCRIPT
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -133,7 +133,7 @@ locals {
       'sudo install -D -m 0755 /dev/stdin /usr/local/sbin/finals-initialize-volume' < "$temporary"
     /usr/bin/ssh "$${ssh_options[@]}" -- "ubuntu@$address" "$post_command"
   SCRIPT
-  operations_commission_secret_script      = <<-SCRIPT
+  operations_commission_secret_script       = <<-SCRIPT
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -162,7 +162,7 @@ locals {
       -- ubuntu@10.60.200.10 \
       'sudo chmod 0644 /etc/ssh/operations_relay_authorized_keys_ubuntu && sudo /usr/sbin/sshd -t && sudo systemctl reload ssh.service && sudo /usr/local/sbin/finals-install-secret-bundle anvil' < "$temporary"
   SCRIPT
-  operations_commission_inventory_script   = <<-SCRIPT
+  operations_commission_inventory_script    = <<-SCRIPT
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -197,7 +197,48 @@ locals {
       -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts \
       -- "peer-reconciler@$address" < "$temporary"
   SCRIPT
-  operations_commission_sudoers            = <<-SUDOERS
+  operations_commission_gateway_role_script = <<-SCRIPT
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    [[ $EUID -eq 0 ]] || { echo "gateway role repair must run as root" >&2; exit 1; }
+    [[ $(cat /etc/finals-platform/role 2>/dev/null) == '{"role":"operations"}' ]] || {
+      echo "gateway role repair is restricted to the operations host" >&2
+      exit 1
+    }
+    [[ $# -eq 1 ]] || { echo "usage: finals-commission-gateway-role {gateway-primary|gateway-standby}" >&2; exit 2; }
+    case "$1" in
+      gateway-primary) address=10.60.250.10; expected=active ;;
+      gateway-standby) address=10.60.250.11; expected=standby ;;
+      *) echo "unsupported fixed gateway target" >&2; exit 2 ;;
+    esac
+
+    exec /usr/bin/ssh \
+      -F /dev/null \
+      -i /etc/finals-platform/operations/id_ed25519 \
+      -o BatchMode=yes \
+      -o ConnectTimeout=10 \
+      -o IdentitiesOnly=yes \
+      -o PasswordAuthentication=no \
+      -o StrictHostKeyChecking=yes \
+      -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts \
+      -- "ubuntu@$address" 'set -euo pipefail
+        platform_role=$(cat /etc/finals-platform/role 2>/dev/null || true)
+        router_role=$(cat /etc/event-router/role 2>/dev/null || true)
+        case "$platform_role" in
+          "" ) ;;
+          "{\"role\":\"production\"}" ) sudo rm -f -- /etc/finals-platform/role ;;
+          * ) echo "gateway has an unexpected platform role marker" >&2; exit 1 ;;
+        esac
+        case "$router_role" in
+          "'$expected'" ) ;;
+          "" ) printf "%s\n" "'$expected'" | sudo install -D -m 0644 /dev/stdin /etc/event-router/role ;;
+          * ) echo "gateway has an unexpected router role marker" >&2; exit 1 ;;
+        esac
+        [[ ! -e /etc/finals-platform/role ]]
+        [[ $(cat /etc/event-router/role) == "'$expected'" ]]'
+  SCRIPT
+  operations_commission_sudoers             = <<-SUDOERS
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh gateway-primary gateway-wireguard
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh gateway-primary gateway-reconciler
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh gateway-standby gateway-wireguard
@@ -212,6 +253,8 @@ locals {
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-secret platform anvil
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-inventory gateway-primary
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-inventory gateway-standby
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-gateway-role gateway-primary
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-gateway-role gateway-standby
   SUDOERS
   operations_commission_runcmd = join("\n", [
     "  - |",
@@ -219,6 +262,7 @@ locals {
     "    printf '%s' '${base64encode(local.operations_commission_script)}' | base64 -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-volume",
     "    printf '%s' '${base64encode(local.operations_commission_secret_script)}' | base64 -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-secret",
     "    printf '%s' '${base64encode(local.operations_commission_inventory_script)}' | base64 -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-inventory",
+    "    printf '%s' '${base64encode(local.operations_commission_gateway_role_script)}' | base64 -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-gateway-role",
     "    temporary=$(mktemp /etc/sudoers.d/.finals-operations-commissioning.XXXXXX)",
     "    printf '%s' '${base64encode(local.operations_commission_sudoers)}' | base64 -d > \"$temporary\"",
     "    chmod 0440 \"$temporary\"",
