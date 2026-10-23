@@ -276,12 +276,13 @@ class BuilderMetadataTests(unittest.TestCase):
         package_script = (ROOT / "terraform/scripts/package-oci-stack.sh").read_text(encoding="utf-8")
         self.assertIn("oci-ingress) PATHS+=(infra/images/router)", package_script)
 
-    def test_platform_package_includes_firewall_source(self):
+    def test_platform_package_includes_commissioning_sources(self):
         package_script = (ROOT / "terraform/scripts/package-oci-stack.sh").read_text(encoding="utf-8")
-        self.assertIn(
-            "oci-platform) PATHS+=(infra/platform/rootfs/usr/local/libexec/finals-platform/firewall)",
-            package_script,
-        )
+        for path in (
+            "infra/platform/rootfs/usr/local/libexec/finals-platform/firewall",
+            "infra/images/router/rootfs/usr/local/libexec/event-router/render_inventory.py",
+        ):
+            self.assertIn(path, package_script)
 
     def test_runtime_builder_replaces_for_par_and_user_data_changes(self):
         source = (ROOT / "terraform/environments/production/oci-runtime-builders/main.tf").read_text(encoding="utf-8")
@@ -432,30 +433,34 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn("UserKnownHostsFile=/etc/finals-platform/operations/known_hosts", platform)
         platform_secret = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-secret platform anvil"
         platform_volume = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform volume-initialize"
-        platform_audit = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform anvil-audit"
+        platform_quiesce = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform platform-quiesce"
         self.assertEqual(platform.count(platform_secret), 1)
         self.assertEqual(platform.count(platform_volume), 1)
-        self.assertEqual(platform.count(platform_audit), 1)
+        self.assertEqual(platform.count(platform_quiesce), 1)
         self.assertNotIn("finals-commission-secret platform *", platform)
         self.assertNotIn("finals-commission-volume platform *", platform)
-        self.assertIn("anvil-audit-complete", platform)
-        self.assertIn("--lines=30", platform)
+        self.assertIn("platform-quiesce=complete", platform)
+        self.assertIn("systemctl disable --now anvil-finals-backup.timer", platform)
+        self.assertIn("--property=ExecMainStatus --value anvil-finals-backup.service", platform)
+        self.assertIn("sha256sum --check --strict SHA256SUMS", platform)
+        self.assertIn("ps --status running --quiet", platform)
+        self.assertIn("umount /srv/anvil", platform)
+        self.assertNotIn("anvil-audit-complete", platform)
+        self.assertNotIn("admin-promote", platform)
         self.assertIn("operations_commission_secret_script", platform)
         self.assertIn("base64gzip(local.operations_commission_secret_script)", platform)
         self.assertNotIn("base64encode(local.operations_commission_", platform)
         self.assertIn("| gzip -d | install", platform)
         self.assertIn("c760f5097b671cfa1423bd30b407cbbc9cb415fe4a82510d84c9120818143a19", platform)
         for action in (
-            "reconcile-once",
             "reconciler-enable",
-            "control-status",
+            "state-export",
+            "state-restore",
         ):
             fixed = f"ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-action {action}"
             self.assertEqual(platform.count(fixed), 1)
-        self.assertIn("journalctl --unit=peer-reconciler.service --lines=3 --reverse", platform)
         self.assertIn("reconciler-access)", platform)
         self.assertIn("sudo -n chmod 0755 \\$h; sudo -n chmod 0644 \\$h/authorized_keys", platform)
-        self.assertIn("finals-commission-volume platform admin-promote", platform)
         self.assertNotIn("finals-commission-control-action *", platform)
         control_wrapper = platform[
             platform.index("operations_commission_control_action_script"):
@@ -466,6 +471,20 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertNotIn('"$@"', control_wrapper)
         self.assertNotIn("eval ", control_wrapper)
         self.assertNotIn("bash -c", control_wrapper)
+        self.assertIn("control-reconciler-state.tar", control_wrapper)
+        self.assertIn("systemctl disable --now peer-reconciler.timer", control_wrapper)
+        self.assertIn("--format=ustar --owner=0 --group=0 --numeric-owner", control_wrapper)
+        self.assertIn("tarfile as t", control_wrapper)
+        self.assertIn("render_inventory.py", control_wrapper)
+        self.assertIn("state-export=complete", control_wrapper)
+        self.assertIn("state-restore=complete", control_wrapper)
+        self.assertIn("active-file-sha256", control_wrapper)
+        self.assertIn("findmnt -n -o FSTYPE /run", control_wrapper)
+        self.assertIn("-le 532480", control_wrapper)
+        self.assertIn("pending-generation", control_wrapper)
+        self.assertNotIn("cat /var/lib/peer-reconciler/active.json", control_wrapper)
+        self.assertIn("base64gzip(local.operations_commission_action_bundle)", platform)
+        self.assertNotIn("base64gzip(local.operations_commission_control_action_script)", platform)
         for bundle in ("control-reconciler", "control-checkers"):
             fixed = f"ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-secret {bundle}"
             self.assertEqual(platform.count(fixed), 1)
@@ -557,11 +576,7 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn('length(trimspace(var.organizer_ssh_authorized_keys)) < 31488', platform)
         self.assertIn("finals-commission-gateway-role gateway-primary", platform)
         self.assertIn("finals-commission-gateway-role gateway-standby", platform)
-        self.assertIn("finals-commission-gateway-role-audit gateway-primary", platform)
-        self.assertIn("finals-commission-gateway-role-audit gateway-standby", platform)
-        self.assertIn("platform_category=unexpected", platform)
-        self.assertIn("router_category=unexpected", platform)
-        self.assertIn('*) echo "unsupported fixed gateway audit target"', platform)
+        self.assertNotIn("finals-commission-gateway-role-audit", platform)
         self.assertIn("address=10.60.250.10", platform)
         self.assertIn("expected=active", platform)
         self.assertIn("address=10.60.250.11", platform)
