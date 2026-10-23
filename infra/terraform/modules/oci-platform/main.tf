@@ -189,6 +189,10 @@ locals {
   }
 }
 
+resource "terraform_data" "operations_generation" {
+  input = "bootstrap"
+}
+
 resource "oci_core_instance" "host" {
   for_each = local.hosts
 

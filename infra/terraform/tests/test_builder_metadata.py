@@ -291,6 +291,8 @@ class BuilderMetadataTests(unittest.TestCase):
         initializer = (ROOT / "volumes/initialize-volume.py").read_bytes()
         self.assertIn(hashlib.sha256(initializer).hexdigest(), platform)
         self.assertIn("operations_commission_script", platform)
+        self.assertIn('resource "terraform_data" "operations_generation"', platform)
+        self.assertIn('input = "bootstrap"', platform)
         self.assertIn("StrictHostKeyChecking=yes", platform)
         self.assertIn("UserKnownHostsFile=/etc/finals-platform/operations/known_hosts", platform)
         self.assertIn("finals-commission-volume platform volume-initialize", platform)
