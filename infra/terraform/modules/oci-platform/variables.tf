@@ -51,3 +51,16 @@ variable "operations_relay_ssh_public_key" {
     error_message = "operations_relay_ssh_public_key must be one raw Ed25519 public key without options or a comment."
   }
 }
+
+variable "relay_authorized_keys_readable_roles" {
+  description = "Fixed roles whose public forced-command key file uses the sshd-readable 0644 mode."
+  type        = set(string)
+  default     = ["platform", "control", "repository"]
+
+  validation {
+    condition = alltrue([
+      for role in var.relay_authorized_keys_readable_roles : contains(["platform", "control", "repository"], role)
+    ])
+    error_message = "relay_authorized_keys_readable_roles may contain only platform, control and repository."
+  }
+}

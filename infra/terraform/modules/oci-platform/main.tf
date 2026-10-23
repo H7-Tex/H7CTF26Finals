@@ -83,6 +83,7 @@ locals {
   operations_relay_roles          = toset(["platform", "control", "repository"])
 
   operations_commission_initializer_sha256 = "687563400a57f907a777946f58a165b5554b8f14146fd3eec3252d65cc00c146"
+  operations_commission_anvil_sha256       = "c760f5097b671cfa1423bd30b407cbbc9cb415fe4a82510d84c9120818143a19"
   operations_commission_script             = <<-SCRIPT
     #!/usr/bin/env bash
     set -euo pipefail
@@ -132,6 +133,35 @@ locals {
       'sudo install -D -m 0755 /dev/stdin /usr/local/sbin/finals-initialize-volume' < "$temporary"
     /usr/bin/ssh "$${ssh_options[@]}" -- "ubuntu@$address" "$post_command"
   SCRIPT
+  operations_commission_secret_script      = <<-SCRIPT
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    [[ $EUID -eq 0 ]] || { echo "secret commissioning wrapper must run as root" >&2; exit 1; }
+    [[ $(cat /etc/finals-platform/role 2>/dev/null) == '{"role":"operations"}' ]] || {
+      echo "secret commissioning wrapper is restricted to the operations host" >&2
+      exit 1
+    }
+    [[ $# -eq 2 && $1 == platform && $2 == anvil ]] || {
+      echo "usage: finals-commission-secret platform anvil" >&2
+      exit 2
+    }
+    temporary=$(mktemp /run/finals-anvil-secret.XXXXXX)
+    trap 'rm -f -- "$temporary"' EXIT
+    cat > "$temporary"
+    printf '%s  %s\n' "${local.operations_commission_anvil_sha256}" "$temporary" | sha256sum -c - >/dev/null
+    exec /usr/bin/ssh \
+      -F /dev/null \
+      -i /etc/finals-platform/operations/id_ed25519 \
+      -o BatchMode=yes \
+      -o ConnectTimeout=10 \
+      -o IdentitiesOnly=yes \
+      -o PasswordAuthentication=no \
+      -o StrictHostKeyChecking=yes \
+      -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts \
+      -- ubuntu@10.60.200.10 \
+      'sudo chmod 0644 /etc/ssh/operations_relay_authorized_keys_ubuntu && sudo /usr/sbin/sshd -t && sudo systemctl reload ssh.service && sudo /usr/local/sbin/finals-install-secret-bundle anvil' < "$temporary"
+  SCRIPT
   operations_commission_sudoers            = <<-SUDOERS
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh gateway-primary gateway-wireguard
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh gateway-primary gateway-reconciler
@@ -144,11 +174,13 @@ locals {
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform volume-initialize
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume gateway-primary volume-initialize
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume gateway-standby volume-initialize
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-secret platform anvil
   SUDOERS
   operations_commission_runcmd = join("\n", [
     "  - |",
     "    set -eu",
     "    printf '%s' '${base64encode(local.operations_commission_script)}' | base64 -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-volume",
+    "    printf '%s' '${base64encode(local.operations_commission_secret_script)}' | base64 -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-secret",
     "    temporary=$(mktemp /etc/sudoers.d/.finals-operations-commissioning.XXXXXX)",
     "    printf '%s' '${base64encode(local.operations_commission_sudoers)}' | base64 -d > \"$temporary\"",
     "    chmod 0440 \"$temporary\"",
@@ -171,7 +203,7 @@ locals {
             AuthorizedKeysFile .ssh/authorized_keys /etc/ssh/operations_relay_authorized_keys_%u
         - path: /etc/ssh/operations_relay_authorized_keys_ubuntu
           owner: root:root
-          permissions: '0600'
+          permissions: '${contains(var.relay_authorized_keys_readable_roles, role) ? "0644" : "0600"}'
           content: |
             ${contains(local.operations_relay_roles, role) ? local.operations_relay_authorized_key : ""}
       runcmd:

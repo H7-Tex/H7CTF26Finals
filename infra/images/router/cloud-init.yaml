@@ -15,11 +15,13 @@ write_files:
       AuthorizedKeysFile .ssh/authorized_keys /etc/ssh/operations_relay_authorized_keys_%u
   - path: /etc/ssh/operations_relay_authorized_keys_ubuntu
     owner: root:root
-    permissions: '0600'
+    permissions: '0644'
     content: |
       __OPERATIONS_RELAY_AUTHORIZED_KEY__
 runcmd:
+  - ["install", "-d", "-m", "0755", "/run/sshd"]
   - ["/usr/sbin/sshd", "-t"]
+  - ["systemctl", "enable", "--now", "ssh.service"]
   - ["systemctl", "restart", "ssh.service"]
   - ["/usr/local/sbin/finals-host-recipient"]
   - ["/usr/local/sbin/event-router-initialize", "__ROUTER_STATE__"]
