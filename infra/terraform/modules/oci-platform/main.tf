@@ -146,4 +146,8 @@ resource "oci_core_instance" "host" {
     are_legacy_imds_endpoints_disabled = true
   }
 
+  lifecycle {
+    prevent_destroy = true
+  }
+
 }
