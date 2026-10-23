@@ -180,7 +180,7 @@ locals {
     [[ $# -eq 1 ]] || { echo "usage: finals-commission-control-action ACTION" >&2; exit 2; }
     case "$1" in
       reconcile-once)
-        remote='set -uo pipefail; if sudo -n systemctl start peer-reconciler.service && [[ $(sudo -n systemctl show --property=Result --value peer-reconciler.service) == success ]]; then echo peer-reconciler-once=success; else sudo -n systemctl show peer-reconciler.service --property=ActiveState,SubState,Result,ExecMainStatus --no-pager; curl -so /dev/null -m 5 https://finals.h7tex.com/api/v1/internal/arena/vpn/peers; echo endpoint-curl=$?; sudo -n journalctl --unit=peer-reconciler.service --lines=30 --no-pager --output=short-iso; exit 1; fi'
+        remote='set -uo pipefail; if sudo -n systemctl start peer-reconciler.service && [[ $(sudo -n systemctl show --property=Result --value peer-reconciler.service) == success ]]; then echo peer-reconciler-once=success; else sudo -n systemctl show peer-reconciler.service --property=ActiveState,SubState,Result,ExecMainStatus --no-pager; sudo -n journalctl --unit=peer-reconciler.service --lines=30 --no-pager --output=short-iso; exit 1; fi'
         ;;
       reconciler-enable)
         remote='set -euo pipefail; sudo -n systemctl enable --now peer-reconciler.timer >/dev/null; sudo -n systemctl is-active --quiet peer-reconciler.timer; echo peer-reconciler-timer=active'
