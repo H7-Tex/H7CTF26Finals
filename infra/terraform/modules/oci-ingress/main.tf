@@ -86,6 +86,10 @@ resource "oci_core_instance" "router" {
     are_legacy_imds_endpoints_disabled = true
   }
 
+  lifecycle {
+    prevent_destroy = true
+  }
+
 }
 
 data "oci_core_vnic_attachments" "router" {
@@ -102,12 +106,20 @@ resource "oci_core_private_ip" "ingress" {
   display_name = each.value.display_name
   ip_address   = each.value.private_ip
 
+  lifecycle {
+    prevent_destroy = true
+  }
+
 }
 
 resource "oci_core_private_ip" "service_ingress" {
   vnic_id      = data.oci_core_vnic_attachments.router[var.active_router].vnic_attachments[0].vnic_id
   display_name = "service-ingress"
   ip_address   = "10.60.250.120"
+
+  lifecycle {
+    prevent_destroy = true
+  }
 
 }
 
@@ -117,5 +129,9 @@ resource "oci_core_private_ip" "team_egress" {
   vnic_id      = data.oci_core_vnic_attachments.router[var.active_router].vnic_attachments[0].vnic_id
   display_name = each.value.display_name
   ip_address   = each.value.private_ip
+
+  lifecycle {
+    prevent_destroy = true
+  }
 
 }
