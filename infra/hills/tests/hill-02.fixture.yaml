@@ -1,0 +1,18 @@
+services:
+  arena:
+    image: example.invalid/hill@sha256:1111111111111111111111111111111111111111111111111111111111111111
+    secrets:
+      - hill_reset
+      - hill_teams
+  evm:
+    image: example.invalid/hill-evm@sha256:2222222222222222222222222222222222222222222222222222222222222222
+    secrets:
+      - hill_evm_mnemonic
+
+secrets:
+  hill_evm_mnemonic:
+    external: true
+  hill_reset:
+    external: true
+  hill_teams:
+    external: true

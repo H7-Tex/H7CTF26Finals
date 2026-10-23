@@ -16,9 +16,32 @@ compose=(docker compose --project-name finals-hill
   --file /etc/finals-hill/credentials.compose.yaml
   --file "/etc/finals-hill/$role.networks.compose.yaml"
   --file "/etc/finals-hill/$role.endpoint.compose.yaml")
+if [[ $role == hill-02 ]]; then
+  compose+=(--file /etc/finals-hill/hill-02.evm.compose.yaml)
+fi
+
+# hill-02's evm mnemonic is generated once on this host below volatile /run, never in git.
+# the evm keeps no chain state, so a fresh mnemonic after a reboot starts a clean chain.
+mnemonic() {
+  local dir=/run/finals-hill/evm image value tmp
+  [[ -f $dir/mnemonic && -s $dir/mnemonic ]] && return 0
+  image=$("${compose[@]}" config --images evm)
+  value=$(docker run --rm --network none --log-driver none --read-only --cap-drop ALL \
+    --security-opt no-new-privileges --user 11002:11002 --entrypoint cast "$image" \
+    wallet new-mnemonic --words 12 --accounts 0 --json |
+    python3 -c 'import json,sys; v=json.load(sys.stdin)["data"]["mnemonic"]; assert len(v.split()) == 12; print(v)')
+  install -d -o root -g root -m 0700 "$dir"
+  tmp=$(mktemp "$dir/.mnemonic.XXXXXX")
+  printf '%s\n' "$value" >"$tmp"
+  chmod 0444 "$tmp"
+  mv -f "$tmp" "$dir/mnemonic"
+}
+
 case $1 in
   config) exec "${compose[@]}" config ;;
-  up) exec "${compose[@]}" up --detach --remove-orphans --force-recreate --wait ;;
+  up)
+    if [[ $role == hill-02 ]]; then mnemonic; fi
+    exec "${compose[@]}" up --detach --remove-orphans --force-recreate --wait ;;
   # credential rotation: only the http arena is recreated; the evm state is untouched
   recreate) exec "${compose[@]}" up --detach --no-deps --force-recreate --wait arena ;;
   ps) exec "${compose[@]}" ps ;;

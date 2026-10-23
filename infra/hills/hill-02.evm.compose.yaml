@@ -1,0 +1,5 @@
+# hill-02 only: the private evm mnemonic, generated on this host by finals-hill-compose up
+secrets:
+  hill_evm_mnemonic:
+    external: false
+    file: /run/finals-hill/evm/mnemonic

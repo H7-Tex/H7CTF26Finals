@@ -1,5 +1,10 @@
+# docker publishes no port for an internal-only network, so the arena bridge is
+# non-internal for the endpoint listener; no masquerade and the host firewall keep it egress-free
 networks:
   arena:
+    internal: false
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: "false"
     ipam:
       config:
         - subnet: 172.31.42.0/24

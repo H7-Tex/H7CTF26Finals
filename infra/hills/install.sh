@@ -12,6 +12,7 @@ for role in hill-01 hill-02 hill-03; do
   install -D -o root -g root -m 0644 "$source_dir/$role.networks.compose.yaml" "$root/etc/finals-hill/$role.networks.compose.yaml"
   install -D -o root -g root -m 0644 "$source_dir/$role.endpoint.compose.yaml" "$root/etc/finals-hill/$role.endpoint.compose.yaml"
 done
+install -D -o root -g root -m 0644 "$source_dir/hill-02.evm.compose.yaml" "$root/etc/finals-hill/hill-02.evm.compose.yaml"
 install -D -o root -g root -m 0644 "$source_dir/finals-hill-credentials.service" "$root/etc/systemd/system/finals-hill-credentials.service"
 install -D -o root -g root -m 0644 "$source_dir/finals-hill.conf" "$root/usr/lib/tmpfiles.d/finals-hill.conf"
 
