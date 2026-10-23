@@ -320,6 +320,32 @@ locals {
         [[ ! -e /etc/finals-platform/role ]]
         [[ $(cat /etc/event-router/role) == "'$expected'" ]]'
   SCRIPT
+  operations_commission_gateway_role_audit_script = <<-SCRIPT
+    #!/usr/bin/env bash
+    set -euo pipefail
+    [[ $EUID -eq 0 && $(cat /etc/finals-platform/role 2>/dev/null) == '{"role":"operations"}' ]] || exit 1
+    [[ -f /run/finals-commissioning/central_id_ed25519 && ! -L /run/finals-commissioning/central_id_ed25519 ]] || exit 1
+    [[ $# -eq 1 ]] || exit 2
+    case "$1" in
+      gateway-primary) address=10.60.250.10 ;;
+      gateway-standby) address=10.60.250.11 ;;
+      *) echo "unsupported fixed gateway audit target" >&2; exit 2 ;;
+    esac
+    exec /usr/bin/ssh -F /dev/null -i /run/finals-commissioning/central_id_ed25519 \
+      -o BatchMode=yes -o ConnectTimeout=10 -o IdentitiesOnly=yes -o PasswordAuthentication=no \
+      -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts \
+      -- "ubuntu@$address" 'set -euo pipefail
+        platform=$(cat /etc/finals-platform/role 2>/dev/null || true)
+        router=$(cat /etc/event-router/role 2>/dev/null || true)
+        case "$platform" in
+          "") platform_category=absent ;;
+          "{\"role\":\"production\"}") platform_category=production ;;
+          "{\"role\":\"gateway\"}") platform_category=gateway ;;
+          *) platform_category=unexpected ;;
+        esac
+        case "$router" in active|standby) router_category=$router ;; "") router_category=absent ;; *) router_category=unexpected ;; esac
+        printf "platform=%s router=%s\n" "$platform_category" "$router_category"'
+  SCRIPT
   operations_commission_sudoers                   = <<-SUDOERS
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh gateway-primary gateway-wireguard
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh gateway-primary gateway-reconciler
@@ -341,6 +367,8 @@ locals {
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-gateway-authorizer gateway-standby
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-gateway-role gateway-primary
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-gateway-role gateway-standby
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-gateway-role-audit gateway-primary
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-gateway-role-audit gateway-standby
   SUDOERS
   operations_commission_runcmd = join("\n", [
     "  - |",
@@ -351,6 +379,7 @@ locals {
     "    printf '%s' '${base64encode(local.operations_commission_gateway_secret_script)}' | base64 -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-gateway-secret",
     "    printf '%s' '${base64encode(local.operations_commission_gateway_authorizer_script)}' | base64 -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-gateway-authorizer",
     "    printf '%s' '${base64encode(local.operations_commission_gateway_role_script)}' | base64 -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-gateway-role",
+    "    printf '%s' '${base64encode(local.operations_commission_gateway_role_audit_script)}' | base64 -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-gateway-role-audit",
     "    temporary=$(mktemp /etc/sudoers.d/.finals-operations-commissioning.XXXXXX)",
     "    printf '%s' '${base64encode(local.operations_commission_sudoers)}' | base64 -d > \"$temporary\"",
     "    chmod 0440 \"$temporary\"",
