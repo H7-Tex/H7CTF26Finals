@@ -52,6 +52,7 @@ locals {
     "deployment/tests/service_proxy_smoke.py",
     "deployment/tests/run.sh",
     "hills/credential_sync.py",
+    "hills/finals-hill-compose",
     "hills/install.sh",
     "hills/tests/run.sh",
     "model-a-runtime/install.sh",

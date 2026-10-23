@@ -55,18 +55,10 @@ Install the reviewed challenge release at `/opt/finals-hill`, with its immutable
 ```bash
 sudo systemctl enable --now finals-hill-credentials.service
 sudo finals-hill-credentials check
-sudo docker compose \
-  --project-name finals-hill \
-  --file /opt/finals-hill/compose.yaml \
-  --file /etc/finals-hill/credentials.compose.yaml \
-  config
-sudo docker compose \
-  --project-name finals-hill \
-  --file /opt/finals-hill/compose.yaml \
-  --file /etc/finals-hill/credentials.compose.yaml \
-  up --detach --remove-orphans --force-recreate --wait
+sudo finals-hill-compose config
+sudo finals-hill-compose up
 ```
 
 Confirm the container health endpoint on the host's assigned port, prove the other two hill ports are closed, and only then open the router's persisted challenge-access gate. A missing token, wrong TLS peer, wrong hill/challenge/team set, malformed response, incomplete local generation or unavailable Anvil endpoint prevents synchronization and therefore prevents first start.
 
-For an intentional credential rotation, restart the credential service and force-recreate the hill container with the same two Compose files. Repeating the sequence with unchanged credentials is idempotent.
+For an intentional credential rotation, restart the credential service, then `sudo finals-hill-compose recreate`. `finals-hill-compose` always uses the same four files: the release compose, the credentials overlay, the role network overlay and the role endpoint overlay, which publishes only `10.60.210.1N:710N`. Never run `docker compose` against a hill with a partial file set. Repeating the sequence with unchanged credentials is idempotent.

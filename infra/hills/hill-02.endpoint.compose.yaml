@@ -1,0 +1,5 @@
+# platform-owned listener: only this hill's fixed address and port
+services:
+  arena:
+    ports:
+      - "10.60.210.12:7102:7102"

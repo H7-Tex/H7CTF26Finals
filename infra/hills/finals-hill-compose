@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# one fixed compose model per hill host: the challenge release, the credentials, this
+# role's pinned networks and its single listener. every lifecycle step uses this file set.
+
+[[ $EUID -eq 0 ]] || { echo "must run as root" >&2; exit 1; }
+[[ $# -eq 1 ]] || { echo "usage: finals-hill-compose {config|up|recreate|ps|down}" >&2; exit 2; }
+case $(cat /etc/finals-platform/role 2>/dev/null) in
+  '{"role":"hill-01"}') role=hill-01 ;;
+  '{"role":"hill-02"}') role=hill-02 ;;
+  '{"role":"hill-03"}') role=hill-03 ;;
+  *) echo "this host is not a fixed hill" >&2; exit 1 ;;
+esac
+compose=(docker compose --project-name finals-hill
+  --file /opt/finals-hill/compose.yaml
+  --file /etc/finals-hill/credentials.compose.yaml
+  --file "/etc/finals-hill/$role.networks.compose.yaml"
+  --file "/etc/finals-hill/$role.endpoint.compose.yaml")
+case $1 in
+  config) exec "${compose[@]}" config ;;
+  up) exec "${compose[@]}" up --detach --remove-orphans --force-recreate --wait ;;
+  # credential rotation: only the http arena is recreated; the evm state is untouched
+  recreate) exec "${compose[@]}" up --detach --no-deps --force-recreate --wait arena ;;
+  ps) exec "${compose[@]}" ps ;;
+  # stops and removes containers; volumes and scoring state stay
+  down) exec "${compose[@]}" down ;;
+  *) echo "usage: finals-hill-compose {config|up|recreate|ps|down}" >&2; exit 2 ;;
+esac
