@@ -476,6 +476,8 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn("StrictHostKeyChecking=yes", firewall_wrapper)
         self.assertIn('UserKnownHostsFile="$work/known_hosts"', firewall_wrapper)
         self.assertIn("production-0[1-9]|production-1[0-6]", firewall_wrapper)
+        self.assertIn('sudo -n /bin/bash \\"\\$temporary\\" --render', firewall_wrapper)
+        self.assertNotIn('sudo -n \\"\\$temporary\\" --render', firewall_wrapper)
         self.assertIn("nft --check --file -", firewall_wrapper)
         self.assertIn("systemctl restart finals-host-firewall.service", firewall_wrapper)
         self.assertIn("base64gzip(file(", firewall_wrapper)

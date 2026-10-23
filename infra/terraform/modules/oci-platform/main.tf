@@ -266,7 +266,7 @@ locals {
       trap 'sudo -n rm -f -- \"\$temporary\"' EXIT
       sudo -n install -o root -g root -m 0755 /dev/stdin \"\$temporary\"
       echo '${filesha256("${path.module}/../../../platform/rootfs/usr/local/libexec/finals-platform/firewall")}  '\"\$temporary\" | sudo -n sha256sum -c --quiet
-      sudo -n \"\$temporary\" --render '$role' | sudo -n nft --check --file -
+      sudo -n /bin/bash \"\$temporary\" --render '$role' | sudo -n nft --check --file -
       sudo -n install -o root -g root -m 0755 \"\$temporary\" /usr/local/libexec/finals-platform/firewall
       sudo -n systemctl restart finals-host-firewall.service
       sudo -n systemctl is-active --quiet finals-host-firewall.service
