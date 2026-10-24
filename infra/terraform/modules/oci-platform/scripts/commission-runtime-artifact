@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+[[ $EUID -eq 0 && $(cat /etc/finals-platform/role 2>/dev/null) == '{"role":"operations"}' ]] || exit 1
+[[ -f /run/finals-commissioning/central_id_ed25519 && ! -L /run/finals-commissioning/central_id_ed25519 ]] || exit 1
+[[ $# -eq 2 ]] || exit 2
+target=$1
+action=$2
+case "$target" in
+  control) address=10.60.201.20 ;;
+  hill-01) address=10.60.210.11 ;;
+  hill-02) address=10.60.210.12 ;;
+  hill-03) address=10.60.210.13 ;;
+  *) exit 2 ;;
+esac
+case "$target:$action" in
+  control:checker-artifacts)
+    maximum=495626240
+    expected_size=$maximum
+    expected_sha256=46d07d20db8805c43918e6c695e18fe500066306c681946ffbe6ab6adee17174
+    remote='sudo -n /usr/local/sbin/finals-commission-checker-artifacts'
+    directory=/var/tmp
+    ;;
+  control:checker-commission)
+    exec ssh -F /dev/null -i /run/finals-commissioning/central_id_ed25519 -o BatchMode=yes -o ConnectTimeout=10 \
+      -o IdentitiesOnly=yes -o PasswordAuthentication=no -o StrictHostKeyChecking=yes \
+      -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts -- "ubuntu@$address" \
+      'sudo -n /usr/local/sbin/checker-runtime-commission'
+    ;;
+  control:state-summary)
+    exec ssh -F /dev/null -i /run/finals-commissioning/central_id_ed25519 -o BatchMode=yes -o ConnectTimeout=10 \
+      -o IdentitiesOnly=yes -o PasswordAuthentication=no -o StrictHostKeyChecking=yes \
+      -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts -- "ubuntu@$address" \
+      'sudo -n /usr/bin/python3 -c '\''import hashlib,json,sys;p=sys.argv[1];b=open(p,"rb").read();v=json.loads(b);print("active-file-sha256="+hashlib.sha256(b).hexdigest());print("active-generation="+str(v["generation"]));print("active-peer-count="+str(len(v["peers"])))'\'' /var/lib/peer-reconciler/active.json'
+    ;;
+  hill-0[123]:hill-artifacts)
+    maximum=385986560
+    expected_size=$maximum
+    expected_sha256=f3716d884f4ed3ebe5b5c4138d459aa2e35324c0839c5466167d91cd6796cc20
+    remote='sudo -n /usr/local/sbin/finals-commission-hill-artifacts'
+    directory=/var/tmp
+    ;;
+  hill-0[123]:hill-config)
+    maximum=65536
+    expected_size=
+    expected_sha256=
+    remote='sudo -n /usr/local/sbin/finals-commission-hill-config'
+    directory=/run
+    ;;
+  hill-0[123]:hill-control)
+    maximum=65536
+    expected_size=
+    expected_sha256=
+    remote='sudo -n /usr/local/sbin/finals-install-secret-bundle hill-control'
+    directory=/run
+    ;;
+  hill-0[123]:hill-start)
+    exec ssh -F /dev/null -i /run/finals-commissioning/central_id_ed25519 -o BatchMode=yes -o ConnectTimeout=10 \
+      -o IdentitiesOnly=yes -o PasswordAuthentication=no -o StrictHostKeyChecking=yes \
+      -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts -- "ubuntu@$address" \
+      'sudo -n /usr/local/sbin/finals-commission-hill-start'
+    ;;
+  *) exit 2 ;;
+esac
+temporary=$(mktemp "$directory/finals-runtime-artifact.XXXXXX")
+trap 'find "$temporary" -delete' EXIT
+head -c "$((maximum + 1))" > "$temporary"
+size=$(stat -c %s "$temporary")
+(( size > 0 && size <= maximum ))
+[[ -z $expected_size || $size -eq $expected_size ]]
+[[ -z $expected_sha256 || $(sha256sum "$temporary" | cut -d ' ' -f 1) == "$expected_sha256" ]]
+ssh -F /dev/null -i /run/finals-commissioning/central_id_ed25519 -o BatchMode=yes -o ConnectTimeout=10 \
+  -o IdentitiesOnly=yes -o PasswordAuthentication=no -o StrictHostKeyChecking=yes \
+  -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts -- "ubuntu@$address" "$remote" < "$temporary"
+printf '%s:%s=complete\n' "$target" "$action"

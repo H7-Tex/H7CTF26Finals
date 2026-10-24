@@ -27,6 +27,18 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn('len(v["peers"])', module)
         self.assertNotIn("v['\\''\"'\\''generation", module)
 
+    def test_operations_runtime_artifact_relay_is_fixed(self):
+        module = (ROOT / "terraform/modules/oci-platform/main.tf").read_text(encoding="utf-8")
+        wrapper = ROOT / "terraform/modules/oci-platform/scripts/commission-runtime-artifact"
+        source = wrapper.read_text(encoding="utf-8")
+        subprocess.run(["bash", "-n", str(wrapper)], check=True)
+        self.assertIn("maximum=495626240", source)
+        self.assertIn("expected_size=$maximum", source)
+        self.assertIn("46d07d20db8805c43918e6c695e18fe500066306c681946ffbe6ab6adee17174", source)
+        self.assertIn("f3716d884f4ed3ebe5b5c4138d459aa2e35324c0839c5466167d91cd6796cc20", source)
+        self.assertIn('file("${path.module}/scripts/commission-runtime-artifact")', module)
+        self.assertNotIn("finals-commission-runtime-artifact *", module)
+
     def test_control_checker_artifact_commissioning_is_fixed(self):
         module = (ROOT / "terraform/modules/oci-platform/main.tf").read_text(encoding="utf-8")
         wrapper = ROOT / "terraform/modules/oci-platform/scripts/commission-checker-artifacts"
