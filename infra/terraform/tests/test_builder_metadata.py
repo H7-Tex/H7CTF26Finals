@@ -24,17 +24,35 @@ class BuilderMetadataTests(unittest.TestCase):
     def test_checker_status_is_fixed_and_bounded(self):
         module = (ROOT / "terraform/modules/oci-platform/main.tf").read_text(encoding="utf-8")
         wrapper = (ROOT / "terraform/modules/oci-platform/scripts/commission-runtime-artifact").read_text(encoding="utf-8")
+        status = wrapper[wrapper.index("  control:checker-status)"):wrapper.index("  control:state-summary)")]
         self.assertIn("control:checker-status)", wrapper)
-        self.assertIn("http://127.0.0.1:9160/readyz", wrapper)
-        self.assertIn("systemctl is-active --quiet checker-runtime.service", wrapper)
-        self.assertIn("systemctl is-active --quiet peer-reconciler.timer", wrapper)
-        self.assertEqual(wrapper.count("timeout --signal=TERM --kill-after=2s 10s"), 2)
-        self.assertIn("--connect-timeout 2 --max-time 3", wrapper)
-        self.assertIn('checker-runtime.service=%s\\npeer-reconciler.timer=%s\\nreadyz-http=%s\\n', wrapper)
-        self.assertIn("[[ $checker_runtime == active && $reconciler_timer == active && $readyz_http == 200 ]]", wrapper)
-        self.assertLess(wrapper.index("checker-runtime.service=%s"), wrapper.index("$checker_runtime == active"))
-        self.assertIn("--silent --output /dev/null --write-out", wrapper)
+        self.assertIn("http://127.0.0.1:9160/readyz", status)
+        self.assertIn("systemctl is-active --quiet checker-runtime.service", status)
+        self.assertIn("systemctl is-active --quiet peer-reconciler.timer", status)
+        self.assertEqual(status.count("timeout --signal=TERM --kill-after=2s 10s"), 2)
+        self.assertIn("--connect-timeout 2 --max-time 3", status)
+        self.assertIn('checker-runtime.service=%s\\npeer-reconciler.timer=%s\\nreadyz-http=%s\\n', status)
+        self.assertIn("[[ $checker_runtime == active && $reconciler_timer == active && $readyz_http == 200 ]]", status)
+        self.assertLess(status.index("checker-runtime.service=%s"), status.index("$checker_runtime == active"))
+        self.assertIn("--silent --output /dev/null --write-out", status)
         self.assertNotIn("operations_commission_control_action_script", module)
+
+    def test_checker_recovery_is_fixed_and_bounded(self):
+        module = (ROOT / "terraform/modules/oci-platform/main.tf").read_text(encoding="utf-8")
+        wrapper = (ROOT / "terraform/modules/oci-platform/scripts/commission-runtime-artifact").read_text(encoding="utf-8")
+        recovery = wrapper[wrapper.index("  control:checker-recover)"):wrapper.index("  control:checker-status)")]
+        self.assertIn("stat -c %U:%G:%a /etc/checker-runtime/enabled) == root:root:600", recovery)
+        self.assertIn("timeout --signal=TERM --kill-after=2s 10s sudo -n systemctl reset-failed checker-runtime.service", recovery)
+        self.assertIn("timeout --signal=TERM --kill-after=2s 180s sudo -n systemctl enable --now checker-runtime.service", recovery)
+        self.assertIn("timeout --signal=TERM --kill-after=2s 60s bash -c", recovery)
+        self.assertIn("--silent --output /dev/null --connect-timeout 2 --max-time 3", recovery)
+        self.assertIn("checker-recover=complete", recovery)
+        self.assertNotIn("peer-reconciler", recovery)
+        self.assertNotIn("control:checker-commission)", wrapper)
+        recover_sudoer = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-runtime-artifact control checker-recover"
+        commission_sudoer = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-runtime-artifact control checker-commission"
+        self.assertEqual(module.count(recover_sudoer), 1)
+        self.assertNotIn(commission_sudoer, module)
 
     def test_operations_runtime_artifact_relay_is_fixed(self):
         module = (ROOT / "terraform/modules/oci-platform/main.tf").read_text(encoding="utf-8")

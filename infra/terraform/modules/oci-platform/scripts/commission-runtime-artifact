@@ -21,11 +21,16 @@ case "$target:$action" in
     remote='sudo -n /usr/local/sbin/finals-commission-checker-artifacts'
     directory=/var/tmp
     ;;
-  control:checker-commission)
+  control:checker-recover)
     exec ssh -F /dev/null -i /run/finals-commissioning/central_id_ed25519 -o BatchMode=yes -o ConnectTimeout=10 \
       -o IdentitiesOnly=yes -o PasswordAuthentication=no -o StrictHostKeyChecking=yes \
       -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts -- "ubuntu@$address" \
-      'sudo -n /usr/local/sbin/checker-runtime-commission'
+      'set -euo pipefail
+      [[ $(sudo -n stat -c %U:%G:%a /etc/checker-runtime/enabled) == root:root:600 ]]
+      timeout --signal=TERM --kill-after=2s 10s sudo -n systemctl reset-failed checker-runtime.service
+      timeout --signal=TERM --kill-after=2s 180s sudo -n systemctl enable --now checker-runtime.service
+      timeout --signal=TERM --kill-after=2s 60s bash -c "until curl --fail --silent --output /dev/null --connect-timeout 2 --max-time 3 http://127.0.0.1:9160/readyz; do sleep 1; done"
+      echo checker-recover=complete'
     ;;
   control:checker-status)
     exec ssh -F /dev/null -i /run/finals-commissioning/central_id_ed25519 -o BatchMode=yes -o ConnectTimeout=10 \
