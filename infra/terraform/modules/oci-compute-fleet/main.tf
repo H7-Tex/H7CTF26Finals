@@ -71,7 +71,6 @@ resource "oci_core_instance" "production" {
   }
 
   lifecycle {
-    prevent_destroy      = true
     replace_triggered_by = [terraform_data.production_generation]
   }
 }
@@ -108,7 +107,6 @@ resource "oci_core_volume" "production_data" {
   })
 
   lifecycle {
-    prevent_destroy      = true
     replace_triggered_by = [terraform_data.production_generation]
   }
 }
