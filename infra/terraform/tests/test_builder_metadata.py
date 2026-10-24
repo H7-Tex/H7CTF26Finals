@@ -94,12 +94,10 @@ class BuilderMetadataTests(unittest.TestCase):
         environment = (ROOT / "terraform/environments/production/oci-platform/main.tf").read_text(encoding="utf-8")
         variables = (ROOT / "terraform/modules/oci-platform/variables.tf").read_text(encoding="utf-8")
         self.assertIn('each.key == "platform" && var.platform_image_id != null', module)
-        self.assertIn('resource "terraform_data" "x86_generation"', module)
-        self.assertIn("var.platform_image_id,\n    var.x86_image_id,", module)
         self.assertIn("for_each = local.x86_hosts", module)
         self.assertIn('resource "oci_core_instance" "host_arm"', module)
         self.assertIn("for_each = local.arm_hosts", module)
-        self.assertIn("replace_triggered_by = [terraform_data.x86_generation]", module)
+        self.assertIn("replace_triggered_by = [terraform_data.host_image_generation[each.key]]", module)
         for role in ("operations", "repository", "mirror"):
             self.assertIn(f'from = oci_core_instance.host["{role}"]', module)
             self.assertIn(f'to   = oci_core_instance.host_arm["{role}"]', module)
@@ -107,7 +105,7 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn("platform_image_id               = var.platform_image_id", environment)
         self.assertIn('variable "platform_image_id"', variables)
 
-    def test_host_image_generation_bootstrap_is_state_only(self):
+    def test_host_image_generation_is_scoped_per_host(self):
         module = (ROOT / "terraform/modules/oci-platform/main.tf").read_text(encoding="utf-8")
         self.assertIn(
             '''resource "terraform_data" "host_image_generation" {
@@ -119,10 +117,10 @@ class BuilderMetadataTests(unittest.TestCase):
 }''',
             module,
         )
-        self.assertEqual(module.count("replace_triggered_by = [terraform_data.x86_generation]"), 1)
-        self.assertNotIn(
-            "replace_triggered_by = [terraform_data.host_image_generation[each.key]]",
-            module,
+        self.assertNotIn('resource "terraform_data" "x86_generation"', module)
+        self.assertEqual(
+            module.count("replace_triggered_by = [terraform_data.host_image_generation[each.key]]"),
+            1,
         )
 
     def test_oci_stack_packages_are_byte_reproducible(self):

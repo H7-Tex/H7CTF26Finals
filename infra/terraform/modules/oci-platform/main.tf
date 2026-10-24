@@ -753,13 +753,6 @@ resource "terraform_data" "operations_generation" {
   input = "bootstrap"
 }
 
-resource "terraform_data" "x86_generation" {
-  triggers_replace = [
-    var.platform_image_id,
-    var.x86_image_id,
-  ]
-}
-
 resource "terraform_data" "host_image_generation" {
   for_each = local.x86_hosts
 
@@ -807,7 +800,7 @@ resource "oci_core_instance" "host" {
   }
 
   lifecycle {
-    replace_triggered_by = [terraform_data.x86_generation]
+    replace_triggered_by = [terraform_data.host_image_generation[each.key]]
   }
 }
 
