@@ -53,6 +53,39 @@ case "$target:$action" in
     echo platform:anvil-deploy=complete
     exit 0
     ;;
+  platform:anvil-status)
+    exec ssh -F /dev/null -i /run/finals-commissioning/central_id_ed25519 -o BatchMode=yes -o ConnectTimeout=10 \
+      -o IdentitiesOnly=yes -o PasswordAuthentication=no -o StrictHostKeyChecking=yes \
+      -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts -- "ubuntu@$address" \
+      'set -euo pipefail
+      project=/opt/anvil/current/deployments/finals
+      env_file=/etc/anvil/finals.env
+      compose=(sudo -n /usr/bin/docker compose --project-name anvil-finals --project-directory "$project" --env-file "$env_file" -f "$project/compose.yaml")
+      revision=$(sudo -n sed -n "s/^ANVIL_IMAGE_REVISION=//p" "$env_file")
+      [[ $revision =~ ^[0-9a-f]{40}$ ]]
+      printf "env-revision=%s\n" "$revision"
+      for service in api web ingress; do
+        container=$("${compose[@]}" ps -q "$service")
+        [[ $container =~ ^[0-9a-f]{64}$ ]]
+        name=$(sudo -n /usr/bin/docker inspect --format "{{.Name}}" "$container")
+        image=$(sudo -n /usr/bin/docker inspect --format "{{.Image}}" "$container")
+        reference=$(sudo -n /usr/bin/docker inspect --format "{{.Config.Image}}" "$container")
+        started=$(sudo -n /usr/bin/docker inspect --format "{{.State.StartedAt}}" "$container")
+        address=$(sudo -n /usr/bin/docker inspect --format "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}" "$container")
+        printf "%s-container=%s name=%s image=%s reference=%s started=%s address=%s\n" "$service" "$container" "$name" "$image" "$reference" "$started" "$address"
+      done
+      for service in api web; do
+        tag="anvil-finals-$service:$revision"
+        printf "%s-tag-image=%s\n" "$service" "$(sudo -n /usr/bin/docker image inspect --format "{{.Id}}" "$tag")"
+      done
+      ingress=$("${compose[@]}" ps -q ingress)
+      direct_api=$(sudo -n /usr/bin/docker exec "$ingress" wget -qO- http://api:8080/api/v1/arena/state | sha256sum | cut -d " " -f 1)
+      direct_web=$(sudo -n /usr/bin/docker exec "$ingress" wget -qO- http://web:3000/ | sha256sum | cut -d " " -f 1)
+      served_api=$(curl --fail --silent --show-error --connect-timeout 5 --max-time 15 --proto "=https" --tlsv1.2 --resolve finals.h7tex.com:443:10.60.200.10 https://finals.h7tex.com/api/v1/arena/state | sha256sum | cut -d " " -f 1)
+      served_web=$(curl --fail --silent --show-error --connect-timeout 5 --max-time 15 --proto "=https" --tlsv1.2 --resolve finals.h7tex.com:443:10.60.200.10 https://finals.h7tex.com/ | sha256sum | cut -d " " -f 1)
+      printf "direct-api-sha=%s served-api-sha=%s\ndirect-web-sha=%s served-web-sha=%s\n" "$direct_api" "$served_api" "$direct_web" "$served_web"
+      echo anvil-status=complete'
+    ;;
   control:checker-status)
     exec ssh -F /dev/null -i /run/finals-commissioning/central_id_ed25519 -o BatchMode=yes -o ConnectTimeout=10 \
       -o IdentitiesOnly=yes -o PasswordAuthentication=no -o StrictHostKeyChecking=yes \

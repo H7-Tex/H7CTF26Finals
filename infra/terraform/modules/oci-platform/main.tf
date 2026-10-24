@@ -591,6 +591,7 @@ locals {
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-gateway-model-a ""
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-runtime-artifact control checker-status
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-runtime-artifact platform anvil-deploy
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-runtime-artifact platform anvil-status
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-runtime-artifact hill-01 hill-artifacts
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-runtime-artifact hill-01 hill-config
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-runtime-artifact hill-01 hill-control

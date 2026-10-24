@@ -74,6 +74,25 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertNotIn("control checker-recover", module)
         self.assertNotIn("control state-summary", module)
 
+    def test_anvil_status_is_fixed_read_only_and_redacted(self):
+        module = (ROOT / "terraform/modules/oci-platform/main.tf").read_text(encoding="utf-8")
+        wrapper = (ROOT / "terraform/modules/oci-platform/scripts/commission-runtime-artifact").read_text(encoding="utf-8")
+        status = wrapper[wrapper.index("  platform:anvil-status)"):wrapper.index("  control:checker-status)")]
+        self.assertIn("ANVIL_IMAGE_REVISION", status)
+        self.assertIn("for service in api web ingress", status)
+        self.assertIn('docker inspect --format "{{.Image}}"', status)
+        self.assertIn('docker inspect --format "{{.State.StartedAt}}"', status)
+        self.assertIn('docker image inspect --format "{{.Id}}"', status)
+        self.assertIn("direct-api-sha=", status)
+        self.assertIn("served-api-sha=", status)
+        self.assertIn("direct-web-sha=", status)
+        self.assertIn("served-web-sha=", status)
+        self.assertIn("anvil-status=complete", status)
+        self.assertNotIn("docker inspect --format '{{json .Config.Env}}'", status)
+        self.assertNotIn("cat $env_file", status)
+        sudoer = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-runtime-artifact platform anvil-status"
+        self.assertEqual(module.count(sudoer), 1)
+
     def test_operations_runtime_artifact_relay_is_fixed(self):
         module = (ROOT / "terraform/modules/oci-platform/main.tf").read_text(encoding="utf-8")
         wrapper = ROOT / "terraform/modules/oci-platform/scripts/commission-runtime-artifact"
@@ -82,6 +101,7 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn("f3716d884f4ed3ebe5b5c4138d459aa2e35324c0839c5466167d91cd6796cc20", source)
         self.assertIn("control:checker-status)", source)
         self.assertIn("platform:anvil-deploy)", source)
+        self.assertIn("platform:anvil-status)", source)
         self.assertNotIn("control:checker-recover)", source)
         self.assertNotIn("control:state-summary)", source)
         self.assertNotIn("control:checker-artifacts)", source)
