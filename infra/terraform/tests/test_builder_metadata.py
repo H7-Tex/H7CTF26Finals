@@ -21,6 +21,12 @@ TEMPLATES = (
 
 
 class BuilderMetadataTests(unittest.TestCase):
+    def test_control_state_summary_has_no_nested_shell_quotes(self):
+        module = (ROOT / "terraform/modules/oci-platform/main.tf").read_text(encoding="utf-8")
+        self.assertIn('v["generation"]', module)
+        self.assertIn('len(v["peers"])', module)
+        self.assertNotIn("v['\\''\"'\\''generation", module)
+
     def test_control_checker_artifact_commissioning_is_fixed(self):
         module = (ROOT / "terraform/modules/oci-platform/main.tf").read_text(encoding="utf-8")
         wrapper = ROOT / "terraform/modules/oci-platform/scripts/commission-checker-artifacts"

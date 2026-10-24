@@ -228,7 +228,7 @@ locals {
       -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts
     )
     inventory_summary() {
-      tar -xOf "$state" "$1.json" | /usr/bin/python3 -c 'import hashlib,json,sys;b=sys.stdin.buffer.read();v=json.loads(b);n=sys.argv[1];print(f"{n}-file-sha256={hashlib.sha256(b).hexdigest()}\n{n}-generation={v['\''"'\''generation'\''"'\'']}\n{n}-peer-count={len(v['\''"'\''peers'\''"'\''])}")' "$1"
+      tar -xOf "$state" "$1.json" | /usr/bin/python3 -c 'import hashlib,json,sys;b=sys.stdin.buffer.read();v=json.loads(b);n=sys.argv[1];print("{}-file-sha256={}\\n{}-generation={}\\n{}-peer-count={}".format(n,hashlib.sha256(b).hexdigest(),n,v["generation"],n,len(v["peers"])))' "$1"
     }
     [[ $# -eq 1 ]] || exit 2
     case "$1" in
