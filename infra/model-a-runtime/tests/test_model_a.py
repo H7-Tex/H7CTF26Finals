@@ -1,8 +1,10 @@
 import importlib.util
+import io
 import json
 import os
 import subprocess
 import sys
+import tarfile
 import tempfile
 import unittest
 from importlib.machinery import SourceFileLoader
@@ -17,6 +19,13 @@ SPEC = importlib.util.spec_from_file_location("model_a", ROOT / "model_a.py")
 MODEL = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODEL)
 sys.modules["model_a"] = MODEL
+PREPARE_LOADER = SourceFileLoader(
+    "model_a_prepare",
+    str(ROOT / "prepare-release.py"),
+)
+PREPARE_SPEC = importlib.util.spec_from_loader("model_a_prepare", PREPARE_LOADER)
+PREPARE = importlib.util.module_from_spec(PREPARE_SPEC)
+PREPARE_LOADER.exec_module(PREPARE)
 INSTALLER_LOADER = SourceFileLoader(
     "model_a_installer",
     str(ROOT / "rootfs/usr/local/sbin/finals-model-a-install"),
@@ -154,6 +163,24 @@ class ModelATest(unittest.TestCase):
     def test_release_build_disables_nondeterministic_provenance(self):
         source = (ROOT / "prepare-release.py").read_text()
         self.assertIn('"--provenance=false"', source)
+
+    def test_image_archive_normalization_is_deterministic(self):
+        with tempfile.TemporaryDirectory() as directory:
+            paths = [Path(directory) / name for name in ("first.tar", "second.tar")]
+            for index, path in enumerate(paths):
+                with tarfile.open(path, "w") as archive:
+                    for name in (("a", "b"), ("b", "a"))[index]:
+                        content = name.encode()
+                        info = tarfile.TarInfo(name)
+                        info.size = len(content)
+                        info.uid = index + 1
+                        info.gid = index + 2
+                        info.uname = f"user{index}"
+                        info.gname = f"group{index}"
+                        info.mtime = index + 3
+                        archive.addfile(info, io.BytesIO(content))
+                PREPARE.normalize_image_archive(path)
+            self.assertEqual(paths[0].read_bytes(), paths[1].read_bytes())
 
     def test_service_subnets_are_fixed_and_disjoint(self):
         self.assertEqual(

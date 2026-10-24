@@ -123,6 +123,26 @@ def deterministic_tar(source, destination):
                 archive.addfile(info)
 
 
+def normalize_image_archive(path):
+    normalized = path.with_suffix(path.suffix + ".normalized")
+    with tarfile.open(path, "r") as source, tarfile.open(
+        normalized, "w", format=tarfile.USTAR_FORMAT
+    ) as destination:
+        members = source.getmembers()
+        if len({member.name for member in members}) != len(members):
+            raise ModelAError(f"duplicate image archive member in {path.name}")
+        for member in sorted(members, key=lambda item: item.name):
+            member.uid = 0
+            member.gid = 0
+            member.uname = "root"
+            member.gname = "root"
+            member.mtime = 0
+            member.pax_headers = {}
+            handle = source.extractfile(member) if member.isfile() else None
+            destination.addfile(member, handle)
+    os.replace(normalized, path)
+
+
 def prepare(source, output):
     verify_source(source)
     if output.exists():
@@ -173,6 +193,7 @@ def prepare(source, output):
                 *factory_tags,
             ]
         )
+        normalize_image_archive(archives / "factory-images.tar")
         run(
             [
                 "docker",
@@ -183,6 +204,7 @@ def prepare(source, output):
                 *BASE_IMAGES,
             ]
         )
+        normalize_image_archive(archives / "base-images.tar")
         archive_records = {
             name: {
                 "sha256": sha256_file(archives / name),
