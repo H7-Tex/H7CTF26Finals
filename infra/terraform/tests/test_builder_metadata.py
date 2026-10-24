@@ -43,6 +43,7 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn('name                         = "operations"', environment)
         self.assertIn('target_subnet_id             = var.subnet_ids["services"]', environment)
         self.assertIn('dns_proxy_status             = "DISABLED"', environment)
+        self.assertIn("ignore_changes = [bastion_type]", environment)
         self.assertNotIn('client_cidr_block_allow_list = ["0.0.0.0/0"]', environment)
         self.assertIn('oci_bastion_bastion.operations.private_endpoint_ip_address', outputs)
         self.assertEqual(

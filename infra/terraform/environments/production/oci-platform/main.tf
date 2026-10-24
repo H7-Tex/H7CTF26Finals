@@ -38,4 +38,8 @@ resource "oci_bastion_bastion" "operations" {
     event      = "finals-2026"
     managed_by = "terraform"
   }
+
+  lifecycle {
+    ignore_changes = [bastion_type]
+  }
 }
