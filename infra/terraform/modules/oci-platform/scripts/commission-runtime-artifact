@@ -79,11 +79,9 @@ case "$target:$action" in
         printf "%s-tag-image=%s\n" "$service" "$(sudo -n /usr/bin/docker image inspect --format "{{.Id}}" "$tag")"
       done
       ingress=$("${compose[@]}" ps -q ingress)
-      direct_api=$(sudo -n /usr/bin/docker exec "$ingress" wget -qO- http://api:8080/api/v1/arena/state | sha256sum | cut -d " " -f 1)
-      direct_web=$(sudo -n /usr/bin/docker exec "$ingress" wget -qO- http://web:3000/ | sha256sum | cut -d " " -f 1)
-      served_api=$(curl --fail --silent --show-error --connect-timeout 5 --max-time 15 --proto "=https" --tlsv1.2 --resolve finals.h7tex.com:443:10.60.200.10 https://finals.h7tex.com/api/v1/arena/state | sha256sum | cut -d " " -f 1)
-      served_web=$(curl --fail --silent --show-error --connect-timeout 5 --max-time 15 --proto "=https" --tlsv1.2 --resolve finals.h7tex.com:443:10.60.200.10 https://finals.h7tex.com/ | sha256sum | cut -d " " -f 1)
-      printf "direct-api-sha=%s served-api-sha=%s\ndirect-web-sha=%s served-web-sha=%s\n" "$direct_api" "$served_api" "$direct_web" "$served_web"
+      for service in api web; do
+        printf "ingress-dns-%s=%s\n" "$service" "$(sudo -n /usr/bin/docker exec "$ingress" getent hosts "$service" | awk "NR == 1 { print \$1 }")"
+      done
       echo anvil-status=complete'
     ;;
   control:checker-status)
