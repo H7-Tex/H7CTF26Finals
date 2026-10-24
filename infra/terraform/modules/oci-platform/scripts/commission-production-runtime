@@ -32,6 +32,7 @@ if [[ $action == status ]]; then
 fi
 
 if [[ $action == docker-store ]]; then
+  systemctl stop finals-model-a-firstboot.service || true
   python3 - <<'PY'
 import json
 import os
@@ -57,6 +58,25 @@ os.replace(temporary, path)
 PY
   systemctl restart docker
   docker info --format '{{json .DriverStatus}}' | grep -Fq 'io.containerd.snapshotter.v1'
+  release=/var/lib/finals-model-a/release
+  docker image load --input "$release/archives/base-images.tar" >/dev/null
+  python3 - "$release/release.json" <<'PY'
+import json
+import subprocess
+import sys
+
+for record in json.load(open(sys.argv[1], encoding="utf-8"))["base_images"]:
+    reference, image_id = record["reference"], record["image_id"]
+    repository = reference.split("@", 1)[0]
+    subprocess.run(["docker", "tag", image_id, f"{repository}:finals-base"], check=True)
+    actual = subprocess.run(
+        ["docker", "image", "inspect", "--format", "{{.Id}}", reference],
+        check=True, capture_output=True, text=True,
+    ).stdout.strip()
+    if actual != image_id:
+        raise SystemExit(f"base name mismatch {reference}: {actual}")
+print("base-names=ok")
+PY
   systemctl reset-failed finals-model-a-firstboot.service || true
   systemctl restart --no-block finals-model-a-firstboot.service
   echo 'docker-store=containerd'
