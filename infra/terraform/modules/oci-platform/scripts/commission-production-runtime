@@ -106,10 +106,13 @@ done
 unit=/usr/lib/systemd/system/finals-service-proxy.service
 unit_original=618f6e50c7aebc8050ec1b0b432ebb0feaa4e3c8e49c1dbbbf203bd9f4e8f0c7
 unit_simple=cd6b9eaf22ad90b47840fcf983987e71e9afef08e826c3d6c479069159bf344b
-unit_final=7a187147b1f168f3dbd25b7eb921b3b65ef8123a85a9c61f2f33061dacda9be5
+unit_filtered=7a187147b1f168f3dbd25b7eb921b3b65ef8123a85a9c61f2f33061dacda9be5
+unit_final=df7cb90800394c72b408681237da929f13ddf7f1f04084c6a9379ea6dc174936
 unit_actual=$(sha256sum "$unit" | cut -d ' ' -f 1)
 if [[ $unit_actual == "$unit_original" || $unit_actual == "$unit_simple" ]]; then
-  sed -i -e 's/^Type=notify$/Type=simple/' -e 's#^ExecStart=/usr/sbin/haproxy -Ws #ExecStart=/usr/sbin/haproxy -W -db #' -e 's/^SystemCallFilter=@system-service$/SystemCallFilter=@system-service setuid setgid setgroups/' "$unit"
+  sed -i -e 's/^Type=notify$/Type=simple/' -e 's#^ExecStart=/usr/sbin/haproxy -Ws #ExecStart=/usr/sbin/haproxy -W -db #' -e 's/^AmbientCapabilities=$/AmbientCapabilities=CAP_SETGID CAP_SETUID/' -e 's/^SystemCallFilter=@system-service$/SystemCallFilter=@system-service setuid setgid setgroups/' "$unit"
+elif [[ $unit_actual == "$unit_filtered" ]]; then
+  sed -i -e 's/^AmbientCapabilities=$/AmbientCapabilities=CAP_SETGID CAP_SETUID/' "$unit"
 elif [[ $unit_actual != "$unit_final" ]]; then
   echo "proxy-repair=refused:unit-hash:$unit_actual" >&2
   exit 1
