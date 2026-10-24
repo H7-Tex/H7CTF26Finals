@@ -7,7 +7,7 @@ central=/run/finals-commissioning/central_id_ed25519
 read -r target action extra
 read -r marker host type key extra_key
 [[ $target =~ ^production-(0[1-9]|1[0-6])$ && -z ${extra:-} ]] || exit 2
-[[ $action == status || $action == docker-store || $action == model-a-network-repair ]] || exit 2
+[[ $action == status || $action == proxy-diagnose || $action == docker-store || $action == model-a-network-repair ]] || exit 2
 team=$((10#${BASH_REMATCH[1]}))
 address="10.60.$team.2"
 [[ $marker == known-host && $host == "$address" && $type == ssh-ed25519 && $key =~ ^[A-Za-z0-9+/]{68}$ && -z ${extra_key:-} ]] || exit 1
@@ -23,6 +23,14 @@ team=$2
 if [[ $action == status ]]; then
   if [[ -f /var/lib/finals-model-a/firstboot.done ]]; then echo firstboot.done=yes; else echo firstboot.done=no; fi
   systemctl is-active finals-service-proxy || true
+  exit 0
+fi
+
+if [[ $action == proxy-diagnose ]]; then
+  systemctl show finals-service-proxy.service -p ActiveState,SubState,Result,ExecMainStatus,MainPID
+  ss -ltnp | grep -E ':700[1-6][[:space:]]' || :
+  nft -a list chain inet finals_host input | grep -E '7001-7006|reject|drop' || :
+  journalctl -u finals-service-proxy.service -n 20 --no-pager -o cat
   exit 0
 fi
 
