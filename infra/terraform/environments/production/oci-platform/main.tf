@@ -25,7 +25,7 @@ module "storage" {
 }
 
 resource "oci_bastion_bastion" "operations" {
-  bastion_type                 = "STANDARD"
+  bastion_type                 = "standard"
   client_cidr_block_allow_list = ["27.61.61.38/32"]
   compartment_id               = var.finals_compartment_id
   dns_proxy_status             = "DISABLED"

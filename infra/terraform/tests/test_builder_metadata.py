@@ -25,7 +25,7 @@ class BuilderMetadataTests(unittest.TestCase):
         environment = (ROOT / "terraform/environments/production/oci-platform/main.tf").read_text(encoding="utf-8")
         outputs = (ROOT / "terraform/environments/production/oci-platform/outputs.tf").read_text(encoding="utf-8")
         self.assertEqual(environment.count('resource "oci_bastion_bastion" "operations"'), 1)
-        self.assertIn('bastion_type                 = "STANDARD"', environment)
+        self.assertIn('bastion_type                 = "standard"', environment)
         self.assertIn('client_cidr_block_allow_list = ["27.61.61.38/32"]', environment)
         self.assertIn('max_session_ttl_in_seconds   = 10800', environment)
         self.assertIn('target_subnet_id             = var.subnet_ids["services"]', environment)
