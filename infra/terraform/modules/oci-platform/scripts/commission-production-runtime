@@ -104,16 +104,17 @@ for slug in sign-me-in can-we-settle-this update-pending book-me-if-you-can ship
   H7_IMAGE="$image" docker compose --project-directory "$root" --file "$root/compose.yaml" up --detach --wait --wait-timeout 90 service
 done
 unit=/usr/lib/systemd/system/finals-service-proxy.service
-unit_before=618f6e50c7aebc8050ec1b0b432ebb0feaa4e3c8e49c1dbbbf203bd9f4e8f0c7
-unit_after=cd6b9eaf22ad90b47840fcf983987e71e9afef08e826c3d6c479069159bf344b
+unit_original=618f6e50c7aebc8050ec1b0b432ebb0feaa4e3c8e49c1dbbbf203bd9f4e8f0c7
+unit_simple=cd6b9eaf22ad90b47840fcf983987e71e9afef08e826c3d6c479069159bf344b
+unit_final=7a187147b1f168f3dbd25b7eb921b3b65ef8123a85a9c61f2f33061dacda9be5
 unit_actual=$(sha256sum "$unit" | cut -d ' ' -f 1)
-if [[ $unit_actual == "$unit_before" ]]; then
-  sed -i -e 's/^Type=notify$/Type=simple/' -e 's#^ExecStart=/usr/sbin/haproxy -Ws #ExecStart=/usr/sbin/haproxy -W -db #' "$unit"
-elif [[ $unit_actual != "$unit_after" ]]; then
+if [[ $unit_actual == "$unit_original" || $unit_actual == "$unit_simple" ]]; then
+  sed -i -e 's/^Type=notify$/Type=simple/' -e 's#^ExecStart=/usr/sbin/haproxy -Ws #ExecStart=/usr/sbin/haproxy -W -db #' -e 's/^SystemCallFilter=@system-service$/SystemCallFilter=@system-service setuid setgid setgroups/' "$unit"
+elif [[ $unit_actual != "$unit_final" ]]; then
   echo "proxy-repair=refused:unit-hash:$unit_actual" >&2
   exit 1
 fi
-echo "$unit_after  $unit" | sha256sum -c --quiet
+echo "$unit_final  $unit" | sha256sum -c --quiet
 systemctl daemon-reload
 systemctl restart finals-service-proxy.service
 systemctl is-active --quiet finals-service-proxy.service

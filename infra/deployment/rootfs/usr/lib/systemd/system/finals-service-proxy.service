@@ -38,7 +38,7 @@ RestrictSUIDSGID=yes
 LockPersonality=yes
 MemoryDenyWriteExecute=yes
 SystemCallArchitectures=native
-SystemCallFilter=@system-service
+SystemCallFilter=@system-service setuid setgid setgroups
 SystemCallErrorNumber=EPERM
 TimeoutStopSec=15s
 
