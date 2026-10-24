@@ -14,30 +14,28 @@ case "$target" in
   *) exit 2 ;;
 esac
 case "$target:$action" in
-  control:checker-artifacts)
-    maximum=495626240
-    expected_size=$maximum
-    expected_sha256=46d07d20db8805c43918e6c695e18fe500066306c681946ffbe6ab6adee17174
-    remote='sudo -n /usr/local/sbin/finals-commission-checker-artifacts'
-    directory=/var/tmp
-    ;;
   control:checker-recover)
     exec ssh -F /dev/null -i /run/finals-commissioning/central_id_ed25519 -o BatchMode=yes -o ConnectTimeout=10 \
       -o IdentitiesOnly=yes -o PasswordAuthentication=no -o StrictHostKeyChecking=yes \
       -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts -- "ubuntu@$address" \
       'set -euo pipefail
-      t=(timeout --signal=TERM --kill-after=2s)
-      "${t[@]}" 10s sudo -n systemctl show checker-runtime.service -p ActiveState,SubState,Result,ExecMainStatus,NRestarts,ConditionResult
-      "${t[@]}" 10s sudo -n journalctl -u checker-runtime.service -n 60 --no-pager -o cat
-      sudo -n test -f /etc/checker-runtime/enabled && echo gate=present || echo gate=absent
-      "${t[@]}" 180s sudo -n /usr/local/libexec/checker-runtime/runtime.py validate-artifacts || :
-      "${t[@]}" 10s sudo -n systemctl reset-failed checker-runtime.service
-      "${t[@]}" 180s sudo -n systemctl restart checker-runtime.service || :
-      b=$(mktemp /tmp/r.XXXXXX); trap "rm -f -- $b" EXIT; ok=
-      "${t[@]}" 240s bash -c "until curl --silent --output $b --write-out \"%{http_code}\" --connect-timeout 2 --max-time 3 http://127.0.0.1:9160/readyz | grep -qx 200; do sleep 1; done" && ok=1 || :
-      cat "$b"
-      "${t[@]}" 10s sudo -n journalctl -u checker-runtime.service -n 30 --no-pager -o cat
-      [[ $ok ]]
+      d=/etc/systemd/system/checker-runtime.service.d/runtime-directory.conf
+      h=9eac6ae93b20078389b6048d064fd50a8017edba06cd1b5fbe49a47491a3ce35
+      x=$(mktemp /tmp/c.XXXXXX); trap "rm -f -- $x" EXIT
+      printf "[Service]\nRuntimeDirectory=checker-runtime\nRuntimeDirectoryMode=0700\n" > "$x"
+      sudo -n install -D -o root -g root -m 0644 "$x" "$d"
+      [[ $(sudo -n stat -c %U:%G:%a "$d") == root:root:644 ]]
+      [[ $(sudo -n sha256sum "$d" | cut -c1-64) == "$h" ]]
+      t=(timeout -k2s); r=
+      "${t[@]}" 30s sudo -n systemctl daemon-reload || r=1
+      "${t[@]}" 10s sudo -n systemctl reset-failed checker-runtime.service || r=1
+      "${t[@]}" 180s sudo -n systemctl restart checker-runtime.service >/dev/null 2>&1 || r=1
+      : > "$x"
+      "${t[@]}" 240s bash -c "until curl -s -o $x -w \"%{http_code}\" --connect-timeout 2 --max-time 3 http://127.0.0.1:9160/readyz | grep -qx 200; do sleep 1; done" || r=1
+      cat "$x"; echo
+      "${t[@]}" 10s sudo -n systemctl show checker-runtime.service -p SubState,Result,NRestarts || r=1
+      [[ -z $r ]] || "${t[@]}" 10s sudo -n journalctl -u checker-runtime.service -n 25 --no-pager -o cat || :
+      [[ -z $r ]]
       echo checker-recover=complete'
     ;;
   control:checker-status)

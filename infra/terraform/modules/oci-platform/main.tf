@@ -606,7 +606,6 @@ locals {
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-clear-central
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-production-keys ""
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-gateway-model-a ""
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-runtime-artifact control checker-artifacts
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-runtime-artifact control checker-recover
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-runtime-artifact control checker-status
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-runtime-artifact control state-summary
