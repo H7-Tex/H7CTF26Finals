@@ -21,6 +21,16 @@ TEMPLATES = (
 
 
 class BuilderMetadataTests(unittest.TestCase):
+    def test_bastion_subnet_egress_is_only_operations_ssh(self):
+        network = (ROOT / "terraform/modules/oci-network/main.tf").read_text(encoding="utf-8")
+        self.assertEqual(network.count('resource "oci_core_security_list" "bastion_egress"'), 1)
+        self.assertIn('destination      = "10.60.200.5/32"', network)
+        self.assertIn('protocol         = "6"', network)
+        self.assertIn('min = 22', network)
+        self.assertIn('max = 22', network)
+        self.assertIn('security_list_ids = each.key == "services"', network)
+        self.assertNotIn('destination      = "0.0.0.0/0"', network[network.index('resource "oci_core_security_list" "bastion_egress"'):network.index('resource "oci_core_route_table" "edge"')])
+
     def test_operations_bastion_is_fixed_and_source_restricted(self):
         environment = (ROOT / "terraform/environments/production/oci-platform/main.tf").read_text(encoding="utf-8")
         outputs = (ROOT / "terraform/environments/production/oci-platform/outputs.tf").read_text(encoding="utf-8")

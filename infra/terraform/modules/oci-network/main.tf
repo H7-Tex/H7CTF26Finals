@@ -168,6 +168,26 @@ resource "oci_core_security_list" "empty" {
   freeform_tags  = local.tags
 }
 
+resource "oci_core_security_list" "bastion_egress" {
+  compartment_id = var.compartment_id
+  vcn_id         = oci_core_vcn.finals.id
+  display_name   = "bastion-egress"
+  freeform_tags  = local.tags
+
+  egress_security_rules {
+    destination      = "10.60.200.5/32"
+    destination_type = "CIDR_BLOCK"
+    protocol         = "6"
+    stateless        = false
+    description      = "Bastion SSH to Operations"
+
+    tcp_options {
+      min = 22
+      max = 22
+    }
+  }
+}
+
 resource "oci_core_route_table" "edge" {
   compartment_id = var.compartment_id
   vcn_id         = oci_core_vcn.finals.id
@@ -409,13 +429,16 @@ resource "oci_core_network_security_group_security_rule" "infra_egress" {
 resource "oci_core_subnet" "finals" {
   for_each = local.subnets
 
-  compartment_id             = var.compartment_id
-  vcn_id                     = oci_core_vcn.finals.id
-  cidr_block                 = each.value.cidr
-  display_name               = each.value.display_name
-  dns_label                  = each.value.dns_label
-  route_table_id             = local.route_tables[each.value.route_class]
-  security_list_ids          = [oci_core_security_list.empty.id]
+  compartment_id = var.compartment_id
+  vcn_id         = oci_core_vcn.finals.id
+  cidr_block     = each.value.cidr
+  display_name   = each.value.display_name
+  dns_label      = each.value.dns_label
+  route_table_id = local.route_tables[each.value.route_class]
+  security_list_ids = each.key == "services" ? [
+    oci_core_security_list.empty.id,
+    oci_core_security_list.bastion_egress.id,
+  ] : [oci_core_security_list.empty.id]
   prohibit_public_ip_on_vnic = !each.value.public
   freeform_tags              = merge(local.tags, { subnet_role = each.key })
 }
