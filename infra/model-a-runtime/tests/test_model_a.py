@@ -179,6 +179,17 @@ class ModelATest(unittest.TestCase):
                         info.gname = f"group{index}"
                         info.mtime = index + 3
                         archive.addfile(info, io.BytesIO(content))
+                    records = [
+                        {"Config": "b", "RepoTags": ["b:1", "a:1"], "Layers": ["2", "1"]},
+                        {"Config": "a", "RepoTags": None, "Layers": ["3"]},
+                    ]
+                    if index:
+                        records.reverse()
+                    content = json.dumps(records).encode()
+                    info = tarfile.TarInfo("manifest.json")
+                    info.size = len(content)
+                    info.mtime = index + 4
+                    archive.addfile(info, io.BytesIO(content))
                 PREPARE.normalize_image_archive(path)
             self.assertEqual(paths[0].read_bytes(), paths[1].read_bytes())
 

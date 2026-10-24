@@ -57,8 +57,8 @@ variable "anvil_revision" {
   type        = string
 
   validation {
-    condition     = var.anvil_revision == "764d7bc2be5ca8cb6c62edbb357a87d9924c3fb7"
-    error_message = "anvil_revision must be the reviewed Anvil v0.365.0 commit 764d7bc2be5ca8cb6c62edbb357a87d9924c3fb7."
+    condition     = var.anvil_revision == "21d50f53afd60eef2aa9dd466f52fa6ec83dabdd"
+    error_message = "anvil_revision must be the reviewed Anvil v0.365.1 commit 21d50f53afd60eef2aa9dd466f52fa6ec83dabdd."
   }
 }
 
@@ -94,12 +94,12 @@ variable "model_a_release" {
     objects        = map(object({ sha256 = string, size = number }))
   })
   default = {
-    release_sha256 = "a49e74eef376f64b38a08fa24d50f43288b911121addc60cb759bc801aff64bf"
+    release_sha256 = "d1d427d928b1aa96394a201af048ec5f3c1eb67471b36bae65c9887c95b9a7e4"
     objects = {
-      "release.json"                = { sha256 = "a49e74eef376f64b38a08fa24d50f43288b911121addc60cb759bc801aff64bf", size = 4721 }
-      "archives/player-bundles.tar" = { sha256 = "c72fdc3f0d46eaf53e13b056f9a89fab8f85f573277ec143eb5796860e9d46b4", size = 95928320 }
-      "archives/factory-images.tar" = { sha256 = "d8d13b3a421742001bc58bf996bb101a8d9a1deab875afb023b065edacbe861f", size = 280236032 }
-      "archives/base-images.tar"    = { sha256 = "3b411e2751cec235f6a456ba2952d541c63ac3e0f5488d7d093adadfe9888236", size = 1300224000 }
+      "release.json"                = { sha256 = "d1d427d928b1aa96394a201af048ec5f3c1eb67471b36bae65c9887c95b9a7e4", size = 4721 }
+      "archives/player-bundles.tar" = { sha256 = "ac00de1ff5ba52aa76fa1ba9b0aba794b4fed3a3b1960b4f9fe1e84361efaa43", size = 95928320 }
+      "archives/factory-images.tar" = { sha256 = "9fb2bc8aec17c12bd2e425030d495459ad80228a909ba52b14a061312816d8b7", size = 280207360 }
+      "archives/base-images.tar"    = { sha256 = "ee06b3b975ae5fac7e7600e3c0214eab7099029106289705c9fbe1d12b70c348", size = 1300224000 }
     }
   }
 }

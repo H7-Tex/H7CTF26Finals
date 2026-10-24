@@ -71,7 +71,7 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn("sensitive   = true", variables.split('variable "model_a_release_url"', 1)[1].split("}", 1)[0])
         self.assertIn("infra/model-a-runtime", package)
         release = json.loads((ROOT / "model-a-runtime/evidence/release-gates.json").read_text(encoding="utf-8")) if (ROOT / "model-a-runtime/evidence/release-gates.json").exists() else None
-        for digest in ("a49e74eef376f64b38a08fa24d50f43288b911121addc60cb759bc801aff64bf", "3b411e2751cec235f6a456ba2952d541c63ac3e0f5488d7d093adadfe9888236"):
+        for digest in ("d1d427d928b1aa96394a201af048ec5f3c1eb67471b36bae65c9887c95b9a7e4", "ee06b3b975ae5fac7e7600e3c0214eab7099029106289705c9fbe1d12b70c348"):
             self.assertIn(digest, variables)
         # the release is fetched only after the production policy phase and before tools and first boot
         self.assertLess(build.index("phase=production-policy"), build.index("run_phase model-a-release"))
@@ -307,7 +307,7 @@ class BuilderMetadataTests(unittest.TestCase):
         root = ROOT / "terraform/environments/production/oci-runtime-builders"
         variables = (root / "variables.tf").read_text(encoding="utf-8")
         example = (root / "terraform.tfvars.example").read_text(encoding="utf-8")
-        revision = "764d7bc2be5ca8cb6c62edbb357a87d9924c3fb7"
+        revision = "21d50f53afd60eef2aa9dd466f52fa6ec83dabdd"
         self.assertIn(f'var.anvil_revision == "{revision}"', variables)
         self.assertIn(f'anvil_revision      = "{revision}"', example)
 

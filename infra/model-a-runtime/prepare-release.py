@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import io
 import json
 import os
 import shutil
@@ -139,6 +140,21 @@ def normalize_image_archive(path):
             member.mtime = 0
             member.pax_headers = {}
             handle = source.extractfile(member) if member.isfile() else None
+            if member.name == "manifest.json" and handle is not None:
+                records = json.loads(handle.read())
+                for record in records:
+                    if isinstance(record.get("RepoTags"), list):
+                        record["RepoTags"].sort()
+                records.sort(
+                    key=lambda record: json.dumps(
+                        record, sort_keys=True, separators=(",", ":")
+                    )
+                )
+                content = (
+                    json.dumps(records, sort_keys=True, separators=(",", ":")) + "\n"
+                ).encode()
+                member.size = len(content)
+                handle = io.BytesIO(content)
             destination.addfile(member, handle)
     os.replace(normalized, path)
 
