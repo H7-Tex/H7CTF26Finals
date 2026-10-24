@@ -21,11 +21,16 @@ TEMPLATES = (
 
 
 class BuilderMetadataTests(unittest.TestCase):
-    def test_control_state_summary_has_no_nested_shell_quotes(self):
+    def test_checker_status_is_fixed_and_bounded(self):
         module = (ROOT / "terraform/modules/oci-platform/main.tf").read_text(encoding="utf-8")
-        self.assertIn('v["generation"]', module)
-        self.assertIn('len(v["peers"])', module)
-        self.assertNotIn("v['\\''\"'\\''generation", module)
+        wrapper = (ROOT / "terraform/modules/oci-platform/scripts/commission-runtime-artifact").read_text(encoding="utf-8")
+        self.assertIn("control:checker-status)", wrapper)
+        self.assertIn("http://127.0.0.1:9160/readyz", wrapper)
+        self.assertIn("systemctl is-active --quiet checker-runtime.service", wrapper)
+        self.assertIn("systemctl is-active --quiet peer-reconciler.timer", wrapper)
+        self.assertEqual(wrapper.count("timeout --signal=TERM --kill-after=2s 10s"), 2)
+        self.assertIn("--connect-timeout 2 --max-time 3", wrapper)
+        self.assertNotIn("operations_commission_control_action_script", module)
 
     def test_operations_runtime_artifact_relay_is_fixed(self):
         module = (ROOT / "terraform/modules/oci-platform/main.tf").read_text(encoding="utf-8")
@@ -36,6 +41,7 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn("expected_size=$maximum", source)
         self.assertIn("46d07d20db8805c43918e6c695e18fe500066306c681946ffbe6ab6adee17174", source)
         self.assertIn("f3716d884f4ed3ebe5b5c4138d459aa2e35324c0839c5466167d91cd6796cc20", source)
+        self.assertIn("control:checker-status)", source)
         self.assertIn('file("${path.module}/scripts/commission-runtime-artifact")', module)
         self.assertNotIn("finals-commission-runtime-artifact *", module)
 
@@ -210,6 +216,7 @@ class BuilderMetadataTests(unittest.TestCase):
         source = (ROOT / "terraform/environments/production/oci-gateway-builder/main.tf").read_text(encoding="utf-8")
         self.assertIn('"cloud-init.yaml"', source)
         self.assertIn('"tests/challenge_access.sh"', source)
+        self.assertIn('"rootfs/usr/local/sbin/event-router-public-ingress"', source)
 
     def test_image_builds_have_bounded_phases_and_serial_evidence(self):
         gateway = (ROOT / "images/router/build-image").read_text(encoding="utf-8")
@@ -232,13 +239,11 @@ class BuilderMetadataTests(unittest.TestCase):
     def test_control_reconciler_ships_the_canonical_router_validator(self):
         reconciler = (ROOT / "reconciler/install.sh").read_text(encoding="utf-8")
         builders = (ROOT / "terraform/environments/production/oci-runtime-builders/main.tf").read_text(encoding="utf-8")
-        platform = (ROOT / "terraform/modules/oci-platform/main.tf").read_text(encoding="utf-8")
         package = (ROOT / "terraform/scripts/package-oci-stack.sh").read_text(encoding="utf-8")
         path = "images/router/rootfs/usr/local/libexec/event-router/render_inventory.py"
         self.assertIn(f"../{path}", reconciler)
         self.assertIn(path, builders)
         self.assertIn(path, package)
-        self.assertIn("/usr/local/libexec/event-router/render_inventory.py", platform)
 
     def test_production_go_build_uses_and_removes_an_explicit_cache(self):
         builder = (ROOT / "images/runtime/build-image").read_text(encoding="utf-8")
@@ -496,8 +501,9 @@ class BuilderMetadataTests(unittest.TestCase):
     def test_model_a_wrappers_are_fixed_and_pin_the_reviewed_router_files(self):
         platform = (ROOT / "terraform/modules/oci-platform/main.tf").read_text(encoding="utf-8")
         router = ROOT / "images/router/rootfs"
-        for path in ("etc/nftables.conf", "usr/local/libexec/event-router/render_inventory.py", "usr/local/sbin/event-router-apply-inventory"):
-            self.assertIn(hashlib.sha256((router / path).read_bytes()).hexdigest(), platform, path)
+        public_ingress = router / "usr/local/sbin/event-router-public-ingress"
+        self.assertIn(hashlib.sha256(public_ingress.read_bytes()).hexdigest(), platform)
+        self.assertNotIn("      activate)", platform)
         self.assertEqual(platform.count('ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-production-keys ""'), 1)
         self.assertEqual(platform.count('ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-gateway-model-a ""'), 1)
         for wrapper in ("finals-commission-production-keys", "finals-commission-gateway-model-a"):
@@ -557,40 +563,13 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertNotIn("base64encode(local.operations_commission_", platform)
         self.assertIn("| gzip -d | install", platform)
         self.assertIn("75a1f6046817a6b83a214b3feeea9b7327a2ba0951bfedc20f811564ef6262e9", platform)
-        control_status = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-action control-status"
-        self.assertEqual(platform.count(control_status), 1)
-        for action in ("reconcile-once", "reconciler-enable", "state-export", "state-restore"):
-            fixed = f"ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-action {action}"
-            self.assertEqual(platform.count(fixed), 0)
+        checker_status = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-runtime-artifact control checker-status"
+        self.assertEqual(platform.count(checker_status), 1)
         self.assertIn("reconciler-access)", platform)
         self.assertIn("sudo -n chmod 0755 \\$h; sudo -n chmod 0644 \\$h/authorized_keys", platform)
-        self.assertNotIn("finals-commission-control-action *", platform)
-        control_wrapper = platform[
-            platform.index("operations_commission_control_action_script"):
-            platform.index("operations_commission_control_secret_script")
-        ]
-        self.assertIn("-- ubuntu@10.60.201.20", control_wrapper)
-        self.assertIn("unsupported fixed control action", control_wrapper)
-        self.assertNotIn('"$@"', control_wrapper)
-        self.assertNotIn("eval ", control_wrapper)
-        self.assertNotIn("bash -c", control_wrapper)
-        self.assertIn("control-reconciler-state.tar", control_wrapper)
-        self.assertIn("systemctl disable --now peer-reconciler.timer", control_wrapper)
-        self.assertIn("--format=ustar --owner=0 --group=0 --numeric-owner", control_wrapper)
-        self.assertIn("tarfile as t", control_wrapper)
-        self.assertIn("render_inventory.py", control_wrapper)
-        self.assertIn("state-export=complete", control_wrapper)
-        self.assertIn("state-restore=complete", control_wrapper)
-        self.assertIn("peer-reconciler-once=success", control_wrapper)
-        self.assertIn("--lines=3 --reverse --no-pager --output=cat", control_wrapper)
-        self.assertIn("control-status=complete", control_wrapper)
-        self.assertIn("active-file-sha256", control_wrapper)
-        self.assertIn("findmnt -n -o FSTYPE /run", control_wrapper)
-        self.assertIn("-le 532480", control_wrapper)
-        self.assertIn("pending-generation", control_wrapper)
-        self.assertNotIn("cat /var/lib/peer-reconciler/active.json", control_wrapper)
-        self.assertNotIn("base64gzip(local.operations_commission_action_bundle)", platform)
-        self.assertNotIn("base64gzip(local.operations_commission_control_action_script)", platform)
+        self.assertNotIn("operations_commission_action_bundle", platform)
+        self.assertIn("base64gzip(local.operations_commission_script)", platform)
+        self.assertNotIn("finals-commission-control-action", platform)
         reconciler = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-secret control-reconciler"
         checkers = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-secret control-checkers"
         self.assertEqual(platform.count(reconciler), 0)
@@ -632,7 +611,7 @@ class BuilderMetadataTests(unittest.TestCase):
         ]
         for target in targets:
             fixed = f"ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall {target}"
-            self.assertEqual(platform.count(fixed), 1 if target.startswith("hill-") else 0, target)
+            self.assertEqual(platform.count(fixed), 1 if target.startswith(("hill-", "production-")) else 0, target)
         self.assertNotIn("finals-commission-host-firewall *", platform)
         self.assertIn("StrictHostKeyChecking=yes", firewall_wrapper)
         self.assertIn('UserKnownHostsFile="$work/known_hosts"', firewall_wrapper)
@@ -698,6 +677,7 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn("sudo -n /usr/local/sbin/event-router-initialize", platform)
         self.assertEqual(platform.count("sudo -n /usr/local/sbin/event-router-initialize"), 1)
         self.assertIn("sudo -n systemctl is-active --quiet event-router.target", platform)
+
         self.assertIn("! -e /etc/finals-platform/role && ! -L /etc/finals-platform/role", platform)
         self.assertIn("sudo -n test ! -e /etc/event-router/role", platform)
         self.assertIn("sudo -n test -f /etc/event-router/role", platform)
@@ -721,6 +701,42 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn("sha256sum -c -", standby)
         self.assertNotIn("finals-volume@captures.service", standby)
         self.assertNotIn('"$@"', platform)
+
+    def test_public_ingress_action_uses_fixed_compact_port_maps(self):
+        platform = (ROOT / "terraform/modules/oci-platform/main.tf").read_text(encoding="utf-8")
+        tool_path = ROOT / "images/router/rootfs/usr/local/sbin/event-router-public-ingress"
+        tool = tool_path.read_text(encoding="utf-8")
+        subprocess.run(["bash", "-n", str(tool_path)], check=True)
+        wrapper = platform[
+            platform.index("operations_commission_gateway_model_a_script"):
+            platform.index("operations_commission_runtime_artifact_script")
+        ]
+        self.assertIn("public-ingress-open|public-ingress-status)", wrapper)
+        self.assertIn(hashlib.sha256(tool_path.read_bytes()).hexdigest(), wrapper)
+        self.assertIn("/usr/local/sbin/event-router-public-ingress $verb", wrapper)
+        for value in ("hill_base=20000", "ssh_base=22000", "service_base=30000"):
+            self.assertIn(value, tool)
+        self.assertIn("for team in $(seq 1 15)", tool)
+        self.assertIn("for hill in 1 2 3", tool)
+        self.assertIn("for box in $(seq 1 16)", tool)
+        self.assertIn("for service in $(seq 1 6)", tool)
+        for name, count in (
+            ("hill_dnat", 45),
+            ("service_dnat", 96),
+            ("ssh_dnat", 15),
+            ("hill_snat", 45),
+            ("ssh_snat", 15),
+        ):
+            self.assertIn(f"map_count {name}) -eq {count}", tool)
+        self.assertIn("ip daddr 10.60.250.100 dnat ip to tcp dport map @hill_dnat", tool)
+        self.assertIn("ip daddr 10.60.250.100 dnat ip to tcp dport map @service_dnat", tool)
+        self.assertIn("ip daddr 10.60.250.100 dnat ip to tcp dport map @ssh_dnat", tool)
+        self.assertIn("ct original proto-dst map @hill_snat", tool)
+        self.assertIn("ct original proto-dst map @ssh_snat", tool)
+        self.assertIn("ip daddr @released_production_addresses tcp dport @service_ports", tool)
+        self.assertIn("ip daddr @production_addresses tcp dport 22", tool)
+        self.assertNotIn("20011 :", tool)
+        self.assertNotIn("30011 :", tool)
 
     def test_transient_object_payload_is_sensitive(self):
         for root in ("oci-gateway-builder", "oci-runtime-builders"):
@@ -772,6 +788,21 @@ class BuilderMetadataTests(unittest.TestCase):
         gateway = network[network.index('resource "oci_core_service_gateway" "management"'):]
         self.assertIn("prevent_destroy = true", gateway)
         self.assertIn("length(data.oci_core_services.regional.services) == 1", gateway)
+
+    def test_router_public_game_ingress_has_three_fixed_tcp_ranges(self):
+        network = (ROOT / "terraform/modules/oci-network/main.tf").read_text(encoding="utf-8")
+        self.assertIn('resource "oci_core_network_security_group_security_rule" "router_public_game_ingress"', network)
+        self.assertIn("for_each = local.router_public_game_ingress", network)
+        self.assertIn("min         = 20011", network)
+        self.assertIn("max         = 20159", network)
+        self.assertIn("min         = 22001", network)
+        self.assertIn("max         = 22016", network)
+        self.assertIn("min         = 30011", network)
+        self.assertIn("max         = 30166", network)
+        resource = network[network.index('resource "oci_core_network_security_group_security_rule" "router_public_game_ingress"'):]
+        self.assertIn('source                    = "0.0.0.0/0"', resource)
+        self.assertIn('protocol                  = "6"', resource)
+        self.assertIn("stateless                 = true", resource)
 
     def test_fleet_can_expand_without_targeting_resources(self):
         module = ROOT / "terraform/modules/oci-compute-fleet"

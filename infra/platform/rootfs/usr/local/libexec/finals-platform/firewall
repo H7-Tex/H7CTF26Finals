@@ -108,6 +108,7 @@ def role_rules(role, mirror_warmup=False, archive_egress=False):
     if role == "production":
         return (
             "ip saddr 10.60.250.120 tcp dport 7001-7006 accept\n"
+            "    ip saddr 10.60.250.121-10.60.250.135 tcp dport 22 accept\n"
             "    ip saddr { 10.60.200.10, 10.60.201.20, 10.60.201.30 } tcp dport 9300 accept\n"
             "    ip saddr 10.60.200.5 tcp dport 22 accept",
             f"{container_forward_rules(role)}\n"

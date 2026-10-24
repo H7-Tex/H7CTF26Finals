@@ -87,6 +87,24 @@ locals {
     event      = "finals-2026"
     managed_by = "terraform"
   }
+
+  router_public_game_ingress = {
+    hills = {
+      min         = 20011
+      max         = 20159
+      description = "Public Hill access"
+    }
+    ssh = {
+      min         = 22001
+      max         = 22016
+      description = "Public production SSH access"
+    }
+    services = {
+      min         = 30011
+      max         = 30166
+      description = "Public Attack-Defense service access"
+    }
+  }
 }
 
 resource "oci_core_vcn" "finals" {
@@ -309,6 +327,25 @@ resource "oci_core_network_security_group_security_rule" "router_web_ingress" {
     destination_port_range {
       min = 443
       max = 443
+    }
+  }
+}
+
+resource "oci_core_network_security_group_security_rule" "router_public_game_ingress" {
+  for_each = local.router_public_game_ingress
+
+  network_security_group_id = oci_core_network_security_group.router.id
+  direction                 = "INGRESS"
+  protocol                  = "6"
+  source                    = "0.0.0.0/0"
+  source_type               = "CIDR_BLOCK"
+  stateless                 = true
+  description               = each.value.description
+
+  tcp_options {
+    destination_port_range {
+      min = each.value.min
+      max = each.value.max
     }
   }
 }

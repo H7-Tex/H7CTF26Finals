@@ -120,6 +120,15 @@ class FirewallTests(unittest.TestCase):
         self.assertNotIn("10.60.201.20 tcp dport 7001-7006", rules)
         self.assertNotIn("10.60.250.121-10.60.250.135 tcp dport 7001-7006", rules)
 
+    def test_production_ssh_accepts_only_normalized_team_sources_and_operations(self):
+        rules = MODULE.render("production")
+        team = "ip saddr 10.60.250.121-10.60.250.135 tcp dport 22 accept"
+        operations = "ip saddr 10.60.200.5 tcp dport 22 accept"
+        self.assertEqual(rules.count(team), 1)
+        self.assertEqual(rules.count(operations), 1)
+        self.assertNotIn("10.60.0.0/16 tcp dport 22", rules)
+        self.assertNotIn("0.0.0.0/0 tcp dport 22", rules)
+
     def test_production_egress_is_limited_to_fixed_dependencies(self):
         rules = MODULE.render("production")
         self.assertIn("ip daddr 10.60.200.10 tcp dport 443 accept", rules)

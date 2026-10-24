@@ -14,9 +14,11 @@ bash -n \
   "$ROUTER_DIR/rootfs/usr/local/sbin/event-router-capture" \
   "$ROUTER_DIR/rootfs/usr/local/sbin/event-router-challenge-access" \
   "$ROUTER_DIR/rootfs/usr/local/sbin/event-router-initialize" \
+  "$ROUTER_DIR/rootfs/usr/local/sbin/event-router-public-ingress" \
   "$ROUTER_DIR/rootfs/usr/local/sbin/event-router-restore" \
   "$ROUTER_DIR/seal-image" \
   "$ROUTER_DIR/tests/challenge_access.sh" \
+  "$ROUTER_DIR/tests/public_ingress.sh" \
   "$ROUTER_DIR/tests/restore.sh" \
   "$ROUTER_DIR/tests/network_namespace.sh"
 python3 -m unittest discover -s "$ROUTER_DIR/tests" -p 'test_*.py'
@@ -55,5 +57,6 @@ grep -Fq 'ip daddr 169.254.169.254 tcp dport @archive_imds_ports accept' "$ROUTE
 grep -Fq 'tcp dport @archive_https_ports accept' "$ROUTER_DIR/rootfs/etc/nftables.conf"
 grep -Fq 'tcp dport @archive_https_ports snat ip to 10.60.250.101' "$ROUTER_DIR/rootfs/etc/nftables.conf"
 "$ROUTER_DIR/tests/challenge_access.sh"
+"$ROUTER_DIR/tests/public_ingress.sh"
 "$ROUTER_DIR/tests/restore.sh"
 "$ROUTER_DIR/tests/network_namespace.sh"

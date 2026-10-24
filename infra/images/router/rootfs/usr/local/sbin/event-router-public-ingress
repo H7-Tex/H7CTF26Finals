@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+[[ $EUID -eq 0 ]] || exit 1
+[[ $(cat /etc/event-router/role 2>/dev/null) =~ ^(active|standby)$ ]] || exit 1
+[[ $# -eq 1 && ( $1 == open || $1 == status ) ]] || exit 2
+
+hill_base=20000
+ssh_base=22000
+service_base=30000
+
+map_count() {
+  nft -j list map inet finals_public "$1" | python3 -c 'import json,sys;d=json.load(sys.stdin);print(len(next(x["map"] for x in d["nftables"] if "map" in x).get("elem",[])))'
+}
+
+validate_maps() {
+  state=$(mktemp /run/event-router-public-state.XXXXXX)
+  nft -j list table inet finals_public > "$state"
+  if ! python3 - "$state" "$hill_base" "$ssh_base" "$service_base" <<'PY'
+import json
+import sys
+
+document = json.load(open(sys.argv[1], encoding="utf-8"))
+hill_base, ssh_base, service_base = map(int, sys.argv[2:])
+maps = {
+    item["map"]["name"]: {int(key): value for key, value in item["map"].get("elem", [])}
+    for item in document["nftables"]
+    if "map" in item
+}
+expected = {
+    "hill_dnat": {
+        hill_base + team * 10 + hill: {"concat": [f"10.60.210.1{hill}", 7100 + hill]}
+        for team in range(1, 16)
+        for hill in range(1, 4)
+    },
+    "hill_snat": {
+        hill_base + team * 10 + hill: f"10.60.250.{120 + team}"
+        for team in range(1, 16)
+        for hill in range(1, 4)
+    },
+    "ssh_dnat": {ssh_base + team: {"concat": [f"10.60.{team}.2", 22]} for team in range(1, 16)},
+    "ssh_snat": {ssh_base + team: f"10.60.250.{120 + team}" for team in range(1, 16)},
+    "service_dnat": {
+        service_base + box * 10 + service: {"concat": [f"10.60.{box}.2", 7000 + service]}
+        for box in range(1, 17)
+        for service in range(1, 7)
+    },
+}
+assert maps == expected
+PY
+  then
+    rm -f -- "$state"
+    return 1
+  fi
+  rm -f -- "$state"
+}
+
+status() {
+  [[ $(map_count hill_dnat) -eq 45 && $(map_count service_dnat) -eq 96 && $(map_count ssh_dnat) -eq 15 ]]
+  [[ $(map_count hill_snat) -eq 45 && $(map_count ssh_snat) -eq 15 ]]
+  validate_maps
+  rules=$(nft list ruleset | sed 's/^[[:space:]]*//')
+  for rule in \
+    'ip daddr 10.60.250.100 dnat ip to tcp dport map @hill_dnat comment "public-hill-dnat"' \
+    'ip daddr 10.60.250.100 dnat ip to tcp dport map @service_dnat comment "public-service-dnat"' \
+    'ip daddr 10.60.250.100 dnat ip to tcp dport map @ssh_dnat comment "public-ssh-dnat"' \
+    'ct status dnat snat ip to ct original proto-dst map @hill_snat comment "public-hill-snat"' \
+    'ct status dnat snat ip to ct original proto-dst map @ssh_snat comment "public-ssh-snat"' \
+    'ct status dnat ip daddr . tcp dport @hill_services ct state new accept comment "public-hill-forward"' \
+    'ct status dnat ip daddr @released_production_addresses tcp dport @service_ports ct state new accept comment "public-service-forward"' \
+    'ct status dnat ip daddr @production_addresses tcp dport 22 ct state new accept comment "public-ssh-forward"'; do
+    [[ $(grep -Fxc "$rule" <<<"$rules") -eq 1 ]]
+  done
+  printf 'public-ingress=complete hill-dnat=45 service-dnat=96 ssh-dnat=15 hill-snat=45 ssh-snat=15\n'
+}
+
+if [[ $1 == status ]]; then
+  status
+  exit
+fi
+
+ruleset=$(mktemp /run/event-router-public-ingress.XXXXXX)
+trap 'rm -f -- "$ruleset"' EXIT
+{
+  nft list table inet finals_public >/dev/null 2>&1 && echo 'delete table inet finals_public'
+  echo 'table inet finals_public {'
+  echo 'map hill_dnat { type inet_service : ipv4_addr . inet_service; elements = {'
+  for team in $(seq 1 15); do for hill in 1 2 3; do printf '%s : 10.60.210.1%s . 710%s,\n' "$((hill_base + team * 10 + hill))" "$hill" "$hill"; done; done
+  echo '} }'
+  echo 'map hill_snat { type inet_service : ipv4_addr; elements = {'
+  for team in $(seq 1 15); do for hill in 1 2 3; do printf '%s : 10.60.250.%s,\n' "$((hill_base + team * 10 + hill))" "$((120 + team))"; done; done
+  echo '} }'
+  echo 'map ssh_dnat { type inet_service : ipv4_addr . inet_service; elements = {'
+  for team in $(seq 1 15); do printf '%s : 10.60.%s.2 . 22,\n' "$((ssh_base + team))" "$team"; done
+  echo '} }'
+  echo 'map ssh_snat { type inet_service : ipv4_addr; elements = {'
+  for team in $(seq 1 15); do printf '%s : 10.60.250.%s,\n' "$((ssh_base + team))" "$((120 + team))"; done
+  echo '} }'
+  echo 'map service_dnat { type inet_service : ipv4_addr . inet_service; elements = {'
+  for box in $(seq 1 16); do for service in $(seq 1 6); do printf '%s : 10.60.%s.2 . 700%s,\n' "$((service_base + box * 10 + service))" "$box" "$service"; done; done
+  echo '} }'
+  echo 'chain prerouting { type nat hook prerouting priority dstnat + 1; policy accept; ip daddr 10.60.250.100 dnat ip to tcp dport map @hill_dnat comment "public-hill-dnat"; ip daddr 10.60.250.100 dnat ip to tcp dport map @service_dnat comment "public-service-dnat"; ip daddr 10.60.250.100 dnat ip to tcp dport map @ssh_dnat comment "public-ssh-dnat"; }'
+  echo 'chain postrouting { type nat hook postrouting priority srcnat - 1; policy accept; ct status dnat snat ip to ct original proto-dst map @hill_snat comment "public-hill-snat"; ct status dnat snat ip to ct original proto-dst map @ssh_snat comment "public-ssh-snat"; }'
+  echo '}'
+} > "$ruleset"
+nft --check --file "$ruleset"
+nft --file "$ruleset"
+
+rules=$(nft -a list chain inet event_router forward_enabled)
+invalid=$(awk '/ct state invalid drop/ {print $NF; exit}' <<<"$rules")
+[[ $invalid =~ ^[0-9]+$ ]]
+add_forward() {
+  [[ $(grep -Fc "comment \"$1\"" <<<"$rules") -eq 1 ]] || printf 'add rule inet event_router forward_enabled position %s %s comment "%s"\n' "$invalid" "$2" "$1" | nft -f -
+}
+add_forward public-hill-forward 'ct status dnat ip daddr . tcp dport @hill_services ct state new accept'
+add_forward public-service-forward 'ct status dnat ip daddr @released_production_addresses tcp dport @service_ports ct state new accept'
+add_forward public-ssh-forward 'ct status dnat ip daddr @production_addresses tcp dport 22 ct state new accept'
+status

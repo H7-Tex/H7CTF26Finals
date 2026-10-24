@@ -208,106 +208,6 @@ locals {
       -- ubuntu@10.60.200.10 \
       'sudo chmod 0644 /etc/ssh/operations_relay_authorized_keys_ubuntu && sudo /usr/sbin/sshd -t && sudo systemctl reload ssh.service && sudo /usr/local/sbin/finals-install-secret-bundle anvil' < "$temporary"
   SCRIPT
-  operations_commission_control_action_script     = <<-SCRIPT
-    #!/usr/bin/env bash
-    set -euo pipefail
-
-    [[ $EUID -eq 0 ]] || { echo "control action wrapper must run as root" >&2; exit 1; }
-    [[ $(cat /etc/finals-platform/role 2>/dev/null) == '{"role":"operations"}' ]] || exit 1
-    [[ -f /run/finals-commissioning/central_id_ed25519 && ! -L /run/finals-commissioning/central_id_ed25519 ]] || exit 1
-    state=/run/finals-commissioning/control-reconciler-state.tar
-    [[ $(findmnt -n -o FSTYPE /run) == tmpfs && $(stat -c '%u:%g:%a' "$${state%/*}") == 0:0:700 ]] || exit 1
-    ssh_options=(
-      -F /dev/null
-      -i /run/finals-commissioning/central_id_ed25519
-      -o BatchMode=yes
-      -o ConnectTimeout=10
-      -o IdentitiesOnly=yes
-      -o PasswordAuthentication=no
-      -o StrictHostKeyChecking=yes
-      -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts
-    )
-    inventory_summary() {
-      tar -xOf "$state" "$1.json" | /usr/bin/python3 -c 'import hashlib,json,sys;b=sys.stdin.buffer.read();v=json.loads(b);n=sys.argv[1];print("{}-file-sha256={}\\n{}-generation={}\\n{}-peer-count={}".format(n,hashlib.sha256(b).hexdigest(),n,v["generation"],n,len(v["peers"])))' "$1"
-    }
-    [[ $# -eq 1 ]] || exit 2
-    case "$1" in
-      reconcile-once)
-        remote='set -uo pipefail; if sudo -n systemctl start peer-reconciler.service && [[ $(sudo -n systemctl show --property=Result --value peer-reconciler.service) == success ]]; then echo peer-reconciler-once=success; else sudo -n journalctl --unit=peer-reconciler.service --lines=3 --reverse --no-pager --output=cat; exit 1; fi'
-        ;;
-      reconciler-enable)
-        remote='set -euo pipefail; sudo -n systemctl enable --now peer-reconciler.timer >/dev/null; sudo -n systemctl is-active --quiet peer-reconciler.timer; echo peer-reconciler-timer=active'
-        ;;
-      control-status)
-        remote='set -euo pipefail; sudo -n systemctl show checker-runtime.service peer-reconciler.service peer-reconciler.timer --property=Id,ActiveState,SubState,Result,ExecMainStatus --no-pager; sudo -n systemctl is-active --quiet peer-reconciler.timer; curl --fail --silent --output /dev/null --connect-timeout 2 --max-time 3 http://127.0.0.1:9160/readyz; echo control-status=complete'
-        ;;
-      state-export)
-        [[ ! -e $state || ( -f $state && ! -L $state && $(stat -c '%u:%g:%a' "$state") == 0:0:600 ) ]] || exit 1
-        next=$state.next
-        rm -f -- "$next"; trap 'rm -f -- "$next"' EXIT
-        if ! /usr/bin/ssh "$${ssh_options[@]}" -- ubuntu@10.60.201.20 \
-          'set -euo pipefail
-          sudo -n systemctl disable --now peer-reconciler.timer >/dev/null
-          sudo -n systemctl stop peer-reconciler.service
-          ! sudo -n systemctl is-active --quiet peer-reconciler.timer
-          ! sudo -n systemctl is-active --quiet peer-reconciler.service
-          d=/var/lib/peer-reconciler; v=/run/peer-state-verify; sudo -n install -d -o peer-reconciler -g peer-reconciler -m 0700 "$v"; trap '\''sudo -n rm -rf -- "$v"'\'' EXIT
-          [[ $(sudo -n stat -c "%U:%G:%a" "$d") == peer-reconciler:peer-reconciler:700 ]]
-          files=(active.json); sudo -n test -f "$d/active.json"; sudo -n test ! -L "$d/active.json"
-          [[ $(sudo -n stat -c "%U:%G:%a" "$d/active.json") == peer-reconciler:peer-reconciler:600 ]]
-          if sudo -n test -e "$d/pending.json"; then sudo -n test -f "$d/pending.json"; sudo -n test ! -L "$d/pending.json"; [[ $(sudo -n stat -c "%U:%G:%a" "$d/pending.json") == peer-reconciler:peer-reconciler:600 ]]; files+=(pending.json); fi
-          sudo -n -u peer-reconciler /usr/local/libexec/event-router/render_inventory.py "$d/active.json" --wireguard-output "$v/a.wg" --nft-output "$v/a.nft"
-          if sudo -n test -e "$d/pending.json"; then sudo -n -u peer-reconciler /usr/local/libexec/event-router/render_inventory.py "$d/pending.json" --active-inventory "$d/active.json" --wireguard-output "$v/p.wg" --nft-output "$v/p.nft"; fi
-          sudo -n tar --format=ustar --owner=0 --group=0 --numeric-owner --mode=go-rwx -C "$d" -cf - "$${files[@]}"' > "$next"; then
-          rm -f -- "$next"; exit 1
-        fi
-        chmod 0600 "$next"; [[ $(stat -c %s "$next") -le 532480 ]]
-        /usr/bin/python3 -c 'import sys,tarfile as t;a=t.open(sys.argv[1],"r:");m=a.getmembers();assert [x.name for x in m] in [["active.json"],["active.json","pending.json"]];assert all(x.isfile() and x.mode==384 and x.uid==x.gid==0 and 0<x.size<=262144 for x in m)' "$next"
-        mv -f -- "$next" "$state"
-        trap - EXIT
-        summary=$(inventory_summary active; if tar -tf "$state" | grep -Fxq pending.json; then inventory_summary pending; else printf 'pending-file-sha256=absent\npending=absent\n'; fi)
-        pending_generation=$(sed -n 's/^pending-generation=//p' <<<"$summary"); [[ -z $pending_generation || $pending_generation -eq $(($(sed -n 's/^active-generation=//p' <<<"$summary") + 1)) ]]
-        printf 'state-sha256=%s\n%s\n%s\n' "$(sha256sum "$state" | cut -d ' ' -f 1)" "$summary" state-export=complete
-        exit
-        ;;
-      state-restore)
-        [[ -f $state && ! -L $state && $(stat -c '%u:%g:%a' "$state") == 0:0:600 && $(stat -c %s "$state") -le 532480 ]] || exit 1
-        /usr/bin/python3 -c 'import sys,tarfile as t;a=t.open(sys.argv[1],"r:");m=a.getmembers();assert [x.name for x in m] in [["active.json"],["active.json","pending.json"]];assert all(x.isfile() and x.mode==384 and x.uid==x.gid==0 and 0<x.size<=262144 for x in m)' "$state"
-        active_hash=$(tar -xOf "$state" active.json | sha256sum | cut -d ' ' -f 1)
-        if tar -tf "$state" | grep -Fxq pending.json; then pending_hash=$(tar -xOf "$state" pending.json | sha256sum | cut -d ' ' -f 1); else pending_hash=absent; fi
-        summary=$(inventory_summary active; if [[ $pending_hash == absent ]]; then printf 'pending-file-sha256=absent\npending=absent\n'; else inventory_summary pending; fi)
-        pending_generation=$(sed -n 's/^pending-generation=//p' <<<"$summary"); [[ -z $pending_generation || $pending_generation -eq $(($(sed -n 's/^active-generation=//p' <<<"$summary") + 1)) ]]
-        remote=$(/usr/bin/ssh "$${ssh_options[@]}" -- ubuntu@10.60.201.20 \
-          'set -euo pipefail
-          sudo -n systemctl disable --now peer-reconciler.timer >/dev/null
-          sudo -n systemctl stop peer-reconciler.service
-          ! sudo -n systemctl is-active --quiet peer-reconciler.timer
-          ! sudo -n systemctl is-active --quiet peer-reconciler.service
-          work=$(sudo -n mktemp -d /run/control-state.XXXXXX); trap '\''sudo -n rm -rf -- "$work"'\'' EXIT
-          sudo -n tee "$work/state.tar" >/dev/null
-          names=$(sudo -n tar -tf "$work/state.tar"); [[ $names == active.json || $names == $'\''active.json\npending.json'\'' ]]
-          sudo -n tar -xf "$work/state.tar" -C "$work" --no-same-owner --no-same-permissions
-          sudo -n install -d -o peer-reconciler -g peer-reconciler -m 0700 /var/lib/peer-reconciler
-          sudo -n install -o peer-reconciler -g peer-reconciler -m 0600 "$work/active.json" /var/lib/peer-reconciler/active.json.next
-          sudo -n mv -f /var/lib/peer-reconciler/active.json.next /var/lib/peer-reconciler/active.json
-          if [[ $names == *pending.json ]]; then sudo -n install -o peer-reconciler -g peer-reconciler -m 0600 "$work/pending.json" /var/lib/peer-reconciler/pending.json.next; sudo -n mv -f /var/lib/peer-reconciler/pending.json.next /var/lib/peer-reconciler/pending.json; else sudo -n rm -f /var/lib/peer-reconciler/pending.json; fi
-          verify=/var/lib/peer-reconciler/.verify; sudo -n install -d -o peer-reconciler -g peer-reconciler -m 0700 "$verify"
-          sudo -n -u peer-reconciler /usr/local/libexec/event-router/render_inventory.py /var/lib/peer-reconciler/active.json --wireguard-output "$verify/a.wg" --nft-output "$verify/a.nft"
-          if [[ $names == *pending.json ]]; then sudo -n -u peer-reconciler /usr/local/libexec/event-router/render_inventory.py /var/lib/peer-reconciler/pending.json --active-inventory /var/lib/peer-reconciler/active.json --wireguard-output "$verify/p.wg" --nft-output "$verify/p.nft"; fi
-          sudo -n rm -rf -- "$verify"
-          [[ $(sudo -n stat -c "%U:%G:%a" /var/lib/peer-reconciler/active.json) == peer-reconciler:peer-reconciler:600 ]]
-          printf "active-file-sha256=%s\n" "$(sudo -n sha256sum /var/lib/peer-reconciler/active.json | cut -d " " -f 1)"
-          if [[ $names == *pending.json ]]; then [[ $(sudo -n stat -c "%U:%G:%a" /var/lib/peer-reconciler/pending.json) == peer-reconciler:peer-reconciler:600 ]]; printf "pending-file-sha256=%s\n" "$(sudo -n sha256sum /var/lib/peer-reconciler/pending.json | cut -d " " -f 1)"; else echo pending-file-sha256=absent; fi' < "$state")
-        [[ $(sed -n 's/^active-file-sha256=//p' <<<"$remote") == "$active_hash" ]]
-        [[ $(sed -n 's/^pending-file-sha256=//p' <<<"$remote") == "$pending_hash" ]]
-        printf 'state-sha256=%s\n%s\n%s\n' "$(sha256sum "$state" | cut -d ' ' -f 1)" "$summary" state-restore=complete
-        exit
-        ;;
-      *) echo "unsupported fixed control action" >&2; exit 2 ;;
-    esac
-    /usr/bin/ssh "$${ssh_options[@]}" -- ubuntu@10.60.201.20 "$remote"
-  SCRIPT
-  operations_commission_action_bundle             = "${local.operations_commission_script}\n__FINALS_CONTROL_ACTION__\n${local.operations_commission_control_action_script}"
   operations_commission_control_secret_script     = <<-SCRIPT
     #!/usr/bin/env bash
     set -euo pipefail
@@ -616,9 +516,8 @@ locals {
     (( organizer == 1 && lines >= 2 && lines <= 64 )) || { echo "keys must keep the organizer and add 1-63 team keys" >&2; exit 1; }
     ssh_to 'set -eu; umask 077; mkdir -p "$HOME/.ssh"; cd "$HOME/.ssh"; cat > authorized_keys.next; if [ -f authorized_keys ]; then cp -p authorized_keys authorized_keys.prev; fi; mv authorized_keys.next authorized_keys; ssh-keygen -lf authorized_keys | wc -l' < "$work/authorized_keys"
   SCRIPT
-  # event-time exception to the gateway image: stage the reviewed model a router
-  # files (hash pinned), activate them, or flip the production-ssh switch.
-  # stdin header: "gateway-primary|gateway-standby stage NAME|activate|enable|disable|reconciler-access"
+  # event-time exception to stage and run the hash-pinned public-ingress tool or
+  # operate the remaining fixed Model A gateway switches.
   operations_commission_gateway_model_a_script    = <<-SCRIPT
     #!/usr/bin/env bash
     set -euo pipefail
@@ -636,9 +535,7 @@ locals {
       *) echo "unsupported fixed gateway target" >&2; exit 2 ;;
     esac
     declare -A pinned=(
-      [nftables]=b3122786466030efae9b2cb29903116d42aa824d6c703235968222f52807a269
-      [render]=a40b74f027e0137442f1f6ddfa1ce4f86b2a490c29716a5716aa9af8c1aa4dc6
-      [apply-inventory]=4725b32ca95776bfcfcbe61f8ee5e7ee66711e8008a7cdd1350ff494ccdf7e57
+      [public-ingress]=e6c536cf0b8c5415250c3853ddb39bbdb8cebbaea9cb1644fa7cc7344e69d321
     )
     ssh_to() { ssh -F /dev/null -i "$central" -o BatchMode=yes -o ConnectTimeout=10 -o IdentitiesOnly=yes \
       -o PasswordAuthentication=no -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts -- "ubuntu@$address" "$1"; }
@@ -650,19 +547,6 @@ locals {
         [[ $sum == "$${pinned[$name]}" ]] || { echo "model a file hash is not the reviewed one" >&2; exit 1; }
         ssh_to "set -eu; sudo -n install -d -m 0700 /var/lib/event-router/model-a; sudo -n tee /var/lib/event-router/model-a/$name >/dev/null" < "$work/file"
         ;;
-      activate)
-        ssh_to "set -eu; d=/var/lib/event-router/model-a
-          echo '$${pinned[nftables]}  '\$d/nftables | sudo -n sha256sum -c --quiet
-          echo '$${pinned[render]}  '\$d/render | sudo -n sha256sum -c --quiet
-          echo '$${pinned[apply-inventory]}  '\$d/apply-inventory | sudo -n sha256sum -c --quiet
-          sudo -n install -m 0644 \$d/nftables /etc/nftables.conf
-          sudo -n install -m 0755 \$d/render /usr/local/libexec/event-router/render_inventory.py
-          sudo -n install -m 0755 \$d/apply-inventory /usr/local/sbin/event-router-apply-inventory
-          sudo -n nft -c -f /etc/nftables.conf
-          sudo -n systemctl restart nftables.service event-router-restore.service
-          if sudo -n grep -Fxq active /etc/event-router/role; then sudo -n systemctl restart event-router-activate.service; fi
-          sudo -n nft list set inet event_router peer_production_access >/dev/null"
-        ;;
       enable|disable)
         ssh_to "set -eu; if [ $action = enable ]; then echo enabled | sudo -n tee /etc/event-router/production-ssh >/dev/null; else sudo -n rm -f /etc/event-router/production-ssh; fi
           sudo -n test ! -f /var/lib/event-router/active-peers.json || sudo -n /usr/local/sbin/event-router-apply-inventory /var/lib/event-router/active-peers.json
@@ -672,6 +556,13 @@ locals {
         if [ $action = challenge-access-open ]; then verb=open; else verb=status; fi
         ssh_to "set -eu; sudo -n /usr/local/sbin/event-router-challenge-access $verb
           sudo -n nft list set inet event_router released_hill_services | grep -c ' \. ' || true"
+        ;;
+      public-ingress-open|public-ingress-status)
+        if [[ $action == public-ingress-open ]]; then verb=open; else verb=status; fi
+        ssh_to "set -eu; d=/var/lib/event-router/model-a/public-ingress
+          echo '$${pinned[public-ingress]}  '\$d | sudo -n sha256sum -c --quiet
+          sudo -n install -m 0755 \$d /usr/local/sbin/event-router-public-ingress
+          sudo -n /usr/local/sbin/event-router-public-ingress $verb"
         ;;
       hill-engine-open)
         ssh_to "set -eu; rule='ip saddr 10.60.200.10 ip daddr . tcp dport @hill_services ct state new accept'
@@ -696,13 +587,29 @@ locals {
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall hill-01
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall hill-02
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall hill-03
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-01
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-02
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-03
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-04
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-05
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-06
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-07
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-08
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-09
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-10
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-11
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-12
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-13
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-14
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-15
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-16
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-stage-central
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-clear-central
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-action control-status
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-production-keys ""
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-gateway-model-a ""
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-runtime-artifact control checker-artifacts
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-runtime-artifact control checker-commission
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-runtime-artifact control checker-status
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-runtime-artifact control state-summary
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-runtime-artifact hill-01 hill-artifacts
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-runtime-artifact hill-01 hill-config
@@ -812,8 +719,10 @@ locals {
 
 check "operations_commission_cloud_init" {
   assert {
-    condition     = length(regexall("finals-commission-production-runtime", local.cloud_init_by_role["operations"])) > 0
-    error_message = "Operations cloud-init must install the fixed commissioning wrapper."
+    condition = alltrue([
+      for wrapper in ["finals-commission-runtime-artifact", "finals-commission-production-runtime"] : length(regexall(wrapper, local.cloud_init_by_role["operations"])) > 0
+    ])
+    error_message = "Operations cloud-init must install every fixed commissioning wrapper."
   }
 
   assert {

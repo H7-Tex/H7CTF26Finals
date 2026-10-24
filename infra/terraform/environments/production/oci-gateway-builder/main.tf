@@ -21,6 +21,7 @@ locals {
     "rootfs/usr/local/sbin/event-router-authorize-reconciler",
     "rootfs/usr/local/sbin/event-router-capture",
     "rootfs/usr/local/sbin/event-router-initialize",
+    "rootfs/usr/local/sbin/event-router-public-ingress",
     "rootfs/usr/local/sbin/event-router-receive-inventory",
     "rootfs/usr/local/sbin/event-router-restore",
     "seal-image",

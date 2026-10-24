@@ -27,6 +27,12 @@ case "$target:$action" in
       -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts -- "ubuntu@$address" \
       'sudo -n /usr/local/sbin/checker-runtime-commission'
     ;;
+  control:checker-status)
+    exec ssh -F /dev/null -i /run/finals-commissioning/central_id_ed25519 -o BatchMode=yes -o ConnectTimeout=10 \
+      -o IdentitiesOnly=yes -o PasswordAuthentication=no -o StrictHostKeyChecking=yes \
+      -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts -- "ubuntu@$address" \
+      'set -euo pipefail; timeout --signal=TERM --kill-after=2s 10s sudo -n systemctl is-active --quiet checker-runtime.service; timeout --signal=TERM --kill-after=2s 10s sudo -n systemctl is-active --quiet peer-reconciler.timer; curl --fail --silent --output /dev/null --connect-timeout 2 --max-time 3 http://127.0.0.1:9160/readyz; echo checker-status=complete'
+    ;;
   control:state-summary)
     exec ssh -F /dev/null -i /run/finals-commissioning/central_id_ed25519 -o BatchMode=yes -o ConnectTimeout=10 \
       -o IdentitiesOnly=yes -o PasswordAuthentication=no -o StrictHostKeyChecking=yes \
