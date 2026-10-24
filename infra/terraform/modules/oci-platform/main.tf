@@ -95,8 +95,8 @@ locals {
     }
     target=$${1:-}
     action=$${2:-}
-    [[ $# -eq 2 && ( $action == volume-initialize || ( $target == platform && $action == arena-schema ) ) ]] || {
-      echo "usage: finals-commission-volume {platform|gateway-primary|gateway-standby} volume-initialize | platform arena-schema" >&2
+    [[ $# -eq 2 && ( $action == volume-initialize || ( $target == platform && $action =~ ^(arena-schema|migration-061|platform-quiesce|anvil-restart)$ ) ) ]] || {
+      echo "unsupported fixed volume action" >&2
       exit 2
     }
     case "$target" in
@@ -132,6 +132,41 @@ locals {
     UPDATE game_koth_hills h SET sort_order = v.n FROM (VALUES ('current-affairs', 1), ('majority-rules', 2), ('tag-youre-it', 3)) v(slug, n) WHERE h.slug = v.slug AND h.sort_order IS DISTINCT FROM v.n;
     SELECT 'arena-schema=complete';
     SQL
+    fi
+    if [[ $action == migration-061 ]]; then
+      exec /usr/bin/ssh "$${ssh_options[@]}" -- "ubuntu@$address" \
+        'set -euo pipefail
+        sudo -n /usr/bin/docker compose --project-name anvil-finals --project-directory /opt/anvil/current/deployments/finals --env-file /etc/anvil/finals.env -f /opt/anvil/current/deployments/finals/compose.yaml up -d --wait postgres
+        result=$(sudo -n /usr/bin/docker compose --project-name anvil-finals --project-directory /opt/anvil/current/deployments/finals --env-file /etc/anvil/finals.env -f /opt/anvil/current/deployments/finals/compose.yaml exec -T postgres psql -v ON_ERROR_STOP=1 --username anvil --dbname anvil --tuples-only --no-align --command "UPDATE schema_migrations SET checksum = '\''c4a3936fbd48195d89ec43ea54c52cf8b8e3571d2754904bd585a4e1d8ef5b81'\'' WHERE version = 61 AND checksum = '\''67270381009968540af04cf4d07c2bbfa612479e8dbf904f683a003211ac13f6'\'';")
+        [[ $result == "UPDATE 1" ]]
+        echo migration-061=complete'
+    fi
+    if [[ $action == platform-quiesce ]]; then
+      exec /usr/bin/ssh "$${ssh_options[@]}" -- "ubuntu@$address" \
+        'set -euo pipefail
+        before=$(sudo -n find /srv/anvil/backups -mindepth 1 -maxdepth 1 -type d -name "anvil-*" -printf "." | wc -c)
+        sudo -n systemctl start anvil-finals-backup.service
+        [[ $(sudo -n systemctl show --property=Result --value anvil-finals-backup.service) == success ]]
+        [[ $(sudo -n systemctl show --property=ExecMainStatus --value anvil-finals-backup.service) == 0 ]]
+        after=$(sudo -n find /srv/anvil/backups -mindepth 1 -maxdepth 1 -type d -name "anvil-*" -printf "." | wc -c); [[ $after -gt $before ]]
+        backup=$(sudo -n find /srv/anvil/backups -mindepth 1 -maxdepth 1 -type d -name "anvil-*" -printf "%T@ %p\n" | sort -n | tail -n 1 | cut -d " " -f 2-)
+        [[ -n $backup && $(sudo -n stat -c "%u:%g:%a" "$backup") == 0:0:700 ]]
+        sudo -n test -s "$backup/database.dump"; sudo -n test -s "$backup/storage.tar.gz"; sudo -n test -s "$backup/SHA256SUMS"
+        sudo -n sh -c '\''cd "$1" && sha256sum --check --strict SHA256SUMS >/dev/null'\'' sh "$backup"
+        sudo -n systemctl disable --now anvil-finals-backup.timer >/dev/null
+        sudo -n systemctl stop anvil-finals.service
+        [[ -z $(sudo -n /usr/bin/docker compose --project-name anvil-finals --project-directory /opt/anvil/current/deployments/finals --env-file /etc/anvil/finals.env -f /opt/anvil/current/deployments/finals/compose.yaml ps --status running --quiet) ]]
+        sync; sudo -n umount /srv/anvil; ! mountpoint -q /srv/anvil
+        echo platform-quiesce=complete'
+    fi
+    if [[ $action == anvil-restart ]]; then
+      exec /usr/bin/ssh "$${ssh_options[@]}" -- "ubuntu@$address" \
+        'set -euo pipefail
+        sudo -n systemctl restart anvil-finals.service
+        sudo -n systemctl is-active --quiet anvil-finals.service
+        status=$(curl --silent --show-error --output /dev/null --write-out "%%{http_code}" --connect-timeout 5 --max-time 15 --proto "=https" --tlsv1.2 --resolve finals.h7tex.com:443:10.60.200.10 https://finals.h7tex.com/)
+        [[ $status == 200 ]]
+        echo anvil-restart=complete'
     fi
     temporary=$(mktemp /run/finals-volume-initialize.XXXXXX)
     trap 'rm -f -- "$temporary"' EXIT
@@ -651,6 +686,9 @@ locals {
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-secret platform anvil
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform volume-initialize
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform arena-schema
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform migration-061
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform platform-quiesce
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform anvil-restart
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-action reconcile-once
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-action reconciler-enable
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-action control-status

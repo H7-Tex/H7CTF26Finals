@@ -439,12 +439,29 @@ class BuilderMetadataTests(unittest.TestCase):
         platform_secret = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-secret platform anvil"
         platform_volume = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform volume-initialize"
         arena_schema = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform arena-schema"
+        migration_061 = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform migration-061"
+        platform_quiesce = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform platform-quiesce"
+        anvil_restart = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform anvil-restart"
         self.assertEqual(platform.count(platform_secret), 1)
         self.assertEqual(platform.count(platform_volume), 1)
         self.assertEqual(platform.count(arena_schema), 1)
+        self.assertEqual(platform.count(migration_061), 1)
+        self.assertEqual(platform.count(platform_quiesce), 1)
+        self.assertEqual(platform.count(anvil_restart), 1)
         self.assertNotIn("finals-commission-secret platform *", platform)
         self.assertNotIn("finals-commission-volume platform *", platform)
-        self.assertNotIn("platform-quiesce", platform)
+        self.assertIn("up -d --wait postgres", platform)
+        self.assertIn("UPDATE schema_migrations SET checksum = '\\''c4a3936fbd48195d89ec43ea54c52cf8b8e3571d2754904bd585a4e1d8ef5b81'\\''", platform)
+        self.assertIn("WHERE version = 61 AND checksum = '\\''67270381009968540af04cf4d07c2bbfa612479e8dbf904f683a003211ac13f6'\\''", platform)
+        self.assertIn('[[ $result == "UPDATE 1" ]]', platform)
+        self.assertIn("migration-061=complete", platform)
+        self.assertIn("platform-quiesce=complete", platform)
+        self.assertIn("systemctl disable --now anvil-finals-backup.timer", platform)
+        self.assertIn("sha256sum --check --strict SHA256SUMS", platform)
+        self.assertIn("umount /srv/anvil", platform)
+        self.assertIn("systemctl restart anvil-finals.service", platform)
+        self.assertIn('[[ $status == 200 ]]', platform)
+        self.assertIn("anvil-restart=complete", platform)
         self.assertIn("event.freeze_at", platform)
         self.assertIn("2026-10-25T11:00:00+05:30", platform)
         self.assertIn("game_services s SET sort_order", platform)
