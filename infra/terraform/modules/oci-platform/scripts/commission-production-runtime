@@ -27,6 +27,8 @@ if [[ $action == status ]]; then
   docker image ls --format '{{.ID}} {{.Repository}}:{{.Tag}}' | sed -n '1,20p'
   docker ps -a --format '{{.Names}} {{.Status}}'
   systemctl is-active finals-service-proxy || true
+  ss -ltn | grep -E ':700[1-6][[:space:]]' || true
+  nft -a list chain inet finals_host input | grep -E '7001-7006|reject|drop' || true
   df -h /srv/finals/service-data /
   exit 0
 fi

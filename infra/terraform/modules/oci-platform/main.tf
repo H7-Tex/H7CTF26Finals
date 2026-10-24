@@ -671,7 +671,9 @@ locals {
       challenge-access-open|challenge-access-status)
         if [ $action = challenge-access-open ]; then verb=open; else verb=status; fi
         ssh_to "set -eu; sudo -n /usr/local/sbin/event-router-challenge-access $verb
-          sudo -n nft list set inet event_router released_hill_services | grep -c ' \. ' || true"
+          sudo -n nft list set inet event_router released_hill_services | grep -c ' \. ' || true
+          printf 'service-snat-address='; ip -o -4 address show | grep -c '10.60.250.120/24' || true
+          sudo -n nft -a list chain inet event_router forward_enabled | grep -E 'router_peer_(service|drop)' || true"
         ;;
       hill-engine-open)
         ssh_to "set -eu; rule='ip saddr 10.60.200.10 ip daddr . tcp dport @hill_services ct state new accept'
