@@ -34,6 +34,8 @@ class BuilderMetadataTests(unittest.TestCase):
     def test_operations_bastion_is_fixed_and_source_restricted(self):
         environment = (ROOT / "terraform/environments/production/oci-platform/main.tf").read_text(encoding="utf-8")
         outputs = (ROOT / "terraform/environments/production/oci-platform/outputs.tf").read_text(encoding="utf-8")
+        module = (ROOT / "terraform/modules/oci-platform/main.tf").read_text(encoding="utf-8")
+        variables = (ROOT / "terraform/modules/oci-platform/variables.tf").read_text(encoding="utf-8")
         self.assertEqual(environment.count('resource "oci_bastion_bastion" "operations"'), 1)
         self.assertIn('bastion_type                 = "standard"', environment)
         self.assertIn('client_cidr_block_allow_list = ["27.61.61.38/32"]', environment)
@@ -43,6 +45,25 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn('dns_proxy_status             = "DISABLED"', environment)
         self.assertNotIn('client_cidr_block_allow_list = ["0.0.0.0/0"]', environment)
         self.assertIn('oci_bastion_bastion.operations.private_endpoint_ip_address', outputs)
+        self.assertEqual(
+            environment.count(
+                "operations_bastion_source_ip    = oci_bastion_bastion.operations.private_endpoint_ip_address"
+            ),
+            1,
+        )
+        self.assertIn('variable "operations_bastion_source_ip"', variables)
+        self.assertIn('startswith(var.operations_bastion_source_ip, "10.60.200.")', variables)
+        self.assertEqual(module.count("10-bastion.conf"), 2)
+        self.assertEqual(
+            module.count(
+                'ExecStartPost=/usr/sbin/nft add rule inet finals_host input ip saddr ${var.operations_bastion_source_ip} tcp dport 22 accept'
+            ),
+            1,
+        )
+        self.assertIn('"  - [\\"systemctl\\", \\"daemon-reload\\"]\\n  - [\\"/usr/local/sbin/finals-platform-activate\\", \\"operations\\"]', module)
+        self.assertIn("operations_unused_relay_files", module)
+        self.assertIn("local.operations_unused_relay_files", module)
+        self.assertNotIn("0.0.0.0/0 tcp dport 22 accept", module)
 
     def test_checker_status_is_fixed_and_bounded(self):
         module = (ROOT / "terraform/modules/oci-platform/main.tf").read_text(encoding="utf-8")

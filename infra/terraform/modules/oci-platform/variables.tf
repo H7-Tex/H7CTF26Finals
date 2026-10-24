@@ -58,6 +58,19 @@ variable "operations_relay_ssh_public_key" {
   }
 }
 
+variable "operations_bastion_source_ip" {
+  description = "Private endpoint address of the restricted Operations Bastion."
+  type        = string
+
+  validation {
+    condition = (
+      startswith(var.operations_bastion_source_ip, "10.60.200.") &&
+      can(cidrnetmask("${var.operations_bastion_source_ip}/32"))
+    )
+    error_message = "operations_bastion_source_ip must be an IPv4 address in the services subnet."
+  }
+}
+
 variable "relay_authorized_keys_readable_roles" {
   description = "Fixed roles whose public forced-command key file uses the sshd-readable 0644 mode."
   type        = set(string)

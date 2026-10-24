@@ -10,6 +10,7 @@ module "platform" {
   arm_image_id                    = var.arm_image_id
   organizer_ssh_authorized_keys   = var.organizer_ssh_authorized_keys
   operations_relay_ssh_public_key = var.operations_relay_ssh_public_key
+  operations_bastion_source_ip    = oci_bastion_bastion.operations.private_endpoint_ip_address
   # Deferred until each affected immutable host receives a reviewed replacement plan.
   relay_authorized_keys_readable_roles = ["platform", "control"]
 }

@@ -82,8 +82,30 @@ locals {
     managed_by = "terraform"
   }
 
-  operations_relay_authorized_key = "restrict,command=\"/usr/local/sbin/finals-secret-relay-receive\" ${var.operations_relay_ssh_public_key}"
-  operations_relay_roles          = toset(["platform", "control", "repository"])
+  operations_relay_authorized_key  = "restrict,command=\"/usr/local/sbin/finals-secret-relay-receive\" ${var.operations_relay_ssh_public_key}"
+  operations_relay_roles           = toset(["platform", "control", "repository"])
+  operations_bastion_firewall_rule = "ExecStartPost=/usr/sbin/nft add rule inet finals_host input ip saddr ${var.operations_bastion_source_ip} tcp dport 22 accept"
+  operations_bastion_firewall_file = join("\n", [
+    "  - path: /etc/systemd/system/finals-host-firewall.service.d/10-bastion.conf",
+    "    permissions: '0644'",
+    "    content: |",
+    "      [Service]",
+    "      ${local.operations_bastion_firewall_rule}",
+    "",
+  ])
+  operations_unused_relay_files = join("\n", [
+    "  - path: /etc/ssh/sshd_config.d/91-operations-relay.conf",
+    "    owner: root:root",
+    "    permissions: '0644'",
+    "    content: |",
+    "      AuthorizedKeysFile .ssh/authorized_keys /etc/ssh/operations_relay_authorized_keys_%u",
+    "  - path: /etc/ssh/operations_relay_authorized_keys_ubuntu",
+    "    owner: root:root",
+    "    permissions: '0600'",
+    "    content: |",
+    "      ",
+    "",
+  ])
 
   operations_commission_initializer_sha256        = "eaeb4c33d2c94f59dee9b01b2b6dbce8e8f8adf720e4108f713456f7cf4f69ab"
   operations_commission_anvil_sha256              = "75a1f6046817a6b83a214b3feeea9b7327a2ba0951bfedc20f811564ef6262e9"
@@ -682,9 +704,13 @@ locals {
   cloud_init_by_role = {
     for role, content in local.cloud_init_base_by_role : role => (
       role == "operations" ? replace(
-        content,
+        replace(
+          content,
+          local.operations_unused_relay_files,
+          local.operations_bastion_firewall_file,
+        ),
         "  - [\"/usr/local/sbin/finals-platform-activate\", \"operations\"]\n",
-        "  - [\"/usr/local/sbin/finals-platform-activate\", \"operations\"]\n${local.operations_commission_runcmd}",
+        "  - [\"systemctl\", \"daemon-reload\"]\n  - [\"/usr/local/sbin/finals-platform-activate\", \"operations\"]\n${local.operations_commission_runcmd}",
         ) : role == "control" ? replace(
         content,
         "  - [\"/usr/local/sbin/finals-platform-activate\", \"control\"]\n",
@@ -699,6 +725,16 @@ locals {
 }
 
 check "operations_commission_cloud_init" {
+  assert {
+    condition = (
+      length(regexall("ExecStartPost=/usr/sbin/nft add rule inet finals_host input ip saddr [0-9.]+ tcp dport 22 accept", local.cloud_init_by_role["operations"])) == 1 &&
+      alltrue([
+        for role in keys(local.hosts) : role == "operations" || length(regexall("10-bastion.conf", local.cloud_init_by_role[role])) == 0
+      ])
+    )
+    error_message = "The Bastion SSH firewall rule must exist only on Operations."
+  }
+
   assert {
     condition = alltrue([
       for wrapper in ["finals-commission-runtime-artifact", "finals-commission-production-runtime"] : length(regexall(wrapper, local.cloud_init_by_role["operations"])) > 0
