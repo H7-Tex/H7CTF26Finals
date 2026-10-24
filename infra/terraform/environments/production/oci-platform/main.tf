@@ -23,3 +23,18 @@ module "storage" {
     gateway-primary = var.gateway_primary_instance_id
   })
 }
+
+resource "oci_bastion_bastion" "operations" {
+  bastion_type                 = "STANDARD"
+  client_cidr_block_allow_list = ["27.61.61.38/32"]
+  compartment_id               = var.finals_compartment_id
+  dns_proxy_status             = "DISABLED"
+  max_session_ttl_in_seconds   = 10800
+  name                         = "operations-access"
+  target_subnet_id             = var.subnet_ids["services"]
+
+  freeform_tags = {
+    event      = "finals-2026"
+    managed_by = "terraform"
+  }
+}

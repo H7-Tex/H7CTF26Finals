@@ -21,6 +21,18 @@ TEMPLATES = (
 
 
 class BuilderMetadataTests(unittest.TestCase):
+    def test_operations_bastion_is_fixed_and_source_restricted(self):
+        environment = (ROOT / "terraform/environments/production/oci-platform/main.tf").read_text(encoding="utf-8")
+        outputs = (ROOT / "terraform/environments/production/oci-platform/outputs.tf").read_text(encoding="utf-8")
+        self.assertEqual(environment.count('resource "oci_bastion_bastion" "operations"'), 1)
+        self.assertIn('bastion_type                 = "STANDARD"', environment)
+        self.assertIn('client_cidr_block_allow_list = ["27.61.61.38/32"]', environment)
+        self.assertIn('max_session_ttl_in_seconds   = 10800', environment)
+        self.assertIn('target_subnet_id             = var.subnet_ids["services"]', environment)
+        self.assertIn('dns_proxy_status             = "DISABLED"', environment)
+        self.assertNotIn('client_cidr_block_allow_list = ["0.0.0.0/0"]', environment)
+        self.assertIn('oci_bastion_bastion.operations.private_endpoint_ip_address', outputs)
+
     def test_checker_status_is_fixed_and_bounded(self):
         module = (ROOT / "terraform/modules/oci-platform/main.tf").read_text(encoding="utf-8")
         wrapper = (ROOT / "terraform/modules/oci-platform/scripts/commission-runtime-artifact").read_text(encoding="utf-8")
