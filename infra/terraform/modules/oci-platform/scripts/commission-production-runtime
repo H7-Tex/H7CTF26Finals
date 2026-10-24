@@ -7,7 +7,7 @@ central=/run/finals-commissioning/central_id_ed25519
 read -r target action extra
 read -r marker host type key extra_key
 [[ $target =~ ^production-(0[1-9]|1[0-6])$ && -z ${extra:-} ]] || exit 2
-[[ $action == status || $action == proxy-diagnose || $action == docker-store || $action == model-a-network-repair ]] || exit 2
+[[ $action == status || $action == model-a-network-repair ]] || exit 2
 team=$((10#${BASH_REMATCH[1]}))
 address="10.60.$team.2"
 [[ $marker == known-host && $host == "$address" && $type == ssh-ed25519 && $key =~ ^[A-Za-z0-9+/]{68}$ && -z ${extra_key:-} ]] || exit 1
@@ -23,66 +23,6 @@ team=$2
 if [[ $action == status ]]; then
   if [[ -f /var/lib/finals-model-a/firstboot.done ]]; then echo firstboot.done=yes; else echo firstboot.done=no; fi
   systemctl is-active finals-service-proxy || true
-  exit 0
-fi
-
-if [[ $action == proxy-diagnose ]]; then
-  systemctl show finals-service-proxy.service -p ActiveState,SubState,Result,ExecMainStatus,MainPID
-  ss -ltnp | grep -E ':700[1-6][[:space:]]' || :
-  nft -a list chain inet finals_host input | grep -E '7001-7006|reject|drop' || :
-  journalctl -u finals-service-proxy.service -n 20 --no-pager -o cat
-  exit 0
-fi
-
-if [[ $action == docker-store ]]; then
-  systemctl stop finals-model-a-firstboot.service || true
-  python3 - <<'PY'
-import json
-import os
-import stat
-import tempfile
-from pathlib import Path
-
-path = Path("/etc/docker/daemon.json")
-info = path.lstat()
-if not stat.S_ISREG(info.st_mode) or info.st_size > 1024 * 1024:
-    raise SystemExit("unsafe Docker daemon configuration")
-document = json.loads(path.read_text(encoding="utf-8"))
-document.setdefault("features", {})["containerd-snapshotter"] = True
-with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=path.parent, delete=False) as output:
-    json.dump(document, output, indent=2, sort_keys=True)
-    output.write("\n")
-    output.flush()
-    os.fsync(output.fileno())
-    temporary = Path(output.name)
-os.chmod(temporary, info.st_mode & 0o777)
-os.chown(temporary, info.st_uid, info.st_gid)
-os.replace(temporary, path)
-PY
-  systemctl restart docker
-  docker info --format '{{json .DriverStatus}}' | grep -Fq 'io.containerd.snapshotter.v1'
-  release=/var/lib/finals-model-a/release
-  docker image load --input "$release/archives/base-images.tar" >/dev/null
-  python3 - "$release/release.json" <<'PY'
-import json
-import subprocess
-import sys
-
-for record in json.load(open(sys.argv[1], encoding="utf-8"))["base_images"]:
-    reference, image_id = record["reference"], record["image_id"]
-    repository = reference.split("@", 1)[0]
-    subprocess.run(["docker", "tag", image_id, f"{repository}:finals-base"], check=True)
-    actual = subprocess.run(
-        ["docker", "image", "inspect", "--format", "{{.Id}}", reference],
-        check=True, capture_output=True, text=True,
-    ).stdout.strip()
-    if actual != image_id:
-        raise SystemExit(f"base name mismatch {reference}: {actual}")
-print("base-names=ok")
-PY
-  systemctl reset-failed finals-model-a-firstboot.service || true
-  systemctl restart --no-block finals-model-a-firstboot.service
-  echo 'docker-store=containerd'
   exit 0
 fi
 
