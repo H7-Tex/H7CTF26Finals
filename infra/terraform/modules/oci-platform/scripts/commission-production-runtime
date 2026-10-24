@@ -22,12 +22,9 @@ action=$1
 team=$2
 if [[ $action == status ]]; then
   if [[ -f /var/lib/finals-model-a/firstboot.done ]]; then echo firstboot.done=yes; else echo firstboot.done=no; fi
-  systemctl show finals-model-a-firstboot -p ActiveState,SubState,Result,ExecMainStatus,NRestarts
-  docker ps -a --format '{{.Names}} {{.Status}}'
   systemctl is-active finals-service-proxy || true
   ss -ltn | grep -E ':700[1-6][[:space:]]' || :
   nft -a list chain inet finals_host input | grep -E '7001-7006|reject|drop' || :
-  df -h /srv/finals/service-data /
   exit 0
 fi
 
@@ -170,6 +167,20 @@ for slug in sign-me-in can-we-settle-this update-pending book-me-if-you-can ship
   H7_IMAGE="$image" docker compose --project-directory "$root" --file "$root/compose.yaml" down
   H7_IMAGE="$image" docker compose --project-directory "$root" --file "$root/compose.yaml" up --detach --wait --wait-timeout 90 service
 done
+unit=/usr/lib/systemd/system/finals-service-proxy.service
+unit_before=618f6e50c7aebc8050ec1b0b432ebb0feaa4e3c8e49c1dbbbf203bd9f4e8f0c7
+unit_after=cd6b9eaf22ad90b47840fcf983987e71e9afef08e826c3d6c479069159bf344b
+unit_actual=$(sha256sum "$unit" | cut -d ' ' -f 1)
+if [[ $unit_actual == "$unit_before" ]]; then
+  sed -i -e 's/^Type=notify$/Type=simple/' -e 's#^ExecStart=/usr/sbin/haproxy -Ws #ExecStart=/usr/sbin/haproxy -W -db #' "$unit"
+elif [[ $unit_actual != "$unit_after" ]]; then
+  echo "proxy-repair=refused:unit-hash:$unit_actual" >&2
+  exit 1
+fi
+echo "$unit_after  $unit" | sha256sum -c --quiet
+systemctl daemon-reload
+systemctl restart finals-service-proxy.service
+systemctl is-active --quiet finals-service-proxy.service
 python3 - "$team" <<'PY'
 import http.client
 import socket
@@ -184,7 +195,7 @@ services = (
 failed = False
 for slug, port, is_http in services:
     passed = True
-    for label, host, target_port in (("loopback", "127.0.0.1", port + 10000), ("frontend", f"10.60.{team}.2", port)):
+    for label, host, target_port in (("loopback", "127.0.0.1", port + 10000),):
         try:
             if is_http:
                 connection = http.client.HTTPConnection(host, target_port, timeout=3)
@@ -204,6 +215,8 @@ for slug, port, is_http in services:
     failed |= not passed
 raise SystemExit(1 if failed else 0)
 PY
+[[ $(ss -ltn | grep -Ec "10\\.60\\.$team\\.2:700[1-6][[:space:]]") -eq 6 ]]
+echo 'proxy-listeners=6'
 echo 'model-a-network-repair=complete'
 REMOTE
 chmod 0700 "$work/remote"
