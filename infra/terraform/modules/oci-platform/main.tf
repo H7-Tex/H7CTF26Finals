@@ -680,60 +680,13 @@ locals {
   operations_commission_runtime_artifact_script   = file("${path.module}/scripts/commission-runtime-artifact")
   operations_commission_production_runtime_script = file("${path.module}/scripts/commission-production-runtime")
   operations_commission_sudoers                   = <<-SUDOERS
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh gateway-primary gateway-wireguard
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh gateway-primary gateway-reconciler
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh gateway-standby gateway-wireguard
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh gateway-standby gateway-reconciler
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh platform anvil
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh control control-reconciler
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh control control-checkers
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh repository repository
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-secret platform anvil
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform volume-initialize
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform arena-schema
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform migration-061
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform platform-quiesce
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform anvil-restart
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-action reconcile-once
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-action reconciler-enable
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-action control-status
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-action state-export
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-action state-restore
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-secret control-reconciler
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-secret control-checkers
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall platform
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall control
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall repository
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall mirror
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall hill-01
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall hill-02
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall hill-03
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-01
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-02
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-03
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-04
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-05
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-06
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-07
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-08
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-09
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-10
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-11
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-12
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-13
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-14
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-15
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall production-16
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume gateway-primary volume-initialize
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume gateway-standby volume-initialize
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-stage-central
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-clear-central
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-gateway-secret gateway-primary gateway-wireguard
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-gateway-secret gateway-primary gateway-reconciler
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-gateway-secret gateway-standby gateway-wireguard
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-gateway-secret gateway-standby gateway-reconciler
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-production-keys ""
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-gateway-model-a ""
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-runtime-artifact control checker-artifacts
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-runtime-artifact control checker-commission
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-runtime-artifact control state-summary
@@ -754,19 +707,11 @@ locals {
   operations_commission_runcmd = join("\n", [
     "  - |",
     "    set -eu",
-    "    work=$(mktemp -d /run/finals-commission-actions.XXXXXX)",
-    "    printf '%s' '${base64gzip(local.operations_commission_action_bundle)}' | base64 -d | gzip -d | awk -v d=\"$work\" '/^__FINALS_CONTROL_ACTION__$/ { p=1; next } { print > d (p ? \"/control\" : \"/volume\") }'",
-    "    install -D -m 0755 \"$work/volume\" /usr/local/sbin/finals-commission-volume",
-    "    install -D -m 0755 \"$work/control\" /usr/local/sbin/finals-commission-control-action",
-    "    rm -rf -- \"$work\"",
-    "    printf '%s' '${base64gzip(local.operations_commission_secret_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-secret",
     "    printf '%s' '${base64gzip(local.operations_commission_control_secret_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-control-secret",
     "    printf '%s' '${base64gzip(local.operations_commission_host_firewall_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-host-firewall",
     "    printf '%s' '${base64gzip(local.operations_commission_stage_central_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-stage-central",
     "    printf '%s' '${base64gzip(local.operations_commission_clear_central_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-clear-central",
-    "    printf '%s' '${base64gzip(local.operations_commission_gateway_secret_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-gateway-secret",
     "    printf '%s' '${base64gzip(local.operations_commission_production_keys_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-production-keys",
-    "    printf '%s' '${base64gzip(local.operations_commission_gateway_model_a_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-gateway-model-a",
     "    printf '%s' '${base64gzip(local.operations_commission_runtime_artifact_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-runtime-artifact",
     "    printf '%s' '${base64gzip(local.operations_commission_production_runtime_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-production-runtime",
     "    temporary=$(mktemp /etc/sudoers.d/.finals-operations-commissioning.XXXXXX)",

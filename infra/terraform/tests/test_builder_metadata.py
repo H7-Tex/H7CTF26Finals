@@ -490,8 +490,9 @@ class BuilderMetadataTests(unittest.TestCase):
         router = ROOT / "images/router/rootfs"
         for path in ("etc/nftables.conf", "usr/local/libexec/event-router/render_inventory.py", "usr/local/sbin/event-router-apply-inventory"):
             self.assertIn(hashlib.sha256((router / path).read_bytes()).hexdigest(), platform, path)
+        self.assertEqual(platform.count('ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-production-keys ""'), 1)
+        self.assertEqual(platform.count('ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-gateway-model-a ""'), 0)
         for wrapper in ("finals-commission-production-keys", "finals-commission-gateway-model-a"):
-            self.assertEqual(platform.count(f'ocarun ALL=(root) NOPASSWD: /usr/local/sbin/{wrapper} ""'), 1)
             self.assertNotIn(f"/usr/local/sbin/{wrapper} *", platform)
         self.assertIn("^production-(0[1-9]|1[0-5])$", platform)
         self.assertIn("SHA256:dfPMQE51IWgeI/TQvWs+zgCNU1dyZhpMBnQap/pmA0I", platform)
@@ -516,12 +517,12 @@ class BuilderMetadataTests(unittest.TestCase):
         migration_061 = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform migration-061"
         platform_quiesce = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform platform-quiesce"
         anvil_restart = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform anvil-restart"
-        self.assertEqual(platform.count(platform_secret), 1)
-        self.assertEqual(platform.count(platform_volume), 1)
-        self.assertEqual(platform.count(arena_schema), 1)
-        self.assertEqual(platform.count(migration_061), 1)
-        self.assertEqual(platform.count(platform_quiesce), 1)
-        self.assertEqual(platform.count(anvil_restart), 1)
+        self.assertEqual(platform.count(platform_secret), 0)
+        self.assertEqual(platform.count(platform_volume), 0)
+        self.assertEqual(platform.count(arena_schema), 0)
+        self.assertEqual(platform.count(migration_061), 0)
+        self.assertEqual(platform.count(platform_quiesce), 0)
+        self.assertEqual(platform.count(anvil_restart), 0)
         self.assertNotIn("finals-commission-secret platform *", platform)
         self.assertNotIn("finals-commission-volume platform *", platform)
         self.assertIn("up -d --wait postgres", platform)
@@ -544,7 +545,7 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertNotIn("anvil-audit-complete", platform)
         self.assertNotIn("admin-promote", platform)
         self.assertIn("operations_commission_secret_script", platform)
-        self.assertIn("base64gzip(local.operations_commission_secret_script)", platform)
+        self.assertNotIn("base64gzip(local.operations_commission_secret_script)", platform)
         self.assertNotIn("base64encode(local.operations_commission_", platform)
         self.assertIn("| gzip -d | install", platform)
         self.assertIn("75a1f6046817a6b83a214b3feeea9b7327a2ba0951bfedc20f811564ef6262e9", platform)
@@ -556,7 +557,7 @@ class BuilderMetadataTests(unittest.TestCase):
             "state-restore",
         ):
             fixed = f"ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-action {action}"
-            self.assertEqual(platform.count(fixed), 1)
+            self.assertEqual(platform.count(fixed), 0)
         self.assertIn("reconciler-access)", platform)
         self.assertIn("sudo -n chmod 0755 \\$h; sudo -n chmod 0644 \\$h/authorized_keys", platform)
         self.assertNotIn("finals-commission-control-action *", platform)
@@ -584,11 +585,12 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn("-le 532480", control_wrapper)
         self.assertIn("pending-generation", control_wrapper)
         self.assertNotIn("cat /var/lib/peer-reconciler/active.json", control_wrapper)
-        self.assertIn("base64gzip(local.operations_commission_action_bundle)", platform)
+        self.assertNotIn("base64gzip(local.operations_commission_action_bundle)", platform)
         self.assertNotIn("base64gzip(local.operations_commission_control_action_script)", platform)
-        for bundle in ("control-reconciler", "control-checkers"):
-            fixed = f"ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-secret {bundle}"
-            self.assertEqual(platform.count(fixed), 1)
+        reconciler = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-secret control-reconciler"
+        checkers = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-secret control-checkers"
+        self.assertEqual(platform.count(reconciler), 0)
+        self.assertEqual(platform.count(checkers), 1)
         self.assertNotIn("finals-commission-control-secret *", platform)
         control_secret = platform[
             platform.index("operations_commission_control_secret_script"):
@@ -626,7 +628,7 @@ class BuilderMetadataTests(unittest.TestCase):
         ]
         for target in targets:
             fixed = f"ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall {target}"
-            self.assertEqual(platform.count(fixed), 1, target)
+            self.assertEqual(platform.count(fixed), 1 if target.startswith("hill-") else 0, target)
         self.assertNotIn("finals-commission-host-firewall *", platform)
         self.assertIn("StrictHostKeyChecking=yes", firewall_wrapper)
         self.assertIn('UserKnownHostsFile="$work/known_hosts"', firewall_wrapper)
@@ -643,8 +645,8 @@ class BuilderMetadataTests(unittest.TestCase):
             self.assertNotIn(forbidden, firewall_wrapper)
         self.assertIn("base64gzip(local.operations_commission_host_firewall_script)", platform)
         self.assertIn("relay_authorized_keys_readable_roles", platform)
-        self.assertIn("finals-commission-volume gateway-primary volume-initialize", platform)
-        self.assertIn("finals-commission-volume gateway-standby volume-initialize", platform)
+        self.assertNotIn("finals-commission-volume gateway-primary volume-initialize", platform)
+        self.assertNotIn("finals-commission-volume gateway-standby volume-initialize", platform)
         self.assertIn("sudo install -D -m 0755 /dev/stdin /usr/local/sbin/finals-initialize-volume", platform)
         self.assertIn("sudo /opt/anvil/current/deployments/finals/preflight.sh", platform)
         self.assertIn("sudo systemctl is-active --quiet anvil-finals.service", platform)
@@ -666,8 +668,8 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn("SHA256:cdz/qtyNUAL19bQV2ey1KgT3f6CCYXvML2CWI069bHA", platform)
         self.assertIn("SHA256:dfPMQE51IWgeI/TQvWs+zgCNU1dyZhpMBnQap/pmA0I", platform)
         self.assertIn('set(files) != {"ssh_private_key", "known_hosts"}', platform)
-        self.assertIn("finals-commission-gateway-secret gateway-primary gateway-wireguard", platform)
-        self.assertIn("finals-commission-gateway-secret gateway-standby gateway-reconciler", platform)
+        self.assertNotIn("finals-commission-gateway-secret gateway-primary gateway-wireguard", platform)
+        self.assertNotIn("finals-commission-gateway-secret gateway-standby gateway-reconciler", platform)
         self.assertIn('"sudo -n /usr/local/sbin/finals-install-secret-bundle $bundle"', platform)
         self.assertNotIn('exec ssh -F /dev/null -i /run/finals-commissioning/central_id_ed25519', platform)
         self.assertNotIn("finals-commission-gateway-authorizer gateway-primary", platform)
