@@ -58,23 +58,24 @@ case "$target:$action" in
       -o IdentitiesOnly=yes -o PasswordAuthentication=no -o StrictHostKeyChecking=yes \
       -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts -- "ubuntu@$address" \
       'set -euo pipefail
-      project=/opt/anvil/current/deployments/finals
       env_file=/etc/anvil/finals.env
-      compose=(sudo -n /usr/bin/docker compose --project-name anvil-finals --project-directory "$project" --env-file "$env_file" -f "$project/compose.yaml")
       revision=$(sudo -n sed -n "s/^ANVIL_IMAGE_REVISION=//p" "$env_file")
       [[ $revision =~ ^[0-9a-f]{40}$ ]]
       printf "env-revision=%s\n" "$revision"
-      for service in api web ingress; do
-        container=$("${compose[@]}" ps -q "$service")
-        [[ $container =~ ^[0-9a-f]{64}$ ]]
-        image=$(sudo -n /usr/bin/docker inspect --format "{{.Image}}" "$container")
-        started=$(sudo -n /usr/bin/docker inspect --format "{{.State.StartedAt}}" "$container")
-        address=$(sudo -n /usr/bin/docker inspect --format "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}" "$container")
-        printf "%s-container=%s image=%s started=%s address=%s\n" "$service" "$container" "$image" "$started" "$address"
-      done
-      for service in api web; do
-        tag="anvil-finals-$service:$revision"
-        printf "%s-tag-image=%s\n" "$service" "$(sudo -n /usr/bin/docker image inspect --format "{{.Id}}" "$tag")"
+      sudo -n stat -c "env-stat=mtime:%Y ctime:%Z inode:%i size:%s mode:%a owner:%U:%G" "$env_file"
+      printf "current=%s\n" "$(readlink -f /opt/anvil/current)"
+      findmnt --noheadings --output SOURCE,TARGET,FSTYPE --target /etc/anvil
+      sudo -n systemctl show anvil-finals.service --property=FragmentPath --property=DropInPaths --property=ActiveEnterTimestamp
+      sudo -n /usr/bin/docker ps -a --no-trunc --filter label=com.docker.compose.project \
+        --format "container={{.ID}} name={{.Names}} image={{.Image}} ports={{.Ports}} project={{.Label \"com.docker.compose.project\"}} service={{.Label \"com.docker.compose.service\"}} workdir={{.Label \"com.docker.compose.project.working_dir\"}}"
+      sudo -n ss -H -lntp "sport = :443"
+      for tag in \
+        anvil-finals-api:c2721f2821fc89c0fc8ea5d362e316871fb17154 \
+        anvil-finals-web:c2721f2821fc89c0fc8ea5d362e316871fb17154 \
+        anvil-finals-api:817b0d9dad344beeb5031b204026f82311e5588f \
+        anvil-finals-web:817b0d9dad344beeb5031b204026f82311e5588f; do
+        image=$(sudo -n /usr/bin/docker image inspect --format "{{.Id}}" "$tag" 2>/dev/null || true)
+        printf "tag=%s image=%s\n" "$tag" "${image:-missing}"
       done
       echo anvil-status=complete'
     ;;
