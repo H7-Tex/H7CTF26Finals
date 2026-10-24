@@ -98,7 +98,7 @@ locals {
     }
     target=$${1:-}
     action=$${2:-}
-    [[ $# -eq 2 && ( $action == volume-initialize || ( $target == platform && $action =~ ^(platform-quiesce|anvil-restart|history-fix-135|weights-65-30-5)$ ) ) ]] || {
+    [[ $# -eq 2 && ( $action == volume-initialize || ( $target == platform && $action =~ ^(platform-quiesce|anvil-restart|weights-65-30-5)$ ) ) ]] || {
       echo "unsupported fixed volume action" >&2
       exit 2
     }
@@ -127,15 +127,6 @@ locals {
       -o StrictHostKeyChecking=yes
       -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts
     )
-    if [[ $action == history-fix-135 ]]; then
-      exec /usr/bin/ssh "$${ssh_options[@]}" -- "ubuntu@$address" \
-        'sudo -n /usr/bin/docker compose --project-name anvil-finals --project-directory /opt/anvil/current/deployments/finals --env-file /etc/anvil/finals.env -f /opt/anvil/current/deployments/finals/compose.yaml exec -T postgres psql -v ON_ERROR_STOP=1 --username anvil --dbname anvil --tuples-only --no-align' <<'SQL'
-    UPDATE game_score_snapshots s SET total = p.total, rank = p.rank
-      FROM game_score_snapshots p
-     WHERE p.tick_number = 134 AND p.team_id = s.team_id AND s.tick_number IN (135, 136);
-    SELECT 'history-fix-135=' || COUNT(*) FROM game_score_snapshots WHERE tick_number IN (135, 136);
-    SQL
-    fi
     if [[ $action == weights-65-30-5 ]]; then
       exec /usr/bin/ssh "$${ssh_options[@]}" -- "ubuntu@$address" \
         'set -euo pipefail
@@ -590,7 +581,6 @@ locals {
   operations_commission_production_runtime_script = file("${path.module}/scripts/commission-production-runtime")
   operations_commission_sudoers                   = <<-SUDOERS
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform anvil-restart
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform history-fix-135
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform weights-65-30-5
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-secret control-checkers
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall hill-01

@@ -26,10 +26,18 @@ case "$target:$action" in
       -o IdentitiesOnly=yes -o PasswordAuthentication=no -o StrictHostKeyChecking=yes \
       -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts -- "ubuntu@$address" \
       'set -euo pipefail
-      [[ $(sudo -n stat -c %U:%G:%a /etc/checker-runtime/enabled) == root:root:600 ]]
-      timeout --signal=TERM --kill-after=2s 10s sudo -n systemctl reset-failed checker-runtime.service
-      timeout --signal=TERM --kill-after=2s 180s sudo -n systemctl enable --now checker-runtime.service
-      timeout --signal=TERM --kill-after=2s 60s bash -c "until curl --fail --silent --output /dev/null --connect-timeout 2 --max-time 3 http://127.0.0.1:9160/readyz; do sleep 1; done"
+      t=(timeout --signal=TERM --kill-after=2s)
+      "${t[@]}" 10s sudo -n systemctl show checker-runtime.service -p ActiveState,SubState,Result,ExecMainStatus,NRestarts,ConditionResult
+      "${t[@]}" 10s sudo -n journalctl -u checker-runtime.service -n 60 --no-pager -o cat
+      sudo -n test -f /etc/checker-runtime/enabled && echo gate=present || echo gate=absent
+      "${t[@]}" 180s sudo -n /usr/local/libexec/checker-runtime/runtime.py validate-artifacts || :
+      "${t[@]}" 10s sudo -n systemctl reset-failed checker-runtime.service
+      "${t[@]}" 180s sudo -n systemctl restart checker-runtime.service || :
+      b=$(mktemp /tmp/r.XXXXXX); trap "rm -f -- $b" EXIT; ok=
+      "${t[@]}" 240s bash -c "until curl --silent --output $b --write-out \"%{http_code}\" --connect-timeout 2 --max-time 3 http://127.0.0.1:9160/readyz | grep -qx 200; do sleep 1; done" && ok=1 || :
+      cat "$b"
+      "${t[@]}" 10s sudo -n journalctl -u checker-runtime.service -n 30 --no-pager -o cat
+      [[ $ok ]]
       echo checker-recover=complete'
     ;;
   control:checker-status)

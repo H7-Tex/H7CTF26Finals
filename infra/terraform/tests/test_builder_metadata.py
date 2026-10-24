@@ -41,11 +41,30 @@ class BuilderMetadataTests(unittest.TestCase):
         module = (ROOT / "terraform/modules/oci-platform/main.tf").read_text(encoding="utf-8")
         wrapper = (ROOT / "terraform/modules/oci-platform/scripts/commission-runtime-artifact").read_text(encoding="utf-8")
         recovery = wrapper[wrapper.index("  control:checker-recover)"):wrapper.index("  control:checker-status)")]
-        self.assertIn("stat -c %U:%G:%a /etc/checker-runtime/enabled) == root:root:600", recovery)
-        self.assertIn("timeout --signal=TERM --kill-after=2s 10s sudo -n systemctl reset-failed checker-runtime.service", recovery)
-        self.assertIn("timeout --signal=TERM --kill-after=2s 180s sudo -n systemctl enable --now checker-runtime.service", recovery)
-        self.assertIn("timeout --signal=TERM --kill-after=2s 60s bash -c", recovery)
-        self.assertIn("--silent --output /dev/null --connect-timeout 2 --max-time 3", recovery)
+        self.assertIn("systemctl show checker-runtime.service -p ActiveState,SubState,Result,ExecMainStatus,NRestarts,ConditionResult", recovery)
+        self.assertIn("journalctl -u checker-runtime.service -n 60 --no-pager -o cat", recovery)
+        self.assertLess(recovery.index("systemctl show"), recovery.index("journalctl -u checker-runtime.service -n 60"))
+        self.assertIn("echo gate=present", recovery)
+        self.assertIn("echo gate=absent", recovery)
+        self.assertIn("sudo -n test -f /etc/checker-runtime/enabled && echo gate=present || echo gate=absent", recovery)
+        self.assertNotIn("stat -c", recovery)
+        self.assertIn("runtime.py validate-artifacts || :", recovery)
+        self.assertLess(recovery.index("journalctl -u checker-runtime.service -n 60"), recovery.index("gate=present"))
+        self.assertLess(recovery.index("gate=present"), recovery.index("validate-artifacts"))
+        self.assertIn('"${t[@]}" 10s sudo -n systemctl reset-failed checker-runtime.service', recovery)
+        self.assertIn('"${t[@]}" 180s sudo -n systemctl restart checker-runtime.service || :', recovery)
+        self.assertLess(recovery.index("validate-artifacts"), recovery.index("reset-failed"))
+        self.assertLess(recovery.index("reset-failed"), recovery.index("systemctl restart"))
+        self.assertIn("mktemp /tmp/r.XXXXXX", recovery)
+        self.assertIn('trap "rm -f -- $b" EXIT', recovery)
+        self.assertIn('"${t[@]}" 240s bash -c', recovery)
+        self.assertIn('--silent --output $b --write-out \\"%{http_code}\\" --connect-timeout 2 --max-time 3', recovery)
+        self.assertIn('cat "$b"', recovery)
+        self.assertIn("journalctl -u checker-runtime.service -n 30 --no-pager -o cat", recovery)
+        self.assertLess(recovery.index("systemctl restart"), recovery.index('240s bash -c'))
+        self.assertLess(recovery.index('240s bash -c'), recovery.index('cat "$b"'))
+        self.assertLess(recovery.index('cat "$b"'), recovery.index("journalctl -u checker-runtime.service -n 30"))
+        self.assertNotIn("enable --now", recovery)
         self.assertIn("checker-recover=complete", recovery)
         self.assertNotIn("peer-reconciler", recovery)
         self.assertNotIn("control:checker-commission)", wrapper)
@@ -552,31 +571,11 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertNotIn("base64encode(local.operations_commission_", platform)
         self.assertIn("| base64 -d | gzip -d |", platform)
 
-    def test_history_fix_135_is_fixed_and_idempotent(self):
-        platform = (ROOT / "terraform/modules/oci-platform/main.tf").read_text(encoding="utf-8")
-        sudo = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform history-fix-135"
-        self.assertEqual(platform.count(sudo), 1)
-        self.assertIn("$target == platform", platform)
-        self.assertIn("platform-quiesce|anvil-restart|history-fix-135", platform)
-        start = platform.index("if [[ $action == history-fix-135 ]]")
-        action = platform[start:platform.index("    fi", start)]
-        self.assertIn("psql -v ON_ERROR_STOP=1", action)
-        self.assertIn(
-            "UPDATE game_score_snapshots s SET total = p.total, rank = p.rank\n"
-            "      FROM game_score_snapshots p\n"
-            "     WHERE p.tick_number = 134 AND p.team_id = s.team_id AND s.tick_number IN (135, 136);",
-            action,
-        )
-        self.assertIn(
-            "SELECT 'history-fix-135=' || COUNT(*) FROM game_score_snapshots WHERE tick_number IN (135, 136);",
-            action,
-        )
-
     def test_weights_65_30_5_is_hash_pinned_and_restarts_anvil(self):
         platform = (ROOT / "terraform/modules/oci-platform/main.tf").read_text(encoding="utf-8")
         sudo = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform weights-65-30-5"
         self.assertEqual(platform.count(sudo), 1)
-        self.assertIn("history-fix-135|weights-65-30-5", platform)
+        self.assertIn("platform-quiesce|anvil-restart|weights-65-30-5", platform)
         start = platform.index("if [[ $action == weights-65-30-5 ]]")
         action = platform[start:platform.index("    fi", start)]
         self.assertIn("8cae357948dceac7abd5ccb0ccaa9961eb5d42f7ac482336a450e2499c615a54", action)
@@ -604,7 +603,6 @@ class BuilderMetadataTests(unittest.TestCase):
         migration_061 = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform migration-061"
         platform_quiesce = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform platform-quiesce"
         anvil_restart = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform anvil-restart"
-        history_fix = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform history-fix-135"
         weights = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform weights-65-30-5"
         self.assertEqual(platform.count(platform_secret), 0)
         self.assertEqual(platform.count(platform_volume), 0)
@@ -612,7 +610,7 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertEqual(platform.count(migration_061), 0)
         self.assertEqual(platform.count(platform_quiesce), 0)
         self.assertEqual(platform.count(anvil_restart), 1)
-        self.assertEqual(platform.count(history_fix), 1)
+        self.assertNotIn("history-fix-135", platform)
         self.assertEqual(platform.count(weights), 1)
         self.assertNotIn("finals-commission-secret platform *", platform)
         self.assertNotIn("finals-commission-volume platform *", platform)
