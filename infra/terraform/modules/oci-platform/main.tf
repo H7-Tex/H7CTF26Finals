@@ -678,6 +678,19 @@ locals {
           sudo -n nft list chain inet event_router forward_enabled | grep -Fq 'ip saddr 10.60.200.10 ip daddr . tcp dport @hill_services' || sudo -n nft insert rule inet event_router forward_enabled \$rule
           sudo -n nft list chain inet event_router forward_enabled | grep -c 'ip saddr 10.60.200.10 ip daddr . tcp dport @hill_services'"
         ;;
+      peer-diagnose)
+        [[ $name =~ ^10\.80\.([1-9]|1[0-6])\.([0-9]{1,3})$ ]] || { echo "peer-diagnose needs a 10.80.T.H address" >&2; exit 2; }
+        ssh_to "set -u; ip=$name
+          echo '--- wg peer'; sudo -n wg show wg0 dump | awk -v a=\$ip/32 '\$4 == a {print "endpoint=" \$3, "handshake=" \$5, "rx=" \$6, "tx=" \$7}'
+          echo '--- now'; date +%s
+          echo '--- router log'; sudo -n journalctl -k --since '-15 min' --no-pager -o short-iso | grep -F "SRC=\$ip " | tail -n 40 || :
+          echo '--- reply log'; sudo -n journalctl -k --since '-15 min' --no-pager -o short-iso | grep -F "DST=\$ip " | tail -n 20 || :"
+        ;;
+      conn-diagnose)
+        [[ $target == gateway-primary && $name =~ ^10\.60\.([1-9]|1[0-6])\.2$ ]] || { echo "conn-diagnose needs a production address" >&2; exit 2; }
+        ssh_to "set -u; echo '--- conntrack'; sudo -n sh -c \"grep -E 'dst=$name ' /proc/net/nf_conntrack | head -20\" || :
+          echo '--- addresses'; ip -o -4 address show"
+        ;;
       reconciler-access)
         ssh_to "set -eu; h=/var/lib/peer-reconciler/.ssh
           [ \"\$(sudo -n stat -c %U:%G \$h/authorized_keys)\" = root:root ]
