@@ -1,5 +1,8 @@
 output "instance_ids" {
-  value = { for name, instance in oci_core_instance.host : name => instance.id }
+  value = merge(
+    { for name, instance in oci_core_instance.host : name => instance.id },
+    { for name, instance in oci_core_instance.host_arm : name => instance.id },
+  )
 }
 
 output "private_ips" {

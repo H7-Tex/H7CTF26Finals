@@ -28,6 +28,13 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn('each.key == "platform" && var.platform_image_id != null', module)
         self.assertIn('resource "terraform_data" "x86_generation"', module)
         self.assertIn("var.platform_image_id,\n    var.x86_image_id,", module)
+        self.assertIn("for_each = local.x86_hosts", module)
+        self.assertIn('resource "oci_core_instance" "host_arm"', module)
+        self.assertIn("for_each = local.arm_hosts", module)
+        self.assertIn("replace_triggered_by = [terraform_data.x86_generation]", module)
+        for role in ("operations", "repository", "mirror"):
+            self.assertIn(f'from = oci_core_instance.host["{role}"]', module)
+            self.assertIn(f'to   = oci_core_instance.host_arm["{role}"]', module)
         self.assertIn("platform_image_id               = var.platform_image_id", environment)
         self.assertIn('variable "platform_image_id"', variables)
 

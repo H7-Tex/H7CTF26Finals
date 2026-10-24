@@ -74,6 +74,9 @@ locals {
     }
   }
 
+  x86_hosts = { for name, host in local.hosts : name => host if host.architecture == "x86" }
+  arm_hosts = { for name, host in local.hosts : name => host if host.architecture == "arm" }
+
   tags = {
     event      = "finals-2026"
     managed_by = "terraform"
@@ -820,7 +823,7 @@ resource "terraform_data" "x86_generation" {
 }
 
 resource "oci_core_instance" "host" {
-  for_each = local.hosts
+  for_each = local.x86_hosts
 
   availability_domain = var.availability_domain
   compartment_id      = var.compartment_id
@@ -843,7 +846,7 @@ resource "oci_core_instance" "host" {
   }
 
   source_details {
-    source_id               = each.key == "platform" && var.platform_image_id != null ? var.platform_image_id : (each.value.architecture == "x86" ? var.x86_image_id : var.arm_image_id)
+    source_id               = each.key == "platform" && var.platform_image_id != null ? var.platform_image_id : var.x86_image_id
     source_type             = "image"
     boot_volume_size_in_gbs = each.value.boot_gb
   }
@@ -857,4 +860,61 @@ resource "oci_core_instance" "host" {
     are_legacy_imds_endpoints_disabled = true
   }
 
+  lifecycle {
+    replace_triggered_by = [terraform_data.x86_generation]
+  }
+}
+
+resource "oci_core_instance" "host_arm" {
+  for_each = local.arm_hosts
+
+  availability_domain = var.availability_domain
+  compartment_id      = var.compartment_id
+  display_name        = each.key
+  shape               = each.value.shape
+  freeform_tags       = merge(local.tags, { role = each.key })
+
+  shape_config {
+    ocpus         = each.value.ocpus
+    memory_in_gbs = each.value.memory_gb
+  }
+
+  create_vnic_details {
+    assign_public_ip = false
+    display_name     = each.key
+    hostname_label   = replace(each.key, "-", "")
+    nsg_ids          = [var.infra_nsg_id]
+    private_ip       = each.value.private_ip
+    subnet_id        = var.subnet_ids[each.value.subnet]
+  }
+
+  source_details {
+    source_id               = var.arm_image_id
+    source_type             = "image"
+    boot_volume_size_in_gbs = each.value.boot_gb
+  }
+
+  metadata = {
+    ssh_authorized_keys = trimspace(var.organizer_ssh_authorized_keys)
+    user_data           = base64encode(local.cloud_init_by_role[each.key])
+  }
+
+  instance_options {
+    are_legacy_imds_endpoints_disabled = true
+  }
+}
+
+moved {
+  from = oci_core_instance.host["operations"]
+  to   = oci_core_instance.host_arm["operations"]
+}
+
+moved {
+  from = oci_core_instance.host["repository"]
+  to   = oci_core_instance.host_arm["repository"]
+}
+
+moved {
+  from = oci_core_instance.host["mirror"]
+  to   = oci_core_instance.host_arm["mirror"]
 }
