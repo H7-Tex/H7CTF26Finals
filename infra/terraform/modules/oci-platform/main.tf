@@ -760,6 +760,14 @@ resource "terraform_data" "x86_generation" {
   ]
 }
 
+resource "terraform_data" "host_image_generation" {
+  for_each = local.x86_hosts
+
+  triggers_replace = [
+    each.key == "platform" && var.platform_image_id != null ? var.platform_image_id : var.x86_image_id,
+  ]
+}
+
 resource "oci_core_instance" "host" {
   for_each = local.x86_hosts
 

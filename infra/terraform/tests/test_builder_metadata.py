@@ -107,6 +107,24 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn("platform_image_id               = var.platform_image_id", environment)
         self.assertIn('variable "platform_image_id"', variables)
 
+    def test_host_image_generation_bootstrap_is_state_only(self):
+        module = (ROOT / "terraform/modules/oci-platform/main.tf").read_text(encoding="utf-8")
+        self.assertIn(
+            '''resource "terraform_data" "host_image_generation" {
+  for_each = local.x86_hosts
+
+  triggers_replace = [
+    each.key == "platform" && var.platform_image_id != null ? var.platform_image_id : var.x86_image_id,
+  ]
+}''',
+            module,
+        )
+        self.assertEqual(module.count("replace_triggered_by = [terraform_data.x86_generation]"), 1)
+        self.assertNotIn(
+            "replace_triggered_by = [terraform_data.host_image_generation[each.key]]",
+            module,
+        )
+
     def test_oci_stack_packages_are_byte_reproducible(self):
         repository = ROOT.parent
         package_script = ROOT / "terraform/scripts/package-oci-stack.sh"
