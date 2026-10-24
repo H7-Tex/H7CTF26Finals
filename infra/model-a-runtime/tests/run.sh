@@ -7,6 +7,7 @@ trap 'rm -rf "$cache"' EXIT
 PYTHONPYCACHEPREFIX="$cache" python3 -m py_compile \
   "$root/model_a.py" \
   "$root/prepare-release.py" \
+  "$root/write-volume-policy.py" \
   "$root/tests/firewall-path.py" \
   "$root/tests/local-acceptance.py" \
   "$root/rootfs/usr/local/sbin/finals-model-a-install" \

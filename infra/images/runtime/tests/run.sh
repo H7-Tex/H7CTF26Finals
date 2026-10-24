@@ -76,6 +76,7 @@ if [[ $role == production ]]; then
   [[ $(stat -c '%U:%G:%a' /var/lib/deployment-executor/offline.lock) == root:root:600 ]]
   [[ $(stat -c '%U:%G:%a' /usr/local/libexec/deployment-executor/commands) == root:root:700 ]]
   [[ $(stat -c '%U:%G:%a' /etc/finals-release) == root:root:700 ]]
+  [[ $(stat -c '%U:%G:%a' /etc/finals-release/volume-policy.json) == root:root:600 ]]
   [[ -z $(find /usr/local/libexec/deployment-executor/commands -mindepth 1 -print -quit) ]]
   test -x /usr/local/bin/deployment-orchestrator
   test -x /usr/local/libexec/deployment-orchestrator/runner

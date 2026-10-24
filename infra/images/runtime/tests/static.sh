@@ -13,6 +13,7 @@ bash -n \
 python3 -m json.tool "$runtime_dir/rootfs/etc/docker/daemon.json" >/dev/null
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s "$runtime_dir/tests" -p 'test_*.py'
 grep -Fq 'run_phase model-a-release 30m "$source_dir/fetch-model-a-release"' "$runtime_dir/build-image"
+grep -Fq 'run_phase model-a-volume-policy 1m python3 "$source_dir/model-a-runtime/write-volume-policy.py"' "$runtime_dir/build-image"
 grep -Fq 'systemctl enable finals-model-a-firstboot.service' "$runtime_dir/build-image"
 grep -Fxq 'PasswordAuthentication no' "$runtime_dir/rootfs/etc/ssh/sshd_config.d/90-runtime.conf"
 grep -Fq 'docker-buildx' "$runtime_dir/install.sh"

@@ -95,6 +95,7 @@ if [[ $role == production ]]; then
   # model a: bake the verified release in; each box installs it for itself at first boot
   run_phase model-a-tests 10m "$source_dir/model-a-runtime/tests/run.sh"
   run_phase model-a-release 30m "$source_dir/fetch-model-a-release" "$source_dir/model-a-release.json" /var/lib/finals-model-a/release
+  run_phase model-a-volume-policy 1m python3 "$source_dir/model-a-runtime/write-volume-policy.py" /var/lib/finals-model-a/release/release.json /etc/finals-release/volume-policy.json
   run_phase model-a-tools 5m "$source_dir/model-a-runtime/install.sh"
   phase=model-a-firstboot
   record_phase started

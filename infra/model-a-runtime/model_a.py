@@ -148,6 +148,16 @@ BASE_IMAGES = (
     "mcr.microsoft.com/dotnet/aspnet@sha256:8af87eba5e7cdafb1514d7388be287365da97c132509e84dfe252ffd552398ca",
 )
 SERVICE_BY_SLUG = {service["slug"]: service for service in SERVICES}
+RELEASE_SERVICE_FIELDS = {
+    "slug",
+    "port",
+    "uid",
+    "factory_reference",
+    "factory_image_id",
+    "bundle_sha256",
+    "storage_bytes",
+    "storage_inodes",
+}
 
 
 class ModelAError(Exception):
@@ -266,6 +276,61 @@ def proxy_config(team_number, frontend_address=None):
             ]
         )
     return "\n".join(lines)
+
+
+def volume_policy_document(release):
+    if (
+        not isinstance(release, dict)
+        or set(release)
+        != {"schema_version", "source_commit", "services", "base_images", "archives"}
+        or release["schema_version"] != 1
+        or release["source_commit"] != SOURCE_COMMIT
+    ):
+        raise ModelAError("release manifest is invalid")
+    records = release.get("services")
+    if not isinstance(records, list) or len(records) != len(SERVICES):
+        raise ModelAError("release service inventory is invalid")
+    if [record.get("slug") for record in records if isinstance(record, dict)] != [
+        service["slug"] for service in SERVICES
+    ]:
+        raise ModelAError("release service inventory is invalid")
+    services = []
+    for record in records:
+        if set(record) != RELEASE_SERVICE_FIELDS:
+            raise ModelAError("release service fields are invalid")
+        contract = SERVICE_BY_SLUG[record["slug"]]
+        if any(
+            record[name] != contract[name]
+            for name in ("port", "uid", "storage_bytes", "storage_inodes")
+        ):
+            raise ModelAError(
+                f"release service contract mismatch for {record['slug']}"
+            )
+        port = record["port"]
+        generations = {}
+        for name, offset in (("live", 0), ("gate", 10000), ("recovery", 20000)):
+            generations[name] = {
+                "path": f"/srv/finals/service-data/{port}/{name}",
+                "project_name": f"finals-{port}-{name}",
+                "project_id": port + offset,
+            }
+        services.append(
+            {
+                "slug": record["slug"],
+                "port": port,
+                "uid": record["uid"],
+                "quota": {
+                    "bytes": record["storage_bytes"],
+                    "inodes": record["storage_inodes"],
+                },
+                "generations": generations,
+            }
+        )
+    return {
+        "schema_version": 1,
+        "mount": "/srv/finals/service-data",
+        "services": services,
+    }
 
 
 def verify_player_bundle(root, slug):

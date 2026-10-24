@@ -85,6 +85,9 @@ class BuilderMetadataTests(unittest.TestCase):
             self.assertIn(digest, variables)
         # the release is fetched only after the production policy phase and before tools and first boot
         self.assertLess(build.index("phase=production-policy"), build.index("run_phase model-a-release"))
+        self.assertIn("run_phase model-a-volume-policy", build)
+        self.assertLess(build.index("run_phase model-a-release"), build.index("run_phase model-a-volume-policy"))
+        self.assertLess(build.index("run_phase model-a-volume-policy"), build.index("systemctl enable finals-model-a-firstboot.service"))
         self.assertLess(build.index("run_phase model-a-release"), build.index("systemctl enable finals-model-a-firstboot.service"))
 
     def test_bootstrap_metadata_stays_below_oci_limit(self):
@@ -317,7 +320,7 @@ class BuilderMetadataTests(unittest.TestCase):
         root = ROOT / "terraform/environments/production/oci-runtime-builders"
         variables = (root / "variables.tf").read_text(encoding="utf-8")
         example = (root / "terraform.tfvars.example").read_text(encoding="utf-8")
-        revision = "21d50f53afd60eef2aa9dd466f52fa6ec83dabdd"
+        revision = "c2721f2821fc89c0fc8ea5d362e316871fb17154"
         self.assertIn(f'var.anvil_revision == "{revision}"', variables)
         self.assertIn(f'anvil_revision      = "{revision}"', example)
 

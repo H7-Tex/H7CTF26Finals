@@ -40,6 +40,13 @@ CONTROL_LOADER = SourceFileLoader(
 CONTROL_SPEC = importlib.util.spec_from_loader("model_a_control", CONTROL_LOADER)
 CONTROL = importlib.util.module_from_spec(CONTROL_SPEC)
 CONTROL_LOADER.exec_module(CONTROL)
+VOLUME_LOADER = SourceFileLoader(
+    "model_a_volume",
+    str(ROOT.parent / "volumes" / "initialize-volume.py"),
+)
+VOLUME_SPEC = importlib.util.spec_from_loader("model_a_volume", VOLUME_LOADER)
+VOLUME = importlib.util.module_from_spec(VOLUME_SPEC)
+VOLUME_LOADER.exec_module(VOLUME)
 
 
 class ModelATest(unittest.TestCase):
@@ -159,6 +166,37 @@ class ModelATest(unittest.TestCase):
             "mcr.microsoft.com/dotnet/aspnet@sha256:8af87eba5e7cdafb1514d7388be287365da97c132509e84dfe252ffd552398ca",
         }
         self.assertEqual(set(MODEL.BASE_IMAGES), expected)
+
+    def test_volume_policy_matches_initializer_contract(self):
+        records = []
+        for service in MODEL.SERVICES:
+            records.append(
+                {
+                    "slug": service["slug"],
+                    "port": service["port"],
+                    "uid": service["uid"],
+                    "factory_reference": f"finals/{service['slug']}:factory",
+                    "factory_image_id": "sha256:" + "1" * 64,
+                    "bundle_sha256": "2" * 64,
+                    "storage_bytes": service["storage_bytes"],
+                    "storage_inodes": service["storage_inodes"],
+                }
+            )
+        release = {
+            "schema_version": 1,
+            "source_commit": MODEL.SOURCE_COMMIT,
+            "services": records,
+            "base_images": [],
+            "archives": {},
+        }
+        policy = MODEL.volume_policy_document(release)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "volume-policy.json"
+            MODEL.write_json(path, policy, 0o600)
+            self.assertEqual(VOLUME.load_volume_policy(path), policy)
+        records[0]["storage_bytes"] += 1
+        with self.assertRaises(MODEL.ModelAError):
+            MODEL.volume_policy_document(release)
 
     def test_release_build_disables_nondeterministic_provenance(self):
         source = (ROOT / "prepare-release.py").read_text()
