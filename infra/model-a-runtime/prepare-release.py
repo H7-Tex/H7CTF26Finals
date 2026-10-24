@@ -95,6 +95,7 @@ def build_service(source, service, staging):
             str(override),
             "build",
             "--pull=false",
+            "--provenance=false",
             "service",
         ],
         cwd=compose.parent,

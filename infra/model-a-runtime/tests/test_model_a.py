@@ -151,6 +151,10 @@ class ModelATest(unittest.TestCase):
         }
         self.assertEqual(set(MODEL.BASE_IMAGES), expected)
 
+    def test_release_build_disables_nondeterministic_provenance(self):
+        source = (ROOT / "prepare-release.py").read_text()
+        self.assertIn('"--provenance=false"', source)
+
     def test_service_subnets_are_fixed_and_disjoint(self):
         self.assertEqual(
             [service["subnet"] for service in MODEL.SERVICES],
