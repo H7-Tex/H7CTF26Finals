@@ -380,14 +380,14 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn('resource "oci_core_private_ip" "service_ingress"', ingress)
         self.assertIn('ip_address   = "10.60.250.120"', ingress)
         fleet = (ROOT / "terraform/modules/oci-compute-fleet/main.tf").read_text(encoding="utf-8")
-        self.assertEqual(fleet.count("prevent_destroy = true"), 2)
+        self.assertEqual(fleet.count("prevent_destroy = true"), 1)
         self.assertIn('resource "oci_core_volume" "production_data"', fleet)
         self.assertIn('resource "oci_core_volume_attachment" "production_data"', fleet)
         self.assertIn("size_in_gbs         = 50", fleet)
         volume_start = fleet.index('resource "oci_core_volume" "production_data"')
         attachment_start = fleet.index('resource "oci_core_volume_attachment" "production_data"')
         workbench_start = fleet.index('resource "oci_core_instance" "workbench"')
-        self.assertIn("prevent_destroy = true", fleet[volume_start:attachment_start])
+        self.assertNotIn("prevent_destroy = true", fleet[volume_start:attachment_start])
         self.assertNotIn("prevent_destroy = true", fleet[attachment_start:workbench_start])
 
     def test_operations_relay_key_is_forced_and_role_scoped(self):

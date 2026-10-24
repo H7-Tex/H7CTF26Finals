@@ -93,9 +93,6 @@ resource "oci_core_volume" "production_data" {
     team = each.value.team == 16 ? "reference" : format("team-%02d", each.value.team)
   })
 
-  lifecycle {
-    prevent_destroy = true
-  }
 }
 
 resource "oci_core_volume_attachment" "production_data" {
