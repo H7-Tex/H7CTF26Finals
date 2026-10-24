@@ -31,7 +31,14 @@ case "$target:$action" in
     exec ssh -F /dev/null -i /run/finals-commissioning/central_id_ed25519 -o BatchMode=yes -o ConnectTimeout=10 \
       -o IdentitiesOnly=yes -o PasswordAuthentication=no -o StrictHostKeyChecking=yes \
       -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts -- "ubuntu@$address" \
-      'set -euo pipefail; timeout --signal=TERM --kill-after=2s 10s sudo -n systemctl is-active --quiet checker-runtime.service; timeout --signal=TERM --kill-after=2s 10s sudo -n systemctl is-active --quiet peer-reconciler.timer; curl --fail --silent --output /dev/null --connect-timeout 2 --max-time 3 http://127.0.0.1:9160/readyz; echo checker-status=complete'
+      'set -euo pipefail
+      if timeout --signal=TERM --kill-after=2s 10s sudo -n systemctl is-active --quiet checker-runtime.service; then checker_runtime=active; else checker_runtime=inactive; fi
+      if timeout --signal=TERM --kill-after=2s 10s sudo -n systemctl is-active --quiet peer-reconciler.timer; then reconciler_timer=active; else reconciler_timer=inactive; fi
+      readyz_http=$(curl --silent --output /dev/null --write-out "%{http_code}" --connect-timeout 2 --max-time 3 http://127.0.0.1:9160/readyz || true)
+      [[ $readyz_http =~ ^[0-9]{3}$ ]] || readyz_http=000
+      printf "checker-runtime.service=%s\npeer-reconciler.timer=%s\nreadyz-http=%s\n" "$checker_runtime" "$reconciler_timer" "$readyz_http"
+      [[ $checker_runtime == active && $reconciler_timer == active && $readyz_http == 200 ]]
+      echo checker-status=complete'
     ;;
   control:state-summary)
     exec ssh -F /dev/null -i /run/finals-commissioning/central_id_ed25519 -o BatchMode=yes -o ConnectTimeout=10 \

@@ -30,6 +30,10 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn("systemctl is-active --quiet peer-reconciler.timer", wrapper)
         self.assertEqual(wrapper.count("timeout --signal=TERM --kill-after=2s 10s"), 2)
         self.assertIn("--connect-timeout 2 --max-time 3", wrapper)
+        self.assertIn('checker-runtime.service=%s\\npeer-reconciler.timer=%s\\nreadyz-http=%s\\n', wrapper)
+        self.assertIn("[[ $checker_runtime == active && $reconciler_timer == active && $readyz_http == 200 ]]", wrapper)
+        self.assertLess(wrapper.index("checker-runtime.service=%s"), wrapper.index("$checker_runtime == active"))
+        self.assertIn("--silent --output /dev/null --write-out", wrapper)
         self.assertNotIn("operations_commission_control_action_script", module)
 
     def test_operations_runtime_artifact_relay_is_fixed(self):
@@ -530,6 +534,42 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertNotIn("base64encode(local.operations_commission_", platform)
         self.assertIn("| base64 -d | gzip -d |", platform)
 
+    def test_history_fix_135_is_fixed_and_idempotent(self):
+        platform = (ROOT / "terraform/modules/oci-platform/main.tf").read_text(encoding="utf-8")
+        sudo = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform history-fix-135"
+        self.assertEqual(platform.count(sudo), 1)
+        self.assertIn("$target == platform", platform)
+        self.assertIn("platform-quiesce|anvil-restart|history-fix-135", platform)
+        start = platform.index("if [[ $action == history-fix-135 ]]")
+        action = platform[start:platform.index("    fi", start)]
+        self.assertIn("psql -v ON_ERROR_STOP=1", action)
+        self.assertIn(
+            "UPDATE game_score_snapshots s SET total = p.total, rank = p.rank\n"
+            "      FROM game_score_snapshots p\n"
+            "     WHERE p.tick_number = 134 AND p.team_id = s.team_id AND s.tick_number IN (135, 136);",
+            action,
+        )
+        self.assertIn(
+            "SELECT 'history-fix-135=' || COUNT(*) FROM game_score_snapshots WHERE tick_number IN (135, 136);",
+            action,
+        )
+
+    def test_weights_65_30_5_is_hash_pinned_and_restarts_anvil(self):
+        platform = (ROOT / "terraform/modules/oci-platform/main.tf").read_text(encoding="utf-8")
+        sudo = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform weights-65-30-5"
+        self.assertEqual(platform.count(sudo), 1)
+        self.assertIn("history-fix-135|weights-65-30-5", platform)
+        start = platform.index("if [[ $action == weights-65-30-5 ]]")
+        action = platform[start:platform.index("    fi", start)]
+        self.assertIn("8cae357948dceac7abd5ccb0ccaa9961eb5d42f7ac482336a450e2499c615a54", action)
+        self.assertIn("feb6acb5d932594c8d4bc8b4370413d7c1b584877ba86d888c0a1f0ee8c90b49", action)
+        self.assertIn("weight_ad: 0\\.6$/    weight_ad: 0.65/", action)
+        self.assertIn("weight_koth: 0\\.25$/    weight_koth: 0.30/", action)
+        self.assertIn("weight_jeopardy: 0\\.15 # jeopardy solve points, median-relative like the other two$/    weight_jeopardy: 0.05 # jeopardy solve points, median-relative like the other two/", action)
+        self.assertIn('install -o root -g root -m 0644 "$temporary" "$game"', action)
+        self.assertIn("systemctl restart anvil-finals.service", action)
+        self.assertIn('[[ $status == 200 ]]', action)
+
     def test_operations_rotation_commissioning_is_fixed_and_hash_bound(self):
         platform = (ROOT / "terraform/modules/oci-platform/main.tf").read_text(encoding="utf-8")
         initializer = (ROOT / "volumes/initialize-volume.py").read_bytes()
@@ -543,23 +583,22 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn("UserKnownHostsFile=/etc/finals-platform/operations/known_hosts", platform)
         platform_secret = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-secret platform anvil"
         platform_volume = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform volume-initialize"
-        arena_schema = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform arena-schema"
         migration_061 = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform migration-061"
         platform_quiesce = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform platform-quiesce"
         anvil_restart = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform anvil-restart"
+        history_fix = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform history-fix-135"
+        weights = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform weights-65-30-5"
         self.assertEqual(platform.count(platform_secret), 0)
         self.assertEqual(platform.count(platform_volume), 0)
-        self.assertEqual(platform.count(arena_schema), 1)
+        self.assertNotIn("arena-schema", platform)
         self.assertEqual(platform.count(migration_061), 0)
         self.assertEqual(platform.count(platform_quiesce), 0)
         self.assertEqual(platform.count(anvil_restart), 1)
+        self.assertEqual(platform.count(history_fix), 1)
+        self.assertEqual(platform.count(weights), 1)
         self.assertNotIn("finals-commission-secret platform *", platform)
         self.assertNotIn("finals-commission-volume platform *", platform)
-        self.assertIn("up -d --wait postgres", platform)
-        self.assertIn("UPDATE schema_migrations SET checksum = '\\''c4a3936fbd48195d89ec43ea54c52cf8b8e3571d2754904bd585a4e1d8ef5b81'\\''", platform)
-        self.assertIn("WHERE version = 61 AND checksum = '\\''67270381009968540af04cf4d07c2bbfa612479e8dbf904f683a003211ac13f6'\\''", platform)
-        self.assertIn('[[ $result == "UPDATE 1" ]]', platform)
-        self.assertIn("migration-061=complete", platform)
+        self.assertNotIn("migration-061=complete", platform)
         self.assertIn("platform-quiesce=complete", platform)
         self.assertIn("systemctl disable --now anvil-finals-backup.timer", platform)
         self.assertIn("sha256sum --check --strict SHA256SUMS", platform)
@@ -567,11 +606,6 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn("systemctl restart anvil-finals.service", platform)
         self.assertIn('[[ $status == 200 ]]', platform)
         self.assertIn("anvil-restart=complete", platform)
-        self.assertIn("event.freeze_at", platform)
-        self.assertIn("2026-10-25T11:00:00+05:30", platform)
-        self.assertIn("game_services s SET sort_order", platform)
-        self.assertIn("game_koth_hills h SET sort_order", platform)
-        self.assertIn("arena-schema=complete", platform)
         self.assertNotIn("anvil-audit-complete", platform)
         self.assertNotIn("admin-promote", platform)
         self.assertIn("operations_commission_secret_script", platform)

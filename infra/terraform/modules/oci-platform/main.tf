@@ -98,7 +98,7 @@ locals {
     }
     target=$${1:-}
     action=$${2:-}
-    [[ $# -eq 2 && ( $action == volume-initialize || ( $target == platform && $action =~ ^(arena-schema|migration-061|platform-quiesce|anvil-restart)$ ) ) ]] || {
+    [[ $# -eq 2 && ( $action == volume-initialize || ( $target == platform && $action =~ ^(platform-quiesce|anvil-restart|history-fix-135|weights-65-30-5)$ ) ) ]] || {
       echo "unsupported fixed volume action" >&2
       exit 2
     }
@@ -127,22 +127,30 @@ locals {
       -o StrictHostKeyChecking=yes
       -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts
     )
-    if [[ $action == arena-schema ]]; then
+    if [[ $action == history-fix-135 ]]; then
       exec /usr/bin/ssh "$${ssh_options[@]}" -- "ubuntu@$address" \
         'sudo -n /usr/bin/docker compose --project-name anvil-finals --project-directory /opt/anvil/current/deployments/finals --env-file /etc/anvil/finals.env -f /opt/anvil/current/deployments/finals/compose.yaml exec -T postgres psql -v ON_ERROR_STOP=1 --username anvil --dbname anvil --tuples-only --no-align' <<'SQL'
-    INSERT INTO platform_settings (key, value, description, category) VALUES ('event.freeze_at', '"2026-10-25T11:00:00+05:30"', 'Scoreboard freeze as an RFC3339 timestamp', 'event') ON CONFLICT (key) DO NOTHING;
-    UPDATE game_services s SET sort_order = v.n FROM (VALUES ('sign-me-in', 1), ('can-we-settle-this', 2), ('update-pending', 3), ('book-me-if-you-can', 4), ('ship-it', 5), ('terms-may-apply', 6)) v(slug, n) WHERE s.slug = v.slug AND s.sort_order IS DISTINCT FROM v.n;
-    UPDATE game_koth_hills h SET sort_order = v.n FROM (VALUES ('current-affairs', 1), ('majority-rules', 2), ('tag-youre-it', 3)) v(slug, n) WHERE h.slug = v.slug AND h.sort_order IS DISTINCT FROM v.n;
-    SELECT 'arena-schema=complete';
+    UPDATE game_score_snapshots s SET total = p.total, rank = p.rank
+      FROM game_score_snapshots p
+     WHERE p.tick_number = 134 AND p.team_id = s.team_id AND s.tick_number IN (135, 136);
+    SELECT 'history-fix-135=' || COUNT(*) FROM game_score_snapshots WHERE tick_number IN (135, 136);
     SQL
     fi
-    if [[ $action == migration-061 ]]; then
+    if [[ $action == weights-65-30-5 ]]; then
       exec /usr/bin/ssh "$${ssh_options[@]}" -- "ubuntu@$address" \
         'set -euo pipefail
-        sudo -n /usr/bin/docker compose --project-name anvil-finals --project-directory /opt/anvil/current/deployments/finals --env-file /etc/anvil/finals.env -f /opt/anvil/current/deployments/finals/compose.yaml up -d --wait postgres
-        result=$(sudo -n /usr/bin/docker compose --project-name anvil-finals --project-directory /opt/anvil/current/deployments/finals --env-file /etc/anvil/finals.env -f /opt/anvil/current/deployments/finals/compose.yaml exec -T postgres psql -v ON_ERROR_STOP=1 --username anvil --dbname anvil --tuples-only --no-align --command "UPDATE schema_migrations SET checksum = '\''c4a3936fbd48195d89ec43ea54c52cf8b8e3571d2754904bd585a4e1d8ef5b81'\'' WHERE version = 61 AND checksum = '\''67270381009968540af04cf4d07c2bbfa612479e8dbf904f683a003211ac13f6'\'';")
-        [[ $result == "UPDATE 1" ]]
-        echo migration-061=complete'
+        game=/opt/anvil/current/deployments/finals/game.yaml
+        [[ $(sudo -n sha256sum "$game" | cut -d " " -f 1) == 8cae357948dceac7abd5ccb0ccaa9961eb5d42f7ac482336a450e2499c615a54 ]]
+        temporary=$(mktemp /tmp/finals-game.XXXXXX); trap '\''rm -f -- "$temporary"'\'' EXIT
+        sudo -n sed -e '\''s/^    weight_ad: 0\.6$/    weight_ad: 0.65/'\'' -e '\''s/^    weight_koth: 0\.25$/    weight_koth: 0.30/'\'' -e '\''s/^    weight_jeopardy: 0\.15 # jeopardy solve points, median-relative like the other two$/    weight_jeopardy: 0.05 # jeopardy solve points, median-relative like the other two/'\'' "$game" > "$temporary"
+        [[ $(sha256sum "$temporary" | cut -d " " -f 1) == feb6acb5d932594c8d4bc8b4370413d7c1b584877ba86d888c0a1f0ee8c90b49 ]]
+        sudo -n install -o root -g root -m 0644 "$temporary" "$game"
+        [[ $(sudo -n stat -c "%U:%G:%a" "$game") == root:root:644 ]]
+        sudo -n systemctl restart anvil-finals.service
+        sudo -n systemctl is-active --quiet anvil-finals.service
+        status=$(curl --silent --show-error --output /dev/null --write-out "%%{http_code}" --connect-timeout 5 --max-time 15 --proto "=https" --tlsv1.2 --resolve finals.h7tex.com:443:10.60.200.10 https://finals.h7tex.com/)
+        [[ $status == 200 ]]
+        echo weights-65-30-5=complete'
     fi
     if [[ $action == platform-quiesce ]]; then
       exec /usr/bin/ssh "$${ssh_options[@]}" -- "ubuntu@$address" \
@@ -581,8 +589,9 @@ locals {
   operations_commission_runtime_artifact_script   = file("${path.module}/scripts/commission-runtime-artifact")
   operations_commission_production_runtime_script = file("${path.module}/scripts/commission-production-runtime")
   operations_commission_sudoers                   = <<-SUDOERS
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform arena-schema
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform anvil-restart
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform history-fix-135
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform weights-65-30-5
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-secret control-checkers
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall hill-01
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall hill-02
