@@ -63,9 +63,6 @@ resource "oci_core_instance" "production" {
     are_legacy_imds_endpoints_disabled = true
   }
 
-  lifecycle {
-    prevent_destroy = true
-  }
 }
 
 data "oci_core_vnic_attachments" "production" {
@@ -82,10 +79,6 @@ resource "oci_core_private_ip" "staging" {
   display_name = "${each.key}-staging"
   ip_address   = each.value.staging_ip
 
-  lifecycle {
-    prevent_destroy = true
-    ignore_changes  = [vnic_id]
-  }
 }
 
 resource "oci_core_volume" "production_data" {
@@ -112,10 +105,6 @@ resource "oci_core_volume_attachment" "production_data" {
   display_name    = "${each.key}-service-data"
   instance_id     = oci_core_instance.production[each.key].id
   volume_id       = oci_core_volume.production_data[each.key].id
-
-  lifecycle {
-    prevent_destroy = true
-  }
 }
 
 resource "oci_core_instance" "workbench" {

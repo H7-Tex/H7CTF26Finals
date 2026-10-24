@@ -380,10 +380,15 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn('resource "oci_core_private_ip" "service_ingress"', ingress)
         self.assertIn('ip_address   = "10.60.250.120"', ingress)
         fleet = (ROOT / "terraform/modules/oci-compute-fleet/main.tf").read_text(encoding="utf-8")
-        self.assertGreaterEqual(fleet.count("prevent_destroy = true"), 5)
+        self.assertEqual(fleet.count("prevent_destroy = true"), 2)
         self.assertIn('resource "oci_core_volume" "production_data"', fleet)
         self.assertIn('resource "oci_core_volume_attachment" "production_data"', fleet)
         self.assertIn("size_in_gbs         = 50", fleet)
+        volume_start = fleet.index('resource "oci_core_volume" "production_data"')
+        attachment_start = fleet.index('resource "oci_core_volume_attachment" "production_data"')
+        workbench_start = fleet.index('resource "oci_core_instance" "workbench"')
+        self.assertIn("prevent_destroy = true", fleet[volume_start:attachment_start])
+        self.assertNotIn("prevent_destroy = true", fleet[attachment_start:workbench_start])
 
     def test_operations_relay_key_is_forced_and_role_scoped(self):
         ingress = (ROOT / "terraform/modules/oci-ingress/main.tf").read_text(encoding="utf-8")
@@ -711,8 +716,9 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn("each.value.team == 16 && var.reference_production_image_id != null", source)
         self.assertIn("reference_production_image_id      = var.reference_production_image_id", root)
         staging = source[source.index('resource "oci_core_private_ip" "staging"'):source.index('resource "oci_core_volume" "production_data"')]
-        self.assertIn("prevent_destroy = true", staging)
-        self.assertIn("ignore_changes  = [vnic_id]", staging)
+        self.assertNotIn("prevent_destroy = true", staging)
+        self.assertNotIn("ignore_changes", staging)
+        self.assertIn("vnic_id      = data.oci_core_vnic_attachments.production[each.key].vnic_attachments[0].vnic_id", staging)
         self.assertIn("production_numbers                 = var.production_numbers", root)
         self.assertIn("workbench_numbers                  = var.workbench_numbers", root)
 
