@@ -24,7 +24,7 @@ class BuilderMetadataTests(unittest.TestCase):
     def test_checker_status_is_fixed_and_bounded(self):
         module = (ROOT / "terraform/modules/oci-platform/main.tf").read_text(encoding="utf-8")
         wrapper = (ROOT / "terraform/modules/oci-platform/scripts/commission-runtime-artifact").read_text(encoding="utf-8")
-        status = wrapper[wrapper.index("  control:checker-status)"):wrapper.index("  control:state-summary)")]
+        status = wrapper[wrapper.index("  control:checker-status)"):wrapper.index("  hill-0[123]:hill-artifacts)")]
         self.assertIn("control:checker-status)", wrapper)
         self.assertIn("http://127.0.0.1:9160/readyz", status)
         self.assertIn("systemctl is-active --quiet checker-runtime.service", status)
@@ -37,44 +37,42 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn("--silent --output /dev/null --write-out", status)
         self.assertNotIn("operations_commission_control_action_script", module)
 
-    def test_checker_recovery_is_fixed_and_bounded(self):
+    def test_anvil_deploy_is_fixed_bounded_and_rollback_safe(self):
         module = (ROOT / "terraform/modules/oci-platform/main.tf").read_text(encoding="utf-8")
         wrapper = (ROOT / "terraform/modules/oci-platform/scripts/commission-runtime-artifact").read_text(encoding="utf-8")
-        recovery = wrapper[wrapper.index("  control:checker-recover)"):wrapper.index("  control:checker-status)")]
-        dropin = b"[Service]\nRuntimeDirectory=checker-runtime\nRuntimeDirectoryMode=0700\n"
-        self.assertIn("d=/etc/systemd/system/checker-runtime.service.d/runtime-directory.conf", recovery)
-        self.assertIn(hashlib.sha256(dropin).hexdigest(), recovery)
-        self.assertIn('printf "[Service]\\nRuntimeDirectory=checker-runtime\\nRuntimeDirectoryMode=0700\\n"', recovery)
-        self.assertIn('install -D -o root -g root -m 0644 "$x" "$d"', recovery)
-        self.assertIn('stat -c %U:%G:%a "$d") == root:root:644', recovery)
-        self.assertEqual(recovery.count('sha256sum "$d"'), 1)
-        self.assertIn('"${t[@]}" 30s sudo -n systemctl daemon-reload', recovery)
-        self.assertIn('"${t[@]}" 10s sudo -n systemctl reset-failed checker-runtime.service', recovery)
-        self.assertIn('"${t[@]}" 180s sudo -n systemctl restart checker-runtime.service', recovery)
-        self.assertLess(recovery.index("daemon-reload"), recovery.index("reset-failed"))
-        self.assertLess(recovery.index("reset-failed"), recovery.index("systemctl restart"))
-        self.assertIn('"${t[@]}" 240s bash -c', recovery)
-        self.assertIn('curl -s -o $x -w \\"%{http_code}\\" --connect-timeout 2 --max-time 3', recovery)
-        self.assertIn('cat "$x"; echo', recovery)
-        self.assertIn("systemctl show checker-runtime.service -p SubState,Result,NRestarts", recovery)
-        self.assertIn("journalctl -u checker-runtime.service -n 25 --no-pager -o cat", recovery)
-        self.assertLess(recovery.index("systemctl restart"), recovery.index('240s bash -c'))
-        self.assertLess(recovery.index('240s bash -c'), recovery.index('cat "$x"'))
-        self.assertLess(recovery.index('cat "$x"'), recovery.index("systemctl show"))
-        self.assertLess(recovery.index("systemctl show"), recovery.index("journalctl"))
-        self.assertIn('[[ -z $r ]] ||', recovery)
-        self.assertIn('[[ -z $r ]]', recovery)
-        self.assertNotIn("enable --now", recovery)
-        self.assertIn("checker-recover=complete", recovery)
-        self.assertNotIn("peer-reconciler", recovery)
-        self.assertNotIn("token", recovery)
-        self.assertNotIn("register", recovery)
-        self.assertNotIn("checker-artifacts", recovery)
-        self.assertNotIn("control:checker-commission)", wrapper)
-        recover_sudoer = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-runtime-artifact control checker-recover"
-        commission_sudoer = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-runtime-artifact control checker-commission"
-        self.assertEqual(module.count(recover_sudoer), 1)
-        self.assertNotIn(commission_sudoer, module)
+        deployer_path = ROOT / "terraform/modules/oci-platform/scripts/deploy-anvil-artifact"
+        deployer = deployer_path.read_text(encoding="utf-8")
+        deploy = wrapper[wrapper.index("  platform:anvil-deploy)"):wrapper.index("  control:checker-status)")]
+        subprocess.run(["bash", "-n", str(deployer_path)], check=True)
+        self.assertIn("maximum=536870912", deploy)
+        self.assertIn("[[ ${#request[@]} -eq 5 ]]", deploy)
+        self.assertIn("expected_game_sha256=${request[3]}", deploy)
+        self.assertIn("objectstorage\\.ap-hyderabad-1\\.oraclecloud\\.com", deploy)
+        self.assertIn(hashlib.sha256(deployer_path.read_bytes()).hexdigest(), deploy)
+        self.assertIn("[[ $(stat -c %s \"$bundle\") -eq $expected_size ]]", deployer)
+        self.assertIn("h7ctf-anvil-deploy-v1", deployer)
+        self.assertIn("$'deploy.sh\\ngame.yaml\\nimages.tar.gz\\nmanifest.json'", deployer)
+        self.assertIn('["format","game","images","migrations","revision"]', deployer)
+        self.assertIn('[[ $revision == "$expected_revision" ]]', deployer)
+        self.assertIn('[[ $target_game == "$expected_game_sha256" ]]', deployer)
+        self.assertIn("uncompressed_maximum=2147483648", deployer)
+        self.assertIn('docker load --input "$work/images.tar"', deployer)
+        self.assertIn('"anvil-finals-api:" + $revision', deployer)
+        self.assertIn('"anvil-finals-web:" + $revision', deployer)
+        self.assertIn("anvil-finals-api:previous", deployer)
+        self.assertIn("anvil-finals-web:previous", deployer)
+        self.assertLess(deployer.index("rollback_needed=1"), deployer.index('docker load --input "$work/images.tar"'))
+        self.assertIn("anvil-deploy-rollback=complete", deployer)
+        self.assertIn("/api/health /api/v1/info", deployer)
+        self.assertEqual(deployer.count("images_active"), 3)
+        self.assertIn("systemctl start anvil-finals-backup.service", deployer)
+        self.assertIn("target_migration_sha256", deployer)
+        self.assertGreaterEqual(deployer.count("migration_sha256"), 4)
+        self.assertIn("anvil-deploy=complete", deployer)
+        deploy_sudoer = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-runtime-artifact platform anvil-deploy"
+        self.assertEqual(module.count(deploy_sudoer), 1)
+        self.assertNotIn("control checker-recover", module)
+        self.assertNotIn("control state-summary", module)
 
     def test_operations_runtime_artifact_relay_is_fixed(self):
         module = (ROOT / "terraform/modules/oci-platform/main.tf").read_text(encoding="utf-8")
@@ -83,6 +81,9 @@ class BuilderMetadataTests(unittest.TestCase):
         subprocess.run(["bash", "-n", str(wrapper)], check=True)
         self.assertIn("f3716d884f4ed3ebe5b5c4138d459aa2e35324c0839c5466167d91cd6796cc20", source)
         self.assertIn("control:checker-status)", source)
+        self.assertIn("platform:anvil-deploy)", source)
+        self.assertNotIn("control:checker-recover)", source)
+        self.assertNotIn("control:state-summary)", source)
         self.assertNotIn("control:checker-artifacts)", source)
         self.assertNotIn("finals-commission-runtime-artifact control checker-artifacts", module)
         self.assertIn('file("${path.module}/scripts/commission-runtime-artifact")', module)
@@ -573,21 +574,15 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertNotIn("base64encode(local.operations_commission_", platform)
         self.assertIn("| base64 -d | gzip -d |", platform)
 
-    def test_weights_65_30_5_is_hash_pinned_and_restarts_anvil(self):
+    def test_weights_are_delivered_with_the_atomic_anvil_bundle(self):
         platform = (ROOT / "terraform/modules/oci-platform/main.tf").read_text(encoding="utf-8")
-        sudo = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform weights-65-30-5"
-        self.assertEqual(platform.count(sudo), 1)
-        self.assertIn("platform-quiesce|anvil-restart|weights-65-30-5", platform)
-        start = platform.index("if [[ $action == weights-65-30-5 ]]")
-        action = platform[start:platform.index("    fi", start)]
-        self.assertIn("8cae357948dceac7abd5ccb0ccaa9961eb5d42f7ac482336a450e2499c615a54", action)
-        self.assertIn("feb6acb5d932594c8d4bc8b4370413d7c1b584877ba86d888c0a1f0ee8c90b49", action)
-        self.assertIn("weight_ad: 0\\.6$/    weight_ad: 0.65/", action)
-        self.assertIn("weight_koth: 0\\.25$/    weight_koth: 0.30/", action)
-        self.assertIn("weight_jeopardy: 0\\.15 # jeopardy solve points, median-relative like the other two$/    weight_jeopardy: 0.05 # jeopardy solve points, median-relative like the other two/", action)
-        self.assertIn('install -o root -g root -m 0644 "$temporary" "$game"', action)
-        self.assertIn("systemctl restart anvil-finals.service", action)
-        self.assertIn('[[ $status == 200 ]]', action)
+        deployer = (ROOT / "terraform/modules/oci-platform/scripts/deploy-anvil-artifact").read_text(encoding="utf-8")
+        self.assertNotIn("weights-65-30-5", platform)
+        self.assertIn("game.yaml", deployer)
+        self.assertIn('[[ $target_game == "$expected_game_sha256" ]]', deployer)
+        self.assertNotIn("feb6acb5d932594c8d4bc8b4370413d7c1b584877ba86d888c0a1f0ee8c90b49", deployer)
+        self.assertIn('install -o root -g root -m 0644 "$work/game.yaml" "$project/game.yaml"', deployer)
+        self.assertIn('install -o root -g root -m 0644 "$work/game.yaml.previous" "$project/game.yaml"', deployer)
 
     def test_operations_rotation_commissioning_is_fixed_and_hash_bound(self):
         platform = (ROOT / "terraform/modules/oci-platform/main.tf").read_text(encoding="utf-8")
@@ -605,7 +600,6 @@ class BuilderMetadataTests(unittest.TestCase):
         migration_061 = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform migration-061"
         platform_quiesce = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform platform-quiesce"
         anvil_restart = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform anvil-restart"
-        weights = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform weights-65-30-5"
         self.assertEqual(platform.count(platform_secret), 0)
         self.assertEqual(platform.count(platform_volume), 0)
         self.assertNotIn("arena-schema", platform)
@@ -613,7 +607,7 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertEqual(platform.count(platform_quiesce), 0)
         self.assertEqual(platform.count(anvil_restart), 1)
         self.assertNotIn("history-fix-135", platform)
-        self.assertEqual(platform.count(weights), 1)
+        self.assertNotIn("weights-65-30-5", platform)
         self.assertNotIn("finals-commission-secret platform *", platform)
         self.assertNotIn("finals-commission-volume platform *", platform)
         self.assertNotIn("migration-061=complete", platform)
@@ -633,6 +627,8 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn("75a1f6046817a6b83a214b3feeea9b7327a2ba0951bfedc20f811564ef6262e9", platform)
         checker_status = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-runtime-artifact control checker-status"
         self.assertEqual(platform.count(checker_status), 1)
+        anvil_deploy = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-runtime-artifact platform anvil-deploy"
+        self.assertEqual(platform.count(anvil_deploy), 1)
         self.assertIn("reconciler-access)", platform)
         self.assertIn("sudo -n chmod 0755 \\$h; sudo -n chmod 0644 \\$h/authorized_keys", platform)
         self.assertNotIn("operations_commission_action_bundle", platform)

@@ -1,0 +1,174 @@
+set -Eeuo pipefail
+[[ $# -eq 4 ]]
+expected_revision=$1
+expected_size=$2
+expected_sha256=$3
+expected_game_sha256=$4
+[[ $expected_revision =~ ^[0-9a-f]{40}$ ]]
+[[ $expected_size =~ ^[1-9][0-9]*$ && $expected_size -le 536870912 ]]
+[[ $expected_sha256 =~ ^[0-9a-f]{64}$ ]]
+[[ $expected_game_sha256 =~ ^[0-9a-f]{64}$ ]]
+bundle=/var/tmp/finals-anvil-deploy.bundle
+project=/opt/anvil/current/deployments/finals
+env_file=/etc/anvil/finals.env
+work=$(mktemp -d /var/tmp/finals-anvil-apply.XXXXXX)
+rollback_needed=0
+complete=0
+
+health() {
+  local path status
+  for path in /api/health /api/v1/info; do
+    status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+      --connect-timeout 5 --max-time 15 --proto '=https' --tlsv1.2 \
+      --resolve finals.h7tex.com:443:10.60.200.10 "https://finals.h7tex.com$path")
+    [[ $status == 200 ]]
+  done
+}
+
+compose_up() {
+  /usr/bin/docker compose --project-name anvil-finals --project-directory "$project" \
+    --env-file "$env_file" -f "$project/compose.yaml" up -d --no-build --no-deps \
+    --wait --wait-timeout 180 api web
+}
+
+images_active() {
+  local revision api web
+  revision=$(sed -n 's/^ANVIL_IMAGE_REVISION=//p' "$env_file")
+  api=$(/usr/bin/docker compose --project-name anvil-finals --project-directory "$project" \
+    --env-file "$env_file" -f "$project/compose.yaml" ps -q api)
+  web=$(/usr/bin/docker compose --project-name anvil-finals --project-directory "$project" \
+    --env-file "$env_file" -f "$project/compose.yaml" ps -q web)
+  [[ $(/usr/bin/docker inspect --format '{{.Image}}' "$api") == $(/usr/bin/docker image inspect --format '{{.Id}}' "anvil-finals-api:$revision") ]]
+  [[ $(/usr/bin/docker inspect --format '{{.Image}}' "$web") == $(/usr/bin/docker image inspect --format '{{.Id}}' "anvil-finals-web:$revision") ]]
+}
+
+migration_count() {
+  /usr/bin/docker compose --project-name anvil-finals --project-directory "$project" \
+    --env-file "$env_file" -f "$project/compose.yaml" exec -T postgres \
+    psql --no-psqlrc --username anvil --dbname anvil --tuples-only --no-align \
+    --command 'SELECT COUNT(*) FROM schema_migrations;'
+}
+
+migration_sha256() {
+  /usr/bin/docker compose --project-name anvil-finals --project-directory "$project" \
+    --env-file "$env_file" -f "$project/compose.yaml" exec -T postgres \
+    psql --no-psqlrc --quiet --username anvil --dbname anvil \
+    --command "COPY (SELECT version::text || '|' || name || '|' || checksum FROM schema_migrations ORDER BY version) TO STDOUT;" \
+    | sha256sum | cut -d ' ' -f 1
+}
+
+finish() {
+  local result=$?
+  trap - EXIT
+  if [[ $rollback_needed == 1 && $complete == 0 ]]; then
+    if install -o root -g root -m 0600 "$work/finals.env.previous" "$env_file" \
+      && install -o root -g root -m 0644 "$work/game.yaml.previous" "$project/game.yaml" \
+      && /usr/bin/docker image tag "$old_api_id" "anvil-finals-api:$old_revision" \
+      && /usr/bin/docker image tag "$old_web_id" "anvil-finals-web:$old_revision" \
+      && "$project/preflight.sh" "$env_file" \
+      && compose_up \
+      && images_active \
+      && health \
+      && [[ $(migration_count) -eq $target_migration_count ]] \
+      && [[ $(migration_sha256) == "$target_migration_sha256" ]]; then
+      echo anvil-deploy-rollback=complete >&2
+    else
+      echo anvil-deploy-rollback=failed >&2
+      result=1
+    fi
+  fi
+  rm -rf -- "$work"
+  rm -f -- "$bundle"
+  exit "$result"
+}
+trap finish EXIT
+
+[[ -f $bundle && ! -L $bundle && $(stat -c %U:%G:%a "$bundle") == root:root:600 ]]
+[[ $(stat -c %s "$bundle") -eq $expected_size ]]
+[[ $(sha256sum "$bundle" | cut -d ' ' -f 1) == "$expected_sha256" ]]
+[[ $(sha256sum "$project/compose.yaml" | cut -d ' ' -f 1) == 2ca0a8155f7e30f822f66d1cf6776423bc5b93d00f2b46392f41ce1d37dfea29 ]]
+[[ $(sha256sum "$project/preflight.sh" | cut -d ' ' -f 1) == b6f50acf91bf456ce6f56a120d474216d8250d24f06d21d4e90ff35f9ef7ce6a ]]
+[[ $(sha256sum /etc/systemd/system/anvil-finals.service | cut -d ' ' -f 1) == 4cf189d93e6a4b1bb24ade8370f24a892d207065b87d44175052bdce7d267159 ]]
+[[ -f $project/game.yaml && ! -L $project/game.yaml ]]
+(( $(stat -c %s "$project/game.yaml") > 0 && $(stat -c %s "$project/game.yaml") <= 65536 ))
+
+[[ $(tar -tf "$bundle" | wc -l) -eq 4 ]]
+[[ $(tar -tf "$bundle" | sort) == $'deploy.sh\ngame.yaml\nimages.tar.gz\nmanifest.json' ]]
+[[ $(tar -tvf "$bundle" | awk '$1 !~ /^-/ { count++ } END { print count + 0 }') -eq 0 ]]
+tar -xf "$bundle" -C "$work" --no-same-owner --no-same-permissions
+manifest=$work/manifest.json
+jq -e '.format == "h7ctf-anvil-deploy-v1" and
+  (keys | sort) == ["format","game","images","migrations","revision"] and
+  (.revision | test("^[0-9a-f]{40}$")) and
+  ([.images,.game] | all(.[];
+    (keys | sort) == ["file","sha256","size"] and
+    (.size | type == "number") and (.size > 0) and
+    (.size == (.size | floor)) and (.sha256 | test("^[0-9a-f]{64}$")))) and
+  (.migrations | keys | sort) == ["count","sha256"] and
+  (.migrations.count | type == "number") and (.migrations.count > 0) and
+  (.migrations.count == (.migrations.count | floor)) and
+  (.migrations.sha256 | test("^[0-9a-f]{64}$"))' "$manifest" >/dev/null
+revision=$(jq -r .revision "$manifest")
+[[ $revision == "$expected_revision" ]]
+for label in images game; do
+  file=$(jq -r ".${label}.file" "$manifest")
+  [[ $label:$file == images:images.tar.gz || $label:$file == game:game.yaml ]]
+  [[ $(stat -c %s "$work/$file") -eq $(jq -r ".${label}.size" "$manifest") ]]
+  [[ $(sha256sum "$work/$file" | cut -d ' ' -f 1) == $(jq -r ".${label}.sha256" "$manifest") ]]
+done
+[[ $(stat -c %s "$work/images.tar.gz") -le 536870912 ]]
+[[ $(stat -c %s "$work/game.yaml") -le 65536 ]]
+target_game=$(sha256sum "$work/game.yaml" | cut -d ' ' -f 1)
+[[ $target_game == "$expected_game_sha256" ]]
+[[ $(jq -r .game.sha256 "$manifest") == "$expected_game_sha256" ]]
+target_migration_count=$(jq -r .migrations.count "$manifest")
+target_migration_sha256=$(jq -r .migrations.sha256 "$manifest")
+[[ $(migration_count) -eq $target_migration_count ]]
+[[ $(migration_sha256) == "$target_migration_sha256" ]]
+
+uncompressed_maximum=2147483648
+reserve=2147483648
+staging_available=$(df --output=avail -B1 "$work" | tail -n 1 | tr -d ' ')
+[[ $staging_available =~ ^[0-9]+$ ]]
+(( staging_available >= uncompressed_maximum + reserve ))
+gzip -dc "$work/images.tar.gz" | head -c "$((uncompressed_maximum + 1))" > "$work/images.tar"
+uncompressed_size=$(stat -c %s "$work/images.tar")
+(( uncompressed_size > 0 && uncompressed_size <= uncompressed_maximum ))
+docker_root=$(/usr/bin/docker info --format '{{.DockerRootDir}}')
+[[ $docker_root == /* && -d $docker_root && ! -L $docker_root ]]
+docker_available=$(df --output=avail -B1 "$docker_root" | tail -n 1 | tr -d ' ')
+[[ $docker_available =~ ^[0-9]+$ ]]
+(( docker_available >= uncompressed_size * 2 + reserve ))
+docker_manifest=$(tar -xOf "$work/images.tar" manifest.json)
+jq -e --arg revision "$revision" 'length == 2 and
+  ([.[].RepoTags[]] | sort) ==
+  ["anvil-finals-api:" + $revision, "anvil-finals-web:" + $revision]' <<< "$docker_manifest" >/dev/null
+
+[[ $revision =~ ^[0-9a-f]{40}$ ]]
+[[ $(grep -Ec '^ANVIL_IMAGE_REVISION=[0-9a-f]{40}$' "$env_file") -eq 1 ]]
+old_revision=$(sed -n 's/^ANVIL_IMAGE_REVISION=//p' "$env_file")
+old_api_id=$(/usr/bin/docker image inspect --format '{{.Id}}' "anvil-finals-api:$old_revision")
+old_web_id=$(/usr/bin/docker image inspect --format '{{.Id}}' "anvil-finals-web:$old_revision")
+/usr/bin/docker image tag "$old_api_id" anvil-finals-api:previous
+/usr/bin/docker image tag "$old_web_id" anvil-finals-web:previous
+install -o root -g root -m 0600 "$env_file" "$work/finals.env.previous"
+install -o root -g root -m 0644 "$project/game.yaml" "$work/game.yaml.previous"
+systemctl start anvil-finals-backup.service
+[[ $(systemctl show --property=Result --value anvil-finals-backup.service) == success ]]
+rollback_needed=1
+/usr/bin/docker load --input "$work/images.tar"
+/usr/bin/docker image inspect "anvil-finals-api:$revision" "anvil-finals-web:$revision" >/dev/null
+sed -E "s/^ANVIL_IMAGE_REVISION=[0-9a-f]{40}$/ANVIL_IMAGE_REVISION=$revision/" \
+  "$env_file" > "$work/finals.env.next"
+chmod 0600 "$work/finals.env.next"
+install -o root -g root -m 0600 "$work/finals.env.next" "$env_file"
+install -o root -g root -m 0644 "$work/game.yaml" "$project/game.yaml"
+"$project/preflight.sh" "$env_file"
+compose_up
+images_active
+health
+[[ $(migration_count) -eq $target_migration_count ]]
+[[ $(migration_sha256) == "$target_migration_sha256" ]]
+complete=1
+echo "anvil-deploy-revision=$revision"
+echo anvil-deploy=complete

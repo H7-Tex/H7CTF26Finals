@@ -98,7 +98,7 @@ locals {
     }
     target=$${1:-}
     action=$${2:-}
-    [[ $# -eq 2 && ( $action == volume-initialize || ( $target == platform && $action =~ ^(platform-quiesce|anvil-restart|weights-65-30-5)$ ) ) ]] || {
+    [[ $# -eq 2 && ( $action == volume-initialize || ( $target == platform && $action =~ ^(platform-quiesce|anvil-restart)$ ) ) ]] || {
       echo "unsupported fixed volume action" >&2
       exit 2
     }
@@ -127,22 +127,6 @@ locals {
       -o StrictHostKeyChecking=yes
       -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts
     )
-    if [[ $action == weights-65-30-5 ]]; then
-      exec /usr/bin/ssh "$${ssh_options[@]}" -- "ubuntu@$address" \
-        'set -euo pipefail
-        game=/opt/anvil/current/deployments/finals/game.yaml
-        [[ $(sudo -n sha256sum "$game" | cut -d " " -f 1) == 8cae357948dceac7abd5ccb0ccaa9961eb5d42f7ac482336a450e2499c615a54 ]]
-        temporary=$(mktemp /tmp/finals-game.XXXXXX); trap '\''rm -f -- "$temporary"'\'' EXIT
-        sudo -n sed -e '\''s/^    weight_ad: 0\.6$/    weight_ad: 0.65/'\'' -e '\''s/^    weight_koth: 0\.25$/    weight_koth: 0.30/'\'' -e '\''s/^    weight_jeopardy: 0\.15 # jeopardy solve points, median-relative like the other two$/    weight_jeopardy: 0.05 # jeopardy solve points, median-relative like the other two/'\'' "$game" > "$temporary"
-        [[ $(sha256sum "$temporary" | cut -d " " -f 1) == feb6acb5d932594c8d4bc8b4370413d7c1b584877ba86d888c0a1f0ee8c90b49 ]]
-        sudo -n install -o root -g root -m 0644 "$temporary" "$game"
-        [[ $(sudo -n stat -c "%U:%G:%a" "$game") == root:root:644 ]]
-        sudo -n systemctl restart anvil-finals.service
-        sudo -n systemctl is-active --quiet anvil-finals.service
-        status=$(curl --silent --show-error --output /dev/null --write-out "%%{http_code}" --connect-timeout 5 --max-time 15 --proto "=https" --tlsv1.2 --resolve finals.h7tex.com:443:10.60.200.10 https://finals.h7tex.com/)
-        [[ $status == 200 ]]
-        echo weights-65-30-5=complete'
-    fi
     if [[ $action == platform-quiesce ]]; then
       exec /usr/bin/ssh "$${ssh_options[@]}" -- "ubuntu@$address" \
         'set -euo pipefail
@@ -581,7 +565,6 @@ locals {
   operations_commission_production_runtime_script = file("${path.module}/scripts/commission-production-runtime")
   operations_commission_sudoers                   = <<-SUDOERS
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform anvil-restart
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform weights-65-30-5
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-secret control-checkers
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall hill-01
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall hill-02
@@ -606,9 +589,8 @@ locals {
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-clear-central
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-production-keys ""
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-gateway-model-a ""
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-runtime-artifact control checker-recover
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-runtime-artifact control checker-status
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-runtime-artifact control state-summary
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-runtime-artifact platform anvil-deploy
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-runtime-artifact hill-01 hill-artifacts
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-runtime-artifact hill-01 hill-config
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-runtime-artifact hill-01 hill-control

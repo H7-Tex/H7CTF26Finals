@@ -7,6 +7,7 @@ set -euo pipefail
 target=$1
 action=$2
 case "$target" in
+  platform) address=10.60.200.10 ;;
   control) address=10.60.201.20 ;;
   hill-01) address=10.60.210.11 ;;
   hill-02) address=10.60.210.12 ;;
@@ -14,29 +15,43 @@ case "$target" in
   *) exit 2 ;;
 esac
 case "$target:$action" in
-  control:checker-recover)
-    exec ssh -F /dev/null -i /run/finals-commissioning/central_id_ed25519 -o BatchMode=yes -o ConnectTimeout=10 \
+  platform:anvil-deploy)
+    maximum=536870912
+    mapfile -t request
+    [[ ${#request[@]} -eq 5 ]]
+    revision=${request[0]}
+    expected_size=${request[1]}
+    expected_sha256=${request[2]}
+    expected_game_sha256=${request[3]}
+    url=${request[4]}
+    [[ $revision =~ ^[0-9a-f]{40}$ ]]
+    [[ $expected_size =~ ^[1-9][0-9]*$ && $expected_size -le $maximum ]]
+    [[ $expected_sha256 =~ ^[0-9a-f]{64}$ ]]
+    [[ $expected_game_sha256 =~ ^[0-9a-f]{64}$ ]]
+    [[ $url =~ ^https://objectstorage\.ap-hyderabad-1\.oraclecloud\.com/p/[^/]+/n/axilpw1vvpzo/b/finals-anvil-deploy-[0-9a-f]{12}/o/anvil-deploy\.bundle$ ]]
+    exec 9>/run/finals-anvil-deploy.lock
+    flock -n 9
+    temporary=$(mktemp /var/tmp/finals-anvil-deploy.XXXXXX)
+    trap 'rm -f -- "$temporary"' EXIT
+    curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location \
+      --connect-timeout 10 --max-time 900 --output "$temporary" "$url"
+    [[ $(stat -c %s "$temporary") -eq $expected_size ]]
+    [[ $(sha256sum "$temporary" | cut -d ' ' -f 1) == "$expected_sha256" ]]
+    deploy=$(mktemp /run/finals-anvil-deploy-script.XXXXXX)
+    trap 'rm -f -- "$temporary" "$deploy"' EXIT
+    tar -xOf "$temporary" deploy.sh > "$deploy"
+    chmod 0700 "$deploy"
+    [[ $(sha256sum "$deploy" | cut -d ' ' -f 1) == 0a950b315186d7455afe58ef8775e7b6def272ad2af25040ef77f0b73c9f14cd ]]
+    ssh -F /dev/null -i /run/finals-commissioning/central_id_ed25519 -o BatchMode=yes -o ConnectTimeout=10 \
       -o IdentitiesOnly=yes -o PasswordAuthentication=no -o StrictHostKeyChecking=yes \
       -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts -- "ubuntu@$address" \
-      'set -euo pipefail
-      d=/etc/systemd/system/checker-runtime.service.d/runtime-directory.conf
-      h=9eac6ae93b20078389b6048d064fd50a8017edba06cd1b5fbe49a47491a3ce35
-      x=$(mktemp /tmp/c.XXXXXX); trap "rm -f -- $x" EXIT
-      printf "[Service]\nRuntimeDirectory=checker-runtime\nRuntimeDirectoryMode=0700\n" > "$x"
-      sudo -n install -D -o root -g root -m 0644 "$x" "$d"
-      [[ $(sudo -n stat -c %U:%G:%a "$d") == root:root:644 ]]
-      [[ $(sudo -n sha256sum "$d" | cut -c1-64) == "$h" ]]
-      t=(timeout -k2s); r=
-      "${t[@]}" 30s sudo -n systemctl daemon-reload || r=1
-      "${t[@]}" 10s sudo -n systemctl reset-failed checker-runtime.service || r=1
-      "${t[@]}" 180s sudo -n systemctl restart checker-runtime.service >/dev/null 2>&1 || r=1
-      : > "$x"
-      "${t[@]}" 240s bash -c "until curl -s -o $x -w \"%{http_code}\" --connect-timeout 2 --max-time 3 http://127.0.0.1:9160/readyz | grep -qx 200; do sleep 1; done" || r=1
-      cat "$x"; echo
-      "${t[@]}" 10s sudo -n systemctl show checker-runtime.service -p SubState,Result,NRestarts || r=1
-      [[ -z $r ]] || "${t[@]}" 10s sudo -n journalctl -u checker-runtime.service -n 25 --no-pager -o cat || :
-      [[ -z $r ]]
-      echo checker-recover=complete'
+      'sudo -n install -D -o root -g root -m 0600 /dev/stdin /var/tmp/finals-anvil-deploy.bundle' < "$temporary"
+    ssh -F /dev/null -i /run/finals-commissioning/central_id_ed25519 -o BatchMode=yes -o ConnectTimeout=10 \
+      -o IdentitiesOnly=yes -o PasswordAuthentication=no -o StrictHostKeyChecking=yes \
+      -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts -- "ubuntu@$address" \
+      "sudo -n /bin/bash -s -- '$revision' '$expected_size' '$expected_sha256' '$expected_game_sha256'" < "$deploy"
+    echo platform:anvil-deploy=complete
+    exit 0
     ;;
   control:checker-status)
     exec ssh -F /dev/null -i /run/finals-commissioning/central_id_ed25519 -o BatchMode=yes -o ConnectTimeout=10 \
@@ -50,12 +65,6 @@ case "$target:$action" in
       printf "checker-runtime.service=%s\npeer-reconciler.timer=%s\nreadyz-http=%s\n" "$checker_runtime" "$reconciler_timer" "$readyz_http"
       [[ $checker_runtime == active && $reconciler_timer == active && $readyz_http == 200 ]]
       echo checker-status=complete'
-    ;;
-  control:state-summary)
-    exec ssh -F /dev/null -i /run/finals-commissioning/central_id_ed25519 -o BatchMode=yes -o ConnectTimeout=10 \
-      -o IdentitiesOnly=yes -o PasswordAuthentication=no -o StrictHostKeyChecking=yes \
-      -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts -- "ubuntu@$address" \
-      'sudo -n /usr/bin/python3 -c '\''import hashlib,json,sys;p=sys.argv[1];b=open(p,"rb").read();v=json.loads(b);print("active-file-sha256="+hashlib.sha256(b).hexdigest());print("active-generation="+str(v["generation"]));print("active-peer-count="+str(len(v["peers"])))'\'' /var/lib/peer-reconciler/active.json'
     ;;
   hill-0[123]:hill-artifacts)
     maximum=385986560
