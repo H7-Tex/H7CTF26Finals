@@ -39,15 +39,17 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn('file("${path.module}/scripts/commission-runtime-artifact")', module)
         self.assertNotIn("finals-commission-runtime-artifact *", module)
 
-    def test_operations_production_runtime_status_is_fixed(self):
+    def test_operations_production_runtime_recovery_is_fixed(self):
         module = (ROOT / "terraform/modules/oci-platform/main.tf").read_text(encoding="utf-8")
         wrapper = ROOT / "terraform/modules/oci-platform/scripts/commission-production-runtime"
         content = wrapper.read_text(encoding="utf-8")
         self.assertIn('file("${path.module}/scripts/commission-production-runtime")', module)
         self.assertIn("^production-(0[1-9]|1[0-6])$", content)
         self.assertIn("firstboot.done=yes", content)
-        self.assertIn("listeners=", content)
-        self.assertNotIn("model-a-network-repair", content)
+        self.assertIn("docker-store=containerd", content)
+        self.assertIn("io.containerd.snapshotter.v1", content)
+        self.assertIn("model-a-network-repair=complete", content)
+        self.assertIn("23f3b34a0d14c6ab4c8e5df065a4e8dd3fa7bac79e5ed82d5e085910c9b1d2dc", content)
         self.assertNotIn("finals-commission-production-runtime *", module)
 
     def test_control_checker_artifact_commissioning_is_fixed(self):
