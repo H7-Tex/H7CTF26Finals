@@ -41,7 +41,7 @@ case "$target:$action" in
     trap 'rm -f -- "$temporary" "$deploy"' EXIT
     tar -xOf "$temporary" deploy.sh > "$deploy"
     chmod 0700 "$deploy"
-    [[ $(sha256sum "$deploy" | cut -d ' ' -f 1) == 0a950b315186d7455afe58ef8775e7b6def272ad2af25040ef77f0b73c9f14cd ]]
+    [[ $(sha256sum "$deploy" | cut -d ' ' -f 1) == 1af4a291ae6a1fe5e91df27ca1a77f051aa09ba6bfb99bcd498f5e393ac7459d ]]
     ssh -F /dev/null -i /run/finals-commissioning/central_id_ed25519 -o BatchMode=yes -o ConnectTimeout=10 \
       -o IdentitiesOnly=yes -o PasswordAuthentication=no -o StrictHostKeyChecking=yes \
       -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts -- "ubuntu@$address" \
@@ -49,7 +49,18 @@ case "$target:$action" in
     ssh -F /dev/null -i /run/finals-commissioning/central_id_ed25519 -o BatchMode=yes -o ConnectTimeout=10 \
       -o IdentitiesOnly=yes -o PasswordAuthentication=no -o StrictHostKeyChecking=yes \
       -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts -- "ubuntu@$address" \
-      "sudo -n /bin/bash -s -- '$revision' '$expected_size' '$expected_sha256' '$expected_game_sha256'" < "$deploy"
+      'sudo -n install -D -o root -g root -m 0700 /dev/stdin /var/tmp/finals-anvil-deploy.sh' < "$deploy"
+    ssh_options=(-F /dev/null -i /run/finals-commissioning/central_id_ed25519 -o BatchMode=yes -o ConnectTimeout=10
+      -o IdentitiesOnly=yes -o PasswordAuthentication=no -o StrictHostKeyChecking=yes
+      -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts)
+    if ! output=$(ssh "${ssh_options[@]}" -- "ubuntu@$address" \
+      "printf '%s  %s\\n' '1af4a291ae6a1fe5e91df27ca1a77f051aa09ba6bfb99bcd498f5e393ac7459d' /var/tmp/finals-anvil-deploy.sh | sudo -n sha256sum -c --quiet && sudo -n /bin/bash /var/tmp/finals-anvil-deploy.sh '$revision' '$expected_size' '$expected_sha256' '$expected_game_sha256' < /dev/null" 2>&1); then
+      printf '%s\n' "$output" >&2
+      exit 1
+    fi
+    printf '%s\n' "$output"
+    grep -Fxq "anvil-deploy-revision=$revision" <<< "$output"
+    grep -Fxq anvil-deploy=complete <<< "$output"
     echo platform:anvil-deploy=complete
     exit 0
     ;;
@@ -61,23 +72,12 @@ case "$target:$action" in
       env_file=/etc/anvil/finals.env
       revision=$(sudo -n sed -n "s/^ANVIL_IMAGE_REVISION=//p" "$env_file")
       [[ $revision =~ ^[0-9a-f]{40}$ ]]
-      printf "env-revision=%s\n" "$revision"
-      sudo -n stat -c "env-stat=mtime:%Y ctime:%Z inode:%i size:%s mode:%a owner:%U:%G" "$env_file"
-      printf "current=%s\n" "$(readlink -f /opt/anvil/current)"
-      findmnt --noheadings --output SOURCE,TARGET,FSTYPE --target /etc/anvil
-      sudo -n systemctl show anvil-finals.service --property=FragmentPath --property=DropInPaths --property=ActiveEnterTimestamp
-      sudo -n /usr/bin/docker ps -a --no-trunc --filter label=com.docker.compose.project \
-        --format "container={{.ID}} name={{.Names}} image={{.Image}} ports={{.Ports}} project={{.Label \"com.docker.compose.project\"}} service={{.Label \"com.docker.compose.service\"}} workdir={{.Label \"com.docker.compose.project.working_dir\"}}"
-      sudo -n ss -H -lntp "sport = :443"
-      for tag in \
-        anvil-finals-api:c2721f2821fc89c0fc8ea5d362e316871fb17154 \
-        anvil-finals-web:c2721f2821fc89c0fc8ea5d362e316871fb17154 \
-        anvil-finals-api:817b0d9dad344beeb5031b204026f82311e5588f \
-        anvil-finals-web:817b0d9dad344beeb5031b204026f82311e5588f; do
-        image=$(sudo -n /usr/bin/docker image inspect --format "{{.Id}}" "$tag" 2>/dev/null || true)
-        printf "tag=%s image=%s\n" "$tag" "${image:-missing}"
+      for service in api web ingress; do
+        container=$(sudo -n /usr/bin/docker compose --project-name anvil-finals --project-directory /opt/anvil/current/deployments/finals --env-file "$env_file" -f /opt/anvil/current/deployments/finals/compose.yaml ps -q "$service")
+        [[ $container =~ ^[0-9a-f]{64}$ ]]
+        printf "%s-image=%s\n" "$service" "$(sudo -n /usr/bin/docker inspect --format "{{.Image}}" "$container")"
       done
-      echo anvil-status=complete'
+      printf "env-revision=%s\nanvil-status=complete\n" "$revision"'
     ;;
   control:checker-status)
     exec ssh -F /dev/null -i /run/finals-commissioning/central_id_ed25519 -o BatchMode=yes -o ConnectTimeout=10 \

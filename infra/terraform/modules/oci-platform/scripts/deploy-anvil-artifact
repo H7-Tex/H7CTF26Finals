@@ -46,7 +46,7 @@ migration_count() {
   /usr/bin/docker compose --project-name anvil-finals --project-directory "$project" \
     --env-file "$env_file" -f "$project/compose.yaml" exec -T postgres \
     psql --no-psqlrc --username anvil --dbname anvil --tuples-only --no-align \
-    --command 'SELECT COUNT(*) FROM schema_migrations;'
+    --command 'SELECT COUNT(*) FROM schema_migrations;' < /dev/null
 }
 
 migration_sha256() {
@@ -54,7 +54,7 @@ migration_sha256() {
     --env-file "$env_file" -f "$project/compose.yaml" exec -T postgres \
     psql --no-psqlrc --quiet --username anvil --dbname anvil \
     --command "COPY (SELECT version::text || '|' || name || '|' || checksum FROM schema_migrations ORDER BY version) TO STDOUT;" \
-    | sha256sum | cut -d ' ' -f 1
+    < /dev/null | sha256sum | cut -d ' ' -f 1
 }
 
 finish() {
