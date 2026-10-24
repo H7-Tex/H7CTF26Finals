@@ -23,12 +23,10 @@ team=$2
 if [[ $action == status ]]; then
   if [[ -f /var/lib/finals-model-a/firstboot.done ]]; then echo firstboot.done=yes; else echo firstboot.done=no; fi
   systemctl show finals-model-a-firstboot -p ActiveState,SubState,Result,ExecMainStatus,NRestarts
-  journalctl -u finals-model-a-firstboot -n 40 --no-pager -o cat
-  docker image ls --format '{{.ID}} {{.Repository}}:{{.Tag}}' | sed -n '1,20p'
   docker ps -a --format '{{.Names}} {{.Status}}'
   systemctl is-active finals-service-proxy || true
-  ss -ltn | grep -E ':700[1-6][[:space:]]' || true
-  nft -a list chain inet finals_host input | grep -E '7001-7006|reject|drop' || true
+  ss -ltn | grep -E ':700[1-6][[:space:]]' || :
+  nft -a list chain inet finals_host input | grep -E '7001-7006|reject|drop' || :
   df -h /srv/finals/service-data /
   exit 0
 fi
