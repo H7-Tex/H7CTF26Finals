@@ -67,20 +67,14 @@ case "$target:$action" in
       for service in api web ingress; do
         container=$("${compose[@]}" ps -q "$service")
         [[ $container =~ ^[0-9a-f]{64}$ ]]
-        name=$(sudo -n /usr/bin/docker inspect --format "{{.Name}}" "$container")
         image=$(sudo -n /usr/bin/docker inspect --format "{{.Image}}" "$container")
-        reference=$(sudo -n /usr/bin/docker inspect --format "{{.Config.Image}}" "$container")
         started=$(sudo -n /usr/bin/docker inspect --format "{{.State.StartedAt}}" "$container")
         address=$(sudo -n /usr/bin/docker inspect --format "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}" "$container")
-        printf "%s-container=%s name=%s image=%s reference=%s started=%s address=%s\n" "$service" "$container" "$name" "$image" "$reference" "$started" "$address"
+        printf "%s-container=%s image=%s started=%s address=%s\n" "$service" "$container" "$image" "$started" "$address"
       done
       for service in api web; do
         tag="anvil-finals-$service:$revision"
         printf "%s-tag-image=%s\n" "$service" "$(sudo -n /usr/bin/docker image inspect --format "{{.Id}}" "$tag")"
-      done
-      ingress=$("${compose[@]}" ps -q ingress)
-      for service in api web; do
-        printf "ingress-dns-%s=%s\n" "$service" "$(sudo -n /usr/bin/docker exec "$ingress" getent hosts "$service" | awk "NR == 1 { print \$1 }")"
       done
       echo anvil-status=complete'
     ;;
