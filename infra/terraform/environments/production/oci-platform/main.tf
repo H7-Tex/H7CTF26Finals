@@ -27,7 +27,7 @@ module "storage" {
 
 resource "oci_bastion_bastion" "operations" {
   bastion_type                 = "standard"
-  client_cidr_block_allow_list = ["27.61.61.38/32"]
+  client_cidr_block_allow_list = ["27.61.61.38/32", "27.61.63.104/32"]
   compartment_id               = var.finals_compartment_id
   dns_proxy_status             = "DISABLED"
   max_session_ttl_in_seconds   = 10800
