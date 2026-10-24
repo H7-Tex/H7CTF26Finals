@@ -383,6 +383,8 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertEqual(fleet.count("prevent_destroy = true"), 1)
         self.assertIn('resource "oci_core_volume" "production_data"', fleet)
         self.assertIn('resource "oci_core_volume_attachment" "production_data"', fleet)
+        self.assertIn('resource "terraform_data" "production_generation"', fleet)
+        self.assertEqual(fleet.count("replace_triggered_by = [terraform_data.production_generation]"), 4)
         self.assertIn("size_in_gbs         = 50", fleet)
         volume_start = fleet.index('resource "oci_core_volume" "production_data"')
         attachment_start = fleet.index('resource "oci_core_volume_attachment" "production_data"')

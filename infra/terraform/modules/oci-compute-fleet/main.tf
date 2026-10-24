@@ -22,6 +22,13 @@ locals {
   }
 }
 
+resource "terraform_data" "production_generation" {
+  triggers_replace = [
+    var.production_image_id,
+    var.reference_production_image_id,
+  ]
+}
+
 resource "oci_core_instance" "production" {
   for_each = local.production
 
@@ -63,6 +70,9 @@ resource "oci_core_instance" "production" {
     are_legacy_imds_endpoints_disabled = true
   }
 
+  lifecycle {
+    replace_triggered_by = [terraform_data.production_generation]
+  }
 }
 
 data "oci_core_vnic_attachments" "production" {
@@ -79,6 +89,9 @@ resource "oci_core_private_ip" "staging" {
   display_name = "${each.key}-staging"
   ip_address   = each.value.staging_ip
 
+  lifecycle {
+    replace_triggered_by = [terraform_data.production_generation]
+  }
 }
 
 resource "oci_core_volume" "production_data" {
@@ -93,6 +106,9 @@ resource "oci_core_volume" "production_data" {
     team = each.value.team == 16 ? "reference" : format("team-%02d", each.value.team)
   })
 
+  lifecycle {
+    replace_triggered_by = [terraform_data.production_generation]
+  }
 }
 
 resource "oci_core_volume_attachment" "production_data" {
@@ -102,6 +118,10 @@ resource "oci_core_volume_attachment" "production_data" {
   display_name    = "${each.key}-service-data"
   instance_id     = oci_core_instance.production[each.key].id
   volume_id       = oci_core_volume.production_data[each.key].id
+
+  lifecycle {
+    replace_triggered_by = [terraform_data.production_generation]
+  }
 }
 
 resource "oci_core_instance" "workbench" {
