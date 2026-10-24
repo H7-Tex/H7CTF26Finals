@@ -127,11 +127,13 @@ def role_rules(role, mirror_warmup=False, archive_egress=False):
         f"ip saddr 10.60.210.0/24 counter drop\n"
         f"    ip saddr 10.60.250.121-10.60.250.135 tcp dport {port} accept\n"
         f"    ip saddr 10.60.201.20 tcp dport {port} accept\n"
+        f"    ip saddr 10.60.200.10 tcp dport {port} accept\n"
         "    ip saddr 10.60.200.5 tcp dport 22 accept",
         f"{container_forward_rules(role)}\n"
         f"    ip daddr 10.60.210.0/24 counter drop\n"
         f"    ip saddr 10.60.250.121-10.60.250.135 ct status dnat ct original proto-dst {port} accept\n"
         f"    ip saddr 10.60.201.20 ct status dnat ct original proto-dst {port} accept\n"
+        f"    ip saddr 10.60.200.10 ct status dnat ct original proto-dst {port} accept\n"
         "    iifname \"br-*\" ip daddr 10.60.210.0/24 counter drop\n"
         "    iifname \"br-*\" ip daddr { 10.60.200.10, 10.60.201.20 } accept",
         f"{container_output_rules(role)}\n"

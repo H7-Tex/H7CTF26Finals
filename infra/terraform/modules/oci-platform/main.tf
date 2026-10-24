@@ -673,6 +673,11 @@ locals {
         ssh_to "set -eu; sudo -n /usr/local/sbin/event-router-challenge-access $verb
           sudo -n nft list set inet event_router released_hill_services | grep -c ' \. ' || true"
         ;;
+      hill-engine-open)
+        ssh_to "set -eu; rule='ip saddr 10.60.200.10 ip daddr . tcp dport @hill_services ct state new accept'
+          sudo -n nft list chain inet event_router forward_enabled | grep -Fq 'ip saddr 10.60.200.10 ip daddr . tcp dport @hill_services' || sudo -n nft insert rule inet event_router forward_enabled \$rule
+          sudo -n nft list chain inet event_router forward_enabled | grep -c 'ip saddr 10.60.200.10 ip daddr . tcp dport @hill_services'"
+        ;;
       reconciler-access)
         ssh_to "set -eu; h=/var/lib/peer-reconciler/.ssh
           [ \"\$(sudo -n stat -c %U:%G \$h/authorized_keys)\" = root:root ]
