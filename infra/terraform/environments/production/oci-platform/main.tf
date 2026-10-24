@@ -30,7 +30,7 @@ resource "oci_bastion_bastion" "operations" {
   compartment_id               = var.finals_compartment_id
   dns_proxy_status             = "DISABLED"
   max_session_ttl_in_seconds   = 10800
-  name                         = "operations-access"
+  name                         = "operations"
   target_subnet_id             = var.subnet_ids["services"]
 
   freeform_tags = {
