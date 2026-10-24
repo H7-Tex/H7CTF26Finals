@@ -796,7 +796,7 @@ locals {
 
 check "operations_commission_cloud_init" {
   assert {
-    condition     = length(regexall("finals-commission-volume", local.cloud_init_by_role["operations"])) > 0
+    condition     = length(regexall("finals-commission-production-runtime", local.cloud_init_by_role["operations"])) > 0
     error_message = "Operations cloud-init must install the fixed commissioning wrapper."
   }
 
