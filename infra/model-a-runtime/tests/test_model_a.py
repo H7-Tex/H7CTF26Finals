@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 CHALLENGE = Path(
-    os.environ.get("CHALLENGE_REPO", "/home/abu/Main/Projects/H7CTF26Finals-challenges")
+    os.environ.get("CHALLENGE_REPO", ROOT.parents[2] / "H7CTF26Finals-challenges")
 )
 SPEC = importlib.util.spec_from_file_location("model_a", ROOT / "model_a.py")
 MODEL = importlib.util.module_from_spec(SPEC)
@@ -34,6 +34,7 @@ CONTROL_LOADER.exec_module(CONTROL)
 
 
 class ModelATest(unittest.TestCase):
+    @unittest.skipUnless(CHALLENGE.is_dir(), "challenge repository is not packaged")
     def test_contract_matches_challenge_manifests(self):
         self.assertEqual(
             subprocess.run(
@@ -112,6 +113,7 @@ class ModelATest(unittest.TestCase):
         with self.assertRaises(MODEL.ModelAError):
             MODEL.proxy_config(17)
 
+    @unittest.skipUnless(CHALLENGE.is_dir(), "challenge repository is not packaged")
     def test_player_exports_are_exact_and_private(self):
         with tempfile.TemporaryDirectory() as directory:
             for service in MODEL.SERVICES:

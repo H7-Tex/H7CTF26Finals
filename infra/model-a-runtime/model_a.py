@@ -4,7 +4,7 @@ import stat
 import subprocess
 from pathlib import PurePosixPath
 
-SOURCE_COMMIT = "c901df95b3fad91349c66e40a631a633b92e9241"
+SOURCE_COMMIT = "c045db048e2e7435f64ca6cdfa4ae8a8c1da93fc"
 # Team 16 is the NOP exploit-test target and runs the same six services.
 MAX_TEAM_NUMBER = 16
 SERVICES = (

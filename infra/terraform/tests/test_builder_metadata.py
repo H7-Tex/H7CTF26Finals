@@ -242,6 +242,11 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn("infra/archive infra/checkers infra/deployment infra/hills infra/images/runtime", package_script)
         self.assertIn("infra/secrets infra/team-access infra/volumes", package_script)
 
+    def test_model_a_builder_tests_do_not_require_a_developer_path(self):
+        source = (ROOT / "model-a-runtime/tests/test_model_a.py").read_text(encoding="utf-8")
+        self.assertNotIn("/home/abu", source)
+        self.assertEqual(source.count('@unittest.skipUnless(CHALLENGE.is_dir(), "challenge repository is not packaged")'), 2)
+
     def test_runtime_builder_preserves_every_source_executable(self):
         source = (ROOT / "terraform/environments/production/oci-runtime-builders/main.tf").read_text(encoding="utf-8")
         block = source[source.index("executable_files = toset(["):]

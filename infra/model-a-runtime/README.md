@@ -1,6 +1,6 @@
 # Model A service runtime
 
-This lane starts the six Attack-Defense services on each team's production box without the Deployment Orchestrator. It is fixed to challenge commit `c901df95b3fad91349c66e40a631a633b92e9241`.
+This lane starts the six Attack-Defense services on each team's production box without the Deployment Orchestrator. It is fixed to challenge commit `c045db048e2e7435f64ca6cdfa4ae8a8c1da93fc`.
 
 The release builder exports only each manifest's player allowlist, builds the six factory images through the committed Compose build definitions with build networking disabled, and saves three artifacts:
 
@@ -19,13 +19,13 @@ sudo infra/model-a-runtime/install.sh
 An organizer prepares the offline release from a clean exact challenge checkout:
 
 ```text
-python3 infra/model-a-runtime/prepare-release.py /home/abu/Main/Projects/H7CTF26Finals-challenges /secure/output/model-a-c901df9
+python3 infra/model-a-runtime/prepare-release.py /home/abu/Main/Projects/H7CTF26Finals-challenges /secure/output/model-a-c045db0
 ```
 
 After the production data volume initializer has mounted XFS with project quota enforcement, root installs one team box with:
 
 ```text
-finals-model-a-install /secure/input/model-a-c901df9 TEAM_NUMBER RELEASE_JSON_SHA256
+finals-model-a-install /secure/input/model-a-c045db0 TEAM_NUMBER RELEASE_JSON_SHA256
 ```
 
 The expected release hash must arrive through the organizer's trusted commissioning command. The installer verifies that root hash, all archive hashes, and all image IDs; reasserts each live-generation byte and inode hard limit; installs factory and editable player trees; starts the six health-checked containers; and enables `finals-service-proxy`. HAProxy owns `10.60.T.2:7001-7006`; containers publish only to `127.0.0.1:17001-17006`. No PROXY protocol or source header reaches a service.
@@ -56,7 +56,7 @@ CHALLENGE_REPO=/home/abu/Main/Projects/H7CTF26Finals-challenges infra/model-a-ru
 Run the isolated Docker acceptance with:
 
 ```text
-infra/model-a-runtime/tests/local-acceptance.py /secure/output/model-a-c901df9 /home/abu/Main/Projects/H7CTF26Finals-challenges /secure/evidence/model-a-local.json
+infra/model-a-runtime/tests/local-acceptance.py /secure/output/model-a-c045db0 /home/abu/Main/Projects/H7CTF26Finals-challenges /secure/evidence/model-a-local.json
 ```
 
 It starts unique local projects, runs each exact checker through a metadata-free TCP proxy, verifies both stores and one exploit per checker, rebuilds an edited service, proves old-flag retention, resets factory source and image while retaining data, records image IDs and timings, and removes its containers and networks.

@@ -88,7 +88,7 @@ variable "model_a_release_url" {
 }
 
 variable "model_a_release" {
-  description = "Exact Model A release pinned by Codex-2's release.json (challenge c901df9)."
+  description = "Exact Model A release pinned by Codex-2's release.json (challenge c045db0)."
   type = object({
     release_sha256 = string
     objects        = map(object({ sha256 = string, size = number }))
