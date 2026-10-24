@@ -698,6 +698,7 @@ locals {
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall hill-03
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-stage-central
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-clear-central
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-action control-status
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-production-keys ""
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-gateway-model-a ""
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-runtime-artifact control checker-artifacts

@@ -557,13 +557,9 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertNotIn("base64encode(local.operations_commission_", platform)
         self.assertIn("| gzip -d | install", platform)
         self.assertIn("75a1f6046817a6b83a214b3feeea9b7327a2ba0951bfedc20f811564ef6262e9", platform)
-        for action in (
-            "reconcile-once",
-            "reconciler-enable",
-            "control-status",
-            "state-export",
-            "state-restore",
-        ):
+        control_status = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-action control-status"
+        self.assertEqual(platform.count(control_status), 1)
+        for action in ("reconcile-once", "reconciler-enable", "state-export", "state-restore"):
             fixed = f"ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-action {action}"
             self.assertEqual(platform.count(fixed), 0)
         self.assertIn("reconciler-access)", platform)
