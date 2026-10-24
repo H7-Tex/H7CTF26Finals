@@ -94,12 +94,12 @@ variable "model_a_release" {
     objects        = map(object({ sha256 = string, size = number }))
   })
   default = {
-    release_sha256 = "c78b158472194e9ba208a94a90a77deba89bbb0b5f75dd22f067477131f0cac8"
+    release_sha256 = "a49e74eef376f64b38a08fa24d50f43288b911121addc60cb759bc801aff64bf"
     objects = {
-      "release.json"                = { sha256 = "c78b158472194e9ba208a94a90a77deba89bbb0b5f75dd22f067477131f0cac8", size = 4721 }
-      "archives/player-bundles.tar" = { sha256 = "738e3664efae0df5940c718c9705d62703fb4d2d53f5c10243cb4cad21cfd190", size = 95928320 }
-      "archives/factory-images.tar" = { sha256 = "c023e38602499aa3a5ee6b059dec29baa7d8296b888510ed4bd02b6ce4452b49", size = 280236544 }
-      "archives/base-images.tar"    = { sha256 = "bf428c66c5fd42272137e7cfa5e1275c4e91c463b0dd8862e059ce23038b8db3", size = 1300224000 }
+      "release.json"                = { sha256 = "a49e74eef376f64b38a08fa24d50f43288b911121addc60cb759bc801aff64bf", size = 4721 }
+      "archives/player-bundles.tar" = { sha256 = "c72fdc3f0d46eaf53e13b056f9a89fab8f85f573277ec143eb5796860e9d46b4", size = 95928320 }
+      "archives/factory-images.tar" = { sha256 = "d8d13b3a421742001bc58bf996bb101a8d9a1deab875afb023b065edacbe861f", size = 280236032 }
+      "archives/base-images.tar"    = { sha256 = "3b411e2751cec235f6a456ba2952d541c63ac3e0f5488d7d093adadfe9888236", size = 1300224000 }
     }
   }
 }

@@ -71,7 +71,7 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn("sensitive   = true", variables.split('variable "model_a_release_url"', 1)[1].split("}", 1)[0])
         self.assertIn("infra/model-a-runtime", package)
         release = json.loads((ROOT / "model-a-runtime/evidence/release-gates.json").read_text(encoding="utf-8")) if (ROOT / "model-a-runtime/evidence/release-gates.json").exists() else None
-        for digest in ("c78b158472194e9ba208a94a90a77deba89bbb0b5f75dd22f067477131f0cac8", "bf428c66c5fd42272137e7cfa5e1275c4e91c463b0dd8862e059ce23038b8db3"):
+        for digest in ("a49e74eef376f64b38a08fa24d50f43288b911121addc60cb759bc801aff64bf", "3b411e2751cec235f6a456ba2952d541c63ac3e0f5488d7d093adadfe9888236"):
             self.assertIn(digest, variables)
         # the release is fetched only after the production policy phase and before tools and first boot
         self.assertLess(build.index("phase=production-policy"), build.index("run_phase model-a-release"))
