@@ -39,14 +39,15 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn('file("${path.module}/scripts/commission-runtime-artifact")', module)
         self.assertNotIn("finals-commission-runtime-artifact *", module)
 
-    def test_operations_production_runtime_repair_is_fixed(self):
+    def test_operations_production_runtime_status_is_fixed(self):
         module = (ROOT / "terraform/modules/oci-platform/main.tf").read_text(encoding="utf-8")
         wrapper = ROOT / "terraform/modules/oci-platform/scripts/commission-production-runtime"
         content = wrapper.read_text(encoding="utf-8")
         self.assertIn('file("${path.module}/scripts/commission-production-runtime")', module)
         self.assertIn("^production-(0[1-9]|1[0-6])$", content)
-        self.assertIn("model-a-network-repair=complete", content)
-        self.assertIn("23f3b34a0d14c6ab4c8e5df065a4e8dd3fa7bac79e5ed82d5e085910c9b1d2dc", content)
+        self.assertIn("firstboot.done=yes", content)
+        self.assertIn("listeners=", content)
+        self.assertNotIn("model-a-network-repair", content)
         self.assertNotIn("finals-commission-production-runtime *", module)
 
     def test_control_checker_artifact_commissioning_is_fixed(self):
@@ -491,7 +492,7 @@ class BuilderMetadataTests(unittest.TestCase):
         for path in ("etc/nftables.conf", "usr/local/libexec/event-router/render_inventory.py", "usr/local/sbin/event-router-apply-inventory"):
             self.assertIn(hashlib.sha256((router / path).read_bytes()).hexdigest(), platform, path)
         self.assertEqual(platform.count('ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-production-keys ""'), 1)
-        self.assertEqual(platform.count('ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-gateway-model-a ""'), 0)
+        self.assertEqual(platform.count('ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-gateway-model-a ""'), 1)
         for wrapper in ("finals-commission-production-keys", "finals-commission-gateway-model-a"):
             self.assertNotIn(f"/usr/local/sbin/{wrapper} *", platform)
         self.assertIn("^production-(0[1-9]|1[0-5])$", platform)
@@ -519,10 +520,10 @@ class BuilderMetadataTests(unittest.TestCase):
         anvil_restart = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform anvil-restart"
         self.assertEqual(platform.count(platform_secret), 0)
         self.assertEqual(platform.count(platform_volume), 0)
-        self.assertEqual(platform.count(arena_schema), 0)
+        self.assertEqual(platform.count(arena_schema), 1)
         self.assertEqual(platform.count(migration_061), 0)
         self.assertEqual(platform.count(platform_quiesce), 0)
-        self.assertEqual(platform.count(anvil_restart), 0)
+        self.assertEqual(platform.count(anvil_restart), 1)
         self.assertNotIn("finals-commission-secret platform *", platform)
         self.assertNotIn("finals-commission-volume platform *", platform)
         self.assertIn("up -d --wait postgres", platform)

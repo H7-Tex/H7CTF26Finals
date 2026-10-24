@@ -680,6 +680,8 @@ locals {
   operations_commission_runtime_artifact_script   = file("${path.module}/scripts/commission-runtime-artifact")
   operations_commission_production_runtime_script = file("${path.module}/scripts/commission-production-runtime")
   operations_commission_sudoers                   = <<-SUDOERS
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform arena-schema
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform anvil-restart
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-secret control-checkers
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall hill-01
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-host-firewall hill-02
@@ -687,6 +689,7 @@ locals {
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-stage-central
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-clear-central
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-production-keys ""
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-gateway-model-a ""
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-runtime-artifact control checker-artifacts
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-runtime-artifact control checker-commission
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-runtime-artifact control state-summary
@@ -707,11 +710,13 @@ locals {
   operations_commission_runcmd = join("\n", [
     "  - |",
     "    set -eu",
+    "    printf '%s' '${base64gzip(local.operations_commission_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-volume",
     "    printf '%s' '${base64gzip(local.operations_commission_control_secret_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-control-secret",
     "    printf '%s' '${base64gzip(local.operations_commission_host_firewall_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-host-firewall",
     "    printf '%s' '${base64gzip(local.operations_commission_stage_central_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-stage-central",
     "    printf '%s' '${base64gzip(local.operations_commission_clear_central_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-clear-central",
     "    printf '%s' '${base64gzip(local.operations_commission_production_keys_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-production-keys",
+    "    printf '%s' '${base64gzip(local.operations_commission_gateway_model_a_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-gateway-model-a",
     "    printf '%s' '${base64gzip(local.operations_commission_runtime_artifact_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-runtime-artifact",
     "    printf '%s' '${base64gzip(local.operations_commission_production_runtime_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-production-runtime",
     "    temporary=$(mktemp /etc/sudoers.d/.finals-operations-commissioning.XXXXXX)",
