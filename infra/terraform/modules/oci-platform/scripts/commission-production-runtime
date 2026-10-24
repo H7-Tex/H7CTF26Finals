@@ -1,0 +1,159 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+[[ $EUID -eq 0 && $(cat /etc/finals-platform/role 2>/dev/null) == '{"role":"operations"}' ]] || exit 1
+central=/run/finals-commissioning/central_id_ed25519
+[[ -f $central && ! -L $central && $# -eq 0 ]] || exit 2
+read -r target action extra
+read -r marker host type key extra_key
+[[ $target =~ ^production-(0[1-9]|1[0-6])$ && -z ${extra:-} ]] || exit 2
+[[ $action == status || $action == model-a-network-repair ]] || exit 2
+team=$((10#${BASH_REMATCH[1]}))
+address="10.60.$team.2"
+[[ $marker == known-host && $host == "$address" && $type == ssh-ed25519 && $key =~ ^[A-Za-z0-9+/]{68}$ && -z ${extra_key:-} ]] || exit 1
+work=$(mktemp -d /run/finals-production-runtime.XXXXXX)
+trap 'rm -rf -- "$work"' EXIT
+printf '%s %s %s\n' "$address" "$type" "$key" > "$work/known_hosts"
+cat > "$work/remote" <<'REMOTE'
+#!/usr/bin/env bash
+set -euo pipefail
+
+action=$1
+team=$2
+if [[ $action == status ]]; then
+  systemctl show finals-model-a-firstboot -p ActiveState,SubState,Result,ExecMainStatus,NRestarts
+  journalctl -u finals-model-a-firstboot -n 40 --no-pager -o cat
+  docker image ls --format '{{.ID}} {{.Repository}}:{{.Tag}}' | sed -n '1,20p'
+  docker ps -a --format '{{.Names}} {{.Status}}'
+  systemctl is-active finals-service-proxy || true
+  df -h /srv/finals/service-data /
+  exit 0
+fi
+
+[[ $action == model-a-network-repair ]]
+[[ -f /var/lib/finals-model-a/firstboot.done ]] || { echo 'model-a-network-repair=refused:firstboot-incomplete' >&2; exit 1; }
+[[ $(systemctl show finals-model-a-firstboot -p ActiveState --value) != activating ]] || { echo 'model-a-network-repair=refused:firstboot-active' >&2; exit 1; }
+model=/usr/local/lib/finals-model-a/model_a.py
+before=4eb307c5d0766cfd95ae1ed28f4d3c3ca5c974168036ffc13adac4c1b426d5d9
+after=23f3b34a0d14c6ab4c8e5df065a4e8dd3fa7bac79e5ed82d5e085910c9b1d2dc
+actual=$(sha256sum "$model" | cut -d ' ' -f 1)
+if [[ $actual == "$before" ]]; then
+  python3 - "$model" <<'PY'
+import os
+import sys
+import tempfile
+from pathlib import Path
+
+path = Path(sys.argv[1])
+source = path.read_text(encoding="utf-8")
+old_network = '''            "target": {
+                "internal": True,
+                "ipam": {"config": [{"subnet": service["subnet"]}]},
+            }'''
+new_network = '''            "target": {
+                "internal": False,
+                "driver_opts": {
+                    "com.docker.network.bridge.enable_ip_masquerade": "false"
+                },
+                "ipam": {"config": [{"subnet": service["subnet"]}]},
+            }'''
+old_format = '''            raise ModelAError(
+                f"release service contract mismatch for {record['slug']}"
+            )'''
+new_format = '''            raise ModelAError(f"release service contract mismatch for {record['slug']}")'''
+if source.count(old_network) != 1 or source.count(old_format) != 1:
+    raise SystemExit("model_a.py source did not match the reviewed predecessor")
+source = source.replace(old_network, new_network).replace(old_format, new_format)
+info = path.stat()
+with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=path.parent, delete=False) as output:
+    output.write(source)
+    output.flush()
+    os.fsync(output.fileno())
+    temporary = Path(output.name)
+os.chmod(temporary, info.st_mode & 0o777)
+os.chown(temporary, info.st_uid, info.st_gid)
+os.replace(temporary, path)
+PY
+elif [[ $actual != "$after" ]]; then
+  echo "model-a-network-repair=refused:model-hash:$actual" >&2
+  exit 1
+fi
+echo "$after  $model" | sha256sum -c --quiet
+python3 - <<'PY'
+import json
+import os
+import stat
+import tempfile
+from pathlib import Path
+
+slugs = (
+    "sign-me-in", "can-we-settle-this", "update-pending",
+    "book-me-if-you-can", "ship-it", "terms-may-apply",
+)
+option = "com.docker.network.bridge.enable_ip_masquerade"
+for root in (Path("/opt/finals/services"), Path("/var/lib/finals-model-a/factory")):
+    for slug in slugs:
+        path = root / slug / "compose.yaml"
+        info = path.lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_size > 1024 * 1024:
+            raise SystemExit(f"unsafe compose file: {path}")
+        document = json.loads(path.read_text(encoding="utf-8"))
+        target = document["networks"]["target"]
+        target["internal"] = False
+        target["driver_opts"] = {option: "false"}
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=path.parent, delete=False) as output:
+            json.dump(document, output, indent=2, sort_keys=True)
+            output.write("\n")
+            output.flush()
+            os.fsync(output.fileno())
+            temporary = Path(output.name)
+        os.chmod(temporary, info.st_mode & 0o777)
+        os.chown(temporary, info.st_uid, info.st_gid)
+        os.replace(temporary, path)
+PY
+for slug in sign-me-in can-we-settle-this update-pending book-me-if-you-can ship-it terms-may-apply; do
+  root="/opt/finals/services/$slug"
+  image=$(tr -d '\n' < "/var/lib/finals-model-a/active/$slug")
+  H7_IMAGE="$image" docker compose --project-directory "$root" --file "$root/compose.yaml" down
+  H7_IMAGE="$image" docker compose --project-directory "$root" --file "$root/compose.yaml" up --detach --wait --wait-timeout 90 service
+done
+python3 - "$team" <<'PY'
+import http.client
+import socket
+import sys
+
+team = int(sys.argv[1])
+services = (
+    ("sign-me-in", 7001, True), ("can-we-settle-this", 7002, True),
+    ("update-pending", 7003, False), ("book-me-if-you-can", 7004, True),
+    ("ship-it", 7005, True), ("terms-may-apply", 7006, True),
+)
+failed = False
+for slug, port, is_http in services:
+    passed = True
+    for label, host, target_port in (("loopback", "127.0.0.1", port + 10000), ("frontend", f"10.60.{team}.2", port)):
+        try:
+            if is_http:
+                connection = http.client.HTTPConnection(host, target_port, timeout=3)
+                connection.request("GET", "/")
+                response = connection.getresponse()
+                response.read(1024)
+                connection.close()
+                print(f"{slug} {label}=HTTP_{response.status}")
+            else:
+                with socket.create_connection((host, target_port), timeout=3):
+                    pass
+                print(f"{slug} {label}=TCP_OK")
+        except (OSError, http.client.HTTPException) as error:
+            passed = False
+            print(f"{slug} {label}=FAIL:{type(error).__name__}")
+    print(f"{slug}={'PASS' if passed else 'FAIL'}")
+    failed |= not passed
+raise SystemExit(1 if failed else 0)
+PY
+echo 'model-a-network-repair=complete'
+REMOTE
+chmod 0700 "$work/remote"
+ssh -F /dev/null -i "$central" -o BatchMode=yes -o ConnectTimeout=10 -o IdentitiesOnly=yes \
+  -o PasswordAuthentication=no -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/known_hosts" \
+  -- "ubuntu@$address" "sudo -n /bin/bash -s -- '$action' '$team'" < "$work/remote"

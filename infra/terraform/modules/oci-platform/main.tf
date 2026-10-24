@@ -619,7 +619,7 @@ locals {
   # event-time exception to the gateway image: stage the reviewed model a router
   # files (hash pinned), activate them, or flip the production-ssh switch.
   # stdin header: "gateway-primary|gateway-standby stage NAME|activate|enable|disable|reconciler-access"
-  operations_commission_gateway_model_a_script  = <<-SCRIPT
+  operations_commission_gateway_model_a_script    = <<-SCRIPT
     #!/usr/bin/env bash
     set -euo pipefail
     [[ $EUID -eq 0 && $(cat /etc/finals-platform/role 2>/dev/null) == '{"role":"operations"}' ]] || exit 1
@@ -677,8 +677,9 @@ locals {
       *) echo "unsupported model a action" >&2; exit 2 ;;
     esac
   SCRIPT
-  operations_commission_runtime_artifact_script = file("${path.module}/scripts/commission-runtime-artifact")
-  operations_commission_sudoers                 = <<-SUDOERS
+  operations_commission_runtime_artifact_script   = file("${path.module}/scripts/commission-runtime-artifact")
+  operations_commission_production_runtime_script = file("${path.module}/scripts/commission-production-runtime")
+  operations_commission_sudoers                   = <<-SUDOERS
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh gateway-primary gateway-wireguard
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh gateway-primary gateway-reconciler
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh gateway-standby gateway-wireguard
@@ -748,6 +749,7 @@ locals {
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-runtime-artifact hill-03 hill-config
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-runtime-artifact hill-03 hill-control
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-runtime-artifact hill-03 hill-start
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-production-runtime ""
   SUDOERS
   operations_commission_runcmd = join("\n", [
     "  - |",
@@ -766,6 +768,7 @@ locals {
     "    printf '%s' '${base64gzip(local.operations_commission_production_keys_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-production-keys",
     "    printf '%s' '${base64gzip(local.operations_commission_gateway_model_a_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-gateway-model-a",
     "    printf '%s' '${base64gzip(local.operations_commission_runtime_artifact_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-runtime-artifact",
+    "    printf '%s' '${base64gzip(local.operations_commission_production_runtime_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-production-runtime",
     "    temporary=$(mktemp /etc/sudoers.d/.finals-operations-commissioning.XXXXXX)",
     "    printf '%s' '${base64gzip(local.operations_commission_sudoers)}' | base64 -d | gzip -d > \"$temporary\"",
     "    chmod 0440 \"$temporary\"",
