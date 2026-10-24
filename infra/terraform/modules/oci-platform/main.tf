@@ -812,6 +812,13 @@ resource "terraform_data" "operations_generation" {
   input = "bootstrap"
 }
 
+resource "terraform_data" "x86_generation" {
+  triggers_replace = [
+    var.platform_image_id,
+    var.x86_image_id,
+  ]
+}
+
 resource "oci_core_instance" "host" {
   for_each = local.hosts
 

@@ -26,6 +26,8 @@ class BuilderMetadataTests(unittest.TestCase):
         environment = (ROOT / "terraform/environments/production/oci-platform/main.tf").read_text(encoding="utf-8")
         variables = (ROOT / "terraform/modules/oci-platform/variables.tf").read_text(encoding="utf-8")
         self.assertIn('each.key == "platform" && var.platform_image_id != null', module)
+        self.assertIn('resource "terraform_data" "x86_generation"', module)
+        self.assertIn("var.platform_image_id,\n    var.x86_image_id,", module)
         self.assertIn("platform_image_id               = var.platform_image_id", environment)
         self.assertIn('variable "platform_image_id"', variables)
 
