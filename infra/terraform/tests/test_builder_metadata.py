@@ -438,27 +438,29 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn("UserKnownHostsFile=/etc/finals-platform/operations/known_hosts", platform)
         platform_secret = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-secret platform anvil"
         platform_volume = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform volume-initialize"
-        platform_quiesce = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform platform-quiesce"
+        arena_schema = "ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform arena-schema"
         self.assertEqual(platform.count(platform_secret), 1)
         self.assertEqual(platform.count(platform_volume), 1)
-        self.assertEqual(platform.count(platform_quiesce), 1)
+        self.assertEqual(platform.count(arena_schema), 1)
         self.assertNotIn("finals-commission-secret platform *", platform)
         self.assertNotIn("finals-commission-volume platform *", platform)
-        self.assertIn("platform-quiesce=complete", platform)
-        self.assertIn("systemctl disable --now anvil-finals-backup.timer", platform)
-        self.assertIn("--property=ExecMainStatus --value anvil-finals-backup.service", platform)
-        self.assertIn("sha256sum --check --strict SHA256SUMS", platform)
-        self.assertIn("ps --status running --quiet", platform)
-        self.assertIn("umount /srv/anvil", platform)
+        self.assertNotIn("platform-quiesce", platform)
+        self.assertIn("event.freeze_at", platform)
+        self.assertIn("2026-10-25T11:00:00+05:30", platform)
+        self.assertIn("game_services s SET sort_order", platform)
+        self.assertIn("game_koth_hills h SET sort_order", platform)
+        self.assertIn("arena-schema=complete", platform)
         self.assertNotIn("anvil-audit-complete", platform)
         self.assertNotIn("admin-promote", platform)
         self.assertIn("operations_commission_secret_script", platform)
         self.assertIn("base64gzip(local.operations_commission_secret_script)", platform)
         self.assertNotIn("base64encode(local.operations_commission_", platform)
         self.assertIn("| gzip -d | install", platform)
-        self.assertIn("c760f5097b671cfa1423bd30b407cbbc9cb415fe4a82510d84c9120818143a19", platform)
+        self.assertIn("75a1f6046817a6b83a214b3feeea9b7327a2ba0951bfedc20f811564ef6262e9", platform)
         for action in (
+            "reconcile-once",
             "reconciler-enable",
+            "control-status",
             "state-export",
             "state-restore",
         ):
@@ -483,6 +485,9 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn("render_inventory.py", control_wrapper)
         self.assertIn("state-export=complete", control_wrapper)
         self.assertIn("state-restore=complete", control_wrapper)
+        self.assertIn("peer-reconciler-once=success", control_wrapper)
+        self.assertIn("--lines=3 --reverse --no-pager --output=cat", control_wrapper)
+        self.assertIn("control-status=complete", control_wrapper)
         self.assertIn("active-file-sha256", control_wrapper)
         self.assertIn("findmnt -n -o FSTYPE /run", control_wrapper)
         self.assertIn("-le 532480", control_wrapper)
@@ -574,13 +579,13 @@ class BuilderMetadataTests(unittest.TestCase):
         self.assertIn("finals-commission-gateway-secret gateway-standby gateway-reconciler", platform)
         self.assertIn('"sudo -n /usr/local/sbin/finals-install-secret-bundle $bundle"', platform)
         self.assertNotIn('exec ssh -F /dev/null -i /run/finals-commissioning/central_id_ed25519', platform)
-        self.assertIn("finals-commission-gateway-authorizer gateway-primary", platform)
-        self.assertIn("finals-commission-gateway-authorizer gateway-standby", platform)
+        self.assertNotIn("finals-commission-gateway-authorizer gateway-primary", platform)
+        self.assertNotIn("finals-commission-gateway-authorizer gateway-standby", platform)
         self.assertIn("operations_commission_gateway_role_script", platform)
         self.assertIn('length(base64encode(local.cloud_init_by_role["operations"]))', platform)
         self.assertIn('length(trimspace(var.organizer_ssh_authorized_keys)) < 31488', platform)
-        self.assertIn("finals-commission-gateway-role gateway-primary", platform)
-        self.assertIn("finals-commission-gateway-role gateway-standby", platform)
+        self.assertNotIn("finals-commission-gateway-role gateway-primary", platform)
+        self.assertNotIn("finals-commission-gateway-role gateway-standby", platform)
         self.assertNotIn("finals-commission-gateway-role-audit", platform)
         self.assertIn("address=10.60.250.10", platform)
         self.assertIn("expected=active", platform)

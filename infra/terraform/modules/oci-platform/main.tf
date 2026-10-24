@@ -83,7 +83,7 @@ locals {
   operations_relay_roles          = toset(["platform", "control", "repository"])
 
   operations_commission_initializer_sha256        = "eaeb4c33d2c94f59dee9b01b2b6dbce8e8f8adf720e4108f713456f7cf4f69ab"
-  operations_commission_anvil_sha256              = "c760f5097b671cfa1423bd30b407cbbc9cb415fe4a82510d84c9120818143a19"
+  operations_commission_anvil_sha256              = "75a1f6046817a6b83a214b3feeea9b7327a2ba0951bfedc20f811564ef6262e9"
   operations_commission_script                    = <<-SCRIPT
     #!/usr/bin/env bash
     set -euo pipefail
@@ -95,8 +95,8 @@ locals {
     }
     target=$${1:-}
     action=$${2:-}
-    [[ $# -eq 2 && ( $action == volume-initialize || ( $target == platform && $action == platform-quiesce ) ) ]] || {
-      echo "usage: finals-commission-volume {platform|gateway-primary|gateway-standby} volume-initialize | platform platform-quiesce" >&2
+    [[ $# -eq 2 && ( $action == volume-initialize || ( $target == platform && $action == arena-schema ) ) ]] || {
+      echo "usage: finals-commission-volume {platform|gateway-primary|gateway-standby} volume-initialize | platform arena-schema" >&2
       exit 2
     }
     case "$target" in
@@ -124,23 +124,14 @@ locals {
       -o StrictHostKeyChecking=yes
       -o UserKnownHostsFile=/etc/finals-platform/operations/known_hosts
     )
-    if [[ $action == platform-quiesce ]]; then
+    if [[ $action == arena-schema ]]; then
       exec /usr/bin/ssh "$${ssh_options[@]}" -- "ubuntu@$address" \
-        'set -euo pipefail
-        before=$(sudo -n find /srv/anvil/backups -mindepth 1 -maxdepth 1 -type d -name "anvil-*" -printf "." | wc -c)
-        sudo -n systemctl start anvil-finals-backup.service
-        [[ $(sudo -n systemctl show --property=Result --value anvil-finals-backup.service) == success ]]
-        [[ $(sudo -n systemctl show --property=ExecMainStatus --value anvil-finals-backup.service) == 0 ]]
-        after=$(sudo -n find /srv/anvil/backups -mindepth 1 -maxdepth 1 -type d -name "anvil-*" -printf "." | wc -c); [[ $after -gt $before ]]
-        backup=$(sudo -n find /srv/anvil/backups -mindepth 1 -maxdepth 1 -type d -name "anvil-*" -printf "%T@ %p\n" | sort -n | tail -n 1 | cut -d " " -f 2-)
-        [[ -n $backup && $(sudo -n stat -c "%u:%g:%a" "$backup") == 0:0:700 ]]
-        sudo -n test -s "$backup/database.dump"; sudo -n test -s "$backup/storage.tar.gz"; sudo -n test -s "$backup/SHA256SUMS"
-        sudo -n sh -c '\''cd "$1" && sha256sum --check --strict SHA256SUMS >/dev/null'\'' sh "$backup"
-        sudo -n systemctl disable --now anvil-finals-backup.timer >/dev/null
-        sudo -n systemctl stop anvil-finals.service
-        [[ -z $(sudo -n /usr/bin/docker compose --project-name anvil-finals --project-directory /opt/anvil/current/deployments/finals --env-file /etc/anvil/finals.env -f /opt/anvil/current/deployments/finals/compose.yaml ps --status running --quiet) ]]
-        sync; sudo -n umount /srv/anvil; ! mountpoint -q /srv/anvil
-        echo platform-quiesce=complete'
+        'sudo -n /usr/bin/docker compose --project-name anvil-finals --project-directory /opt/anvil/current/deployments/finals --env-file /etc/anvil/finals.env -f /opt/anvil/current/deployments/finals/compose.yaml exec -T postgres psql -v ON_ERROR_STOP=1 --username anvil --dbname anvil --tuples-only --no-align' <<'SQL'
+    INSERT INTO platform_settings (key, value, description, category) VALUES ('event.freeze_at', '"2026-10-25T11:00:00+05:30"', 'Scoreboard freeze as an RFC3339 timestamp', 'event') ON CONFLICT (key) DO NOTHING;
+    UPDATE game_services s SET sort_order = v.n FROM (VALUES ('sign-me-in', 1), ('can-we-settle-this', 2), ('update-pending', 3), ('book-me-if-you-can', 4), ('ship-it', 5), ('terms-may-apply', 6)) v(slug, n) WHERE s.slug = v.slug AND s.sort_order IS DISTINCT FROM v.n;
+    UPDATE game_koth_hills h SET sort_order = v.n FROM (VALUES ('current-affairs', 1), ('majority-rules', 2), ('tag-youre-it', 3)) v(slug, n) WHERE h.slug = v.slug AND h.sort_order IS DISTINCT FROM v.n;
+    SELECT 'arena-schema=complete';
+    SQL
     fi
     temporary=$(mktemp /run/finals-volume-initialize.XXXXXX)
     trap 'rm -f -- "$temporary"' EXIT
@@ -203,8 +194,14 @@ locals {
     }
     [[ $# -eq 1 ]] || exit 2
     case "$1" in
+      reconcile-once)
+        remote='set -uo pipefail; if sudo -n systemctl start peer-reconciler.service && [[ $(sudo -n systemctl show --property=Result --value peer-reconciler.service) == success ]]; then echo peer-reconciler-once=success; else sudo -n journalctl --unit=peer-reconciler.service --lines=3 --reverse --no-pager --output=cat; exit 1; fi'
+        ;;
       reconciler-enable)
         remote='set -euo pipefail; sudo -n systemctl enable --now peer-reconciler.timer >/dev/null; sudo -n systemctl is-active --quiet peer-reconciler.timer; echo peer-reconciler-timer=active'
+        ;;
+      control-status)
+        remote='set -euo pipefail; sudo -n systemctl show checker-runtime.service peer-reconciler.service peer-reconciler.timer --property=Id,ActiveState,SubState,Result,ExecMainStatus --no-pager; sudo -n systemctl is-active --quiet peer-reconciler.timer; curl --fail --silent --output /dev/null --connect-timeout 2 --max-time 3 http://127.0.0.1:9160/readyz; echo control-status=complete'
         ;;
       state-export)
         [[ ! -e $state || ( -f $state && ! -L $state && $(stat -c '%u:%g:%a' "$state") == 0:0:600 ) ]] || exit 1
@@ -653,8 +650,10 @@ locals {
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-operations-ssh repository repository
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-secret platform anvil
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform volume-initialize
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform platform-quiesce
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-volume platform arena-schema
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-action reconcile-once
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-action reconciler-enable
+    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-action control-status
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-action state-export
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-action state-restore
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-control-secret control-reconciler
@@ -690,10 +689,6 @@ locals {
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-gateway-secret gateway-primary gateway-reconciler
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-gateway-secret gateway-standby gateway-wireguard
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-gateway-secret gateway-standby gateway-reconciler
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-gateway-authorizer gateway-primary
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-gateway-authorizer gateway-standby
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-gateway-role gateway-primary
-    ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-gateway-role gateway-standby
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-production-keys ""
     ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-gateway-model-a ""
   SUDOERS
@@ -711,8 +706,6 @@ locals {
     "    printf '%s' '${base64gzip(local.operations_commission_stage_central_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-stage-central",
     "    printf '%s' '${base64gzip(local.operations_commission_clear_central_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-clear-central",
     "    printf '%s' '${base64gzip(local.operations_commission_gateway_secret_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-gateway-secret",
-    "    printf '%s' '${base64gzip(local.operations_commission_gateway_authorizer_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-gateway-authorizer",
-    "    printf '%s' '${base64gzip(local.operations_commission_gateway_role_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-gateway-role",
     "    printf '%s' '${base64gzip(local.operations_commission_production_keys_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-production-keys",
     "    printf '%s' '${base64gzip(local.operations_commission_gateway_model_a_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-gateway-model-a",
     "    temporary=$(mktemp /etc/sudoers.d/.finals-operations-commissioning.XXXXXX)",
