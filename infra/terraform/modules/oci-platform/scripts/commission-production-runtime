@@ -7,7 +7,7 @@ central=/run/finals-commissioning/central_id_ed25519
 read -r target action extra
 read -r marker host type key extra_key
 [[ $target =~ ^production-(0[1-9]|1[0-6])$ && -z ${extra:-} ]] || exit 2
-[[ $action == status || $action == path-diagnose || $action == model-a-network-repair ]] || exit 2
+[[ $action == status || $action == legacy-firewall-diagnose || $action == legacy-firewall-repair || $action == model-a-network-repair ]] || exit 2
 team=$((10#${BASH_REMATCH[1]}))
 address="10.60.$team.2"
 [[ $marker == known-host && $host == "$address" && $type == ssh-ed25519 && $key =~ ^[A-Za-z0-9+/]{68}$ && -z ${extra_key:-} ]] || exit 1
@@ -26,13 +26,32 @@ if [[ $action == status ]]; then
   exit 0
 fi
 
-if [[ $action == path-diagnose ]]; then
-  echo '--- sockets'
-  ss -tan | grep -E '10\.60\.250\.120|:700[1-6][[:space:]]' | head -80 || :
-  echo '--- conntrack'
-  grep 10.60.250.120 /proc/net/nf_conntrack 2>/dev/null | head -20 || :
-  echo '--- input'
-  nft list chain inet finals_host input | head -160
+if [[ $action == legacy-firewall-diagnose ]]; then
+  echo '--- legacy rules'
+  iptables-save 2>/dev/null | grep -n -i -E 'REJECT|prohibit' | head -20 || :
+  echo '--- tables'
+  nft list tables
+  echo '--- persistence'
+  stat -c '%F %U:%G %a %s' /etc/iptables/rules.v4 2>/dev/null || :
+  sha256sum /etc/iptables/rules.v4 2>/dev/null || :
+  systemctl is-active ufw firewalld netfilter-persistent 2>/dev/null || :
+  systemctl is-enabled netfilter-persistent 2>/dev/null || :
+  exit 0
+fi
+
+if [[ $action == legacy-firewall-repair ]]; then
+  rules=/etc/iptables/rules.v4
+  [[ -f $rules && ! -L $rules && $(stat -c %U:%G "$rules") == root:root && $(stat -c %s "$rules") -le 65536 ]]
+  reject='-A INPUT -j REJECT --reject-with icmp-host-prohibited'
+  accept='-A INPUT -s 10.60.250.120/32 -p tcp -m multiport --dports 7001:7006 -j ACCEPT'
+  [[ $(grep -Fxc -- "$reject" "$rules") -eq 1 ]]
+  if ! grep -Fxq -- "$accept" "$rules"; then sed -i "0,/^-A INPUT /s||$accept\\n&|" "$rules"; fi
+  iptables-restore --test < "$rules"
+  iptables -C INPUT -s 10.60.250.120 -p tcp -m multiport --dports 7001:7006 -j ACCEPT 2>/dev/null || iptables -I INPUT 1 -s 10.60.250.120 -p tcp -m multiport --dports 7001:7006 -j ACCEPT
+  [[ $(grep -Fxc -- "$accept" "$rules") -eq 1 ]]
+  iptables -C INPUT -s 10.60.250.120 -p tcp -m multiport --dports 7001:7006 -j ACCEPT
+  [[ $(ss -ltn | grep -Ec "10\\.60\\.$team\\.2:700[1-6][[:space:]]") -eq 6 ]]
+  echo 'legacy-firewall-repair=complete'
   exit 0
 fi
 
