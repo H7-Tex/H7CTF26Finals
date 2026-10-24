@@ -233,7 +233,10 @@ def compose_document(service, image_id, data_path=None, backend_address="127.0.0
         "services": {"service": runtime},
         "networks": {
             "target": {
-                "internal": True,
+                "internal": False,
+                "driver_opts": {
+                    "com.docker.network.bridge.enable_ip_masquerade": "false"
+                },
                 "ipam": {"config": [{"subnet": service["subnet"]}]},
             }
         },
@@ -303,9 +306,7 @@ def volume_policy_document(release):
             record[name] != contract[name]
             for name in ("port", "uid", "storage_bytes", "storage_inodes")
         ):
-            raise ModelAError(
-                f"release service contract mismatch for {record['slug']}"
-            )
+            raise ModelAError(f"release service contract mismatch for {record['slug']}")
         port = record["port"]
         generations = {}
         for name, offset in (("live", 0), ("gate", 10000), ("recovery", 20000)):

@@ -105,7 +105,11 @@ class ModelATest(unittest.TestCase):
             self.assertTrue(runtime["read_only"])
             self.assertEqual(runtime["cap_drop"], ["ALL"])
             self.assertEqual(runtime["security_opt"], ["no-new-privileges:true"])
-            self.assertTrue(compose["networks"]["target"]["internal"])
+            self.assertFalse(compose["networks"]["target"]["internal"])
+            self.assertEqual(
+                compose["networks"]["target"]["driver_opts"],
+                {"com.docker.network.bridge.enable_ip_masquerade": "false"},
+            )
             self.assertEqual(
                 compose["networks"]["target"]["ipam"]["config"],
                 [{"subnet": service["subnet"]}],
@@ -218,7 +222,11 @@ class ModelATest(unittest.TestCase):
                         info.mtime = index + 3
                         archive.addfile(info, io.BytesIO(content))
                     records = [
-                        {"Config": "b", "RepoTags": ["b:1", "a:1"], "Layers": ["2", "1"]},
+                        {
+                            "Config": "b",
+                            "RepoTags": ["b:1", "a:1"],
+                            "Layers": ["2", "1"],
+                        },
                         {"Config": "a", "RepoTags": None, "Layers": ["3"]},
                     ]
                     if index:
@@ -294,12 +302,16 @@ class ModelATest(unittest.TestCase):
             slug = "sign-me-in"
             current = work_root / slug
             factory = factory_root / slug
+            compose = MODEL.compose_document(
+                MODEL.SERVICE_BY_SLUG[slug], "sha256:" + "1" * 64
+            )
             for tree, value in ((current, "edited"), (factory, "factory")):
                 (tree / "service").mkdir(parents=True)
                 (tree / "player").mkdir()
-                (tree / "compose.yaml").write_text("services: {}\n")
+                (tree / "compose.yaml").write_text(json.dumps(compose) + "\n")
                 (tree / "BUNDLE.json").write_text("{}\n")
                 (tree / "service/app.py").write_text(value)
+            (current / "compose.yaml").write_text("{}\n")
             owner = (current / "service").stat()
             with (
                 patch.object(CONTROL, "WORK_ROOT", work_root),
@@ -310,6 +322,38 @@ class ModelATest(unittest.TestCase):
             self.assertEqual((restored / "app.py").read_text(), "factory")
             self.assertEqual(restored.stat().st_uid, owner.st_uid)
             self.assertEqual(restored.stat().st_gid, owner.st_gid)
+            restored_compose = json.loads(
+                (work_root / slug / "compose.yaml").read_text()
+            )
+            self.assertEqual(restored_compose, compose)
+
+    def test_rebuild_and_restart_preserve_compose(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            slug = "sign-me-in"
+            workspace = root / "work" / slug
+            active = root / "state" / "active"
+            workspace.mkdir(parents=True)
+            active.mkdir(parents=True)
+            image = "sha256:" + "1" * 64
+            compose = MODEL.compose_document(MODEL.SERVICE_BY_SLUG[slug], image)
+            compose_path = workspace / "compose.yaml"
+            compose_path.write_text(json.dumps(compose) + "\n")
+            before = compose_path.read_bytes()
+            (active / slug).write_text(image + "\n")
+            with (
+                patch.object(CONTROL, "WORK_ROOT", root / "work"),
+                patch.object(CONTROL, "STATE_ROOT", root / "state"),
+                patch.object(CONTROL, "compose"),
+                patch.object(
+                    CONTROL,
+                    "run",
+                    return_value=subprocess.CompletedProcess([], 0, image + "\n", ""),
+                ),
+            ):
+                CONTROL.rebuild(slug)
+                CONTROL.restart(slug)
+            self.assertEqual(compose_path.read_bytes(), before)
 
 
 if __name__ == "__main__":
