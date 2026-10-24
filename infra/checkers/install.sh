@@ -5,6 +5,7 @@ set -euo pipefail
 source_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 cp -a "$source_dir/rootfs/." /
+install -m 0755 "$source_dir/sign-checker-update.py" /usr/local/sbin/finals-sign-checker-update
 chmod 0755 \
   /usr/local/libexec/checker-runtime/runtime.py \
   /usr/local/sbin/checker-runtime-commission

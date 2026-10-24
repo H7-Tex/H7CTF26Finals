@@ -6,6 +6,7 @@ cache=$(mktemp -d)
 trap 'rm -rf "$cache"' EXIT
 PYTHONPYCACHEPREFIX="$cache" python3 -m py_compile \
   "$root/model_a.py" \
+  "$root/sign-service-update.py" \
   "$root/prepare-release.py" \
   "$root/write-volume-policy.py" \
   "$root/tests/firewall-path.py" \

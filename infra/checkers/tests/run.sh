@@ -12,6 +12,7 @@ bash -n \
   "$checker_dir/tests/run.sh"
 python3 -m json.tool "$checker_dir/artifact-manifest.example.json" >/dev/null
 python3 -c 'import ast, pathlib, sys; ast.parse(pathlib.Path(sys.argv[1]).read_text())' "$runtime"
+python3 -m py_compile "$checker_dir/sign-checker-update.py"
 python3 -m unittest discover -s "$checker_dir/tests" -p 'test_*.py'
 "$checker_dir/tests/egress_isolation.sh"
 
