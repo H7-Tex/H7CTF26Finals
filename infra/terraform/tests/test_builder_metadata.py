@@ -21,6 +21,32 @@ TEMPLATES = (
 
 
 class BuilderMetadataTests(unittest.TestCase):
+    def test_control_checker_artifact_commissioning_is_fixed(self):
+        module = (ROOT / "terraform/modules/oci-platform/main.tf").read_text(encoding="utf-8")
+        wrapper = ROOT / "terraform/modules/oci-platform/scripts/commission-checker-artifacts"
+        source = wrapper.read_text(encoding="utf-8")
+        subprocess.run(["bash", "-n", str(wrapper)], check=True)
+        self.assertIn("expected_size=495626240", source)
+        self.assertIn("expected_sha256=46d07d20db8805c43918e6c695e18fe500066306c681946ffbe6ab6adee17174", source)
+        self.assertIn("/usr/local/libexec/finals-platform/checker-preflight", source)
+        self.assertIn('file("${path.module}/scripts/commission-checker-artifacts")', module)
+        self.assertIn("base64gzip(local.control_commission_script)", module)
+        self.assertIn("ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-checker-artifacts", module)
+        self.assertIn("ocarun ALL=(root) NOPASSWD: /usr/local/sbin/checker-runtime-commission", module)
+        self.assertNotIn("finals-commission-checker-artifacts *", module)
+
+    def test_hill_commissioning_is_fixed(self):
+        module = (ROOT / "terraform/modules/oci-platform/main.tf").read_text(encoding="utf-8")
+        scripts = ROOT / "terraform/modules/oci-platform/scripts"
+        for name in ("commission-hill-artifacts", "commission-hill-config", "commission-hill-start"):
+            subprocess.run(["bash", "-n", str(scripts / name)], check=True)
+        artifacts = (scripts / "commission-hill-artifacts").read_text(encoding="utf-8")
+        self.assertIn("expected_size=385986560", artifacts)
+        self.assertIn("expected_sha256=f3716d884f4ed3ebe5b5c4138d459aa2e35324c0839c5466167d91cd6796cc20", artifacts)
+        self.assertIn("python3 \"$release/verify-release.py\" --role \"$role\" --load", artifacts)
+        self.assertIn("ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-install-secret-bundle hill-control", module)
+        self.assertNotIn("finals-commission-hill-artifacts *", module)
+
     def test_platform_image_override_is_scoped_to_platform_host(self):
         module = (ROOT / "terraform/modules/oci-platform/main.tf").read_text(encoding="utf-8")
         environment = (ROOT / "terraform/environments/production/oci-platform/main.tf").read_text(encoding="utf-8")

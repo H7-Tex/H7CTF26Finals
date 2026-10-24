@@ -756,6 +756,36 @@ locals {
     "    mv \"$temporary\" /etc/sudoers.d/finals-operations-commissioning",
     "",
   ])
+  control_commission_script = file("${path.module}/scripts/commission-checker-artifacts")
+  control_commission_runcmd = join("\n", [
+    "  - |",
+    "    set -eu",
+    "    printf '%s' '${base64gzip(local.control_commission_script)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-checker-artifacts",
+    "    temporary=$(mktemp /etc/sudoers.d/.finals-control-commissioning.XXXXXX)",
+    "    printf '%s\\n' 'ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-checker-artifacts' 'ocarun ALL=(root) NOPASSWD: /usr/local/sbin/checker-runtime-commission' > \"$temporary\"",
+    "    chmod 0440 \"$temporary\"",
+    "    visudo -cf \"$temporary\" >/dev/null",
+    "    mv \"$temporary\" /etc/sudoers.d/finals-control-commissioning",
+    "",
+  ])
+  hill_commission_scripts = {
+    artifacts = file("${path.module}/scripts/commission-hill-artifacts")
+    config    = file("${path.module}/scripts/commission-hill-config")
+    start     = file("${path.module}/scripts/commission-hill-start")
+  }
+  hill_commission_runcmd = join("\n", [
+    "  - |",
+    "    set -eu",
+    "    printf '%s' '${base64gzip(local.hill_commission_scripts.artifacts)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-hill-artifacts",
+    "    printf '%s' '${base64gzip(local.hill_commission_scripts.config)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-hill-config",
+    "    printf '%s' '${base64gzip(local.hill_commission_scripts.start)}' | base64 -d | gzip -d | install -D -m 0755 /dev/stdin /usr/local/sbin/finals-commission-hill-start",
+    "    temporary=$(mktemp /etc/sudoers.d/.finals-hill-commissioning.XXXXXX)",
+    "    printf '%s\\n' 'ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-hill-artifacts' 'ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-hill-config' 'ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-install-secret-bundle hill-control' 'ocarun ALL=(root) NOPASSWD: /usr/local/sbin/finals-commission-hill-start' > \"$temporary\"",
+    "    chmod 0440 \"$temporary\"",
+    "    visudo -cf \"$temporary\" >/dev/null",
+    "    mv \"$temporary\" /etc/sudoers.d/finals-hill-commissioning",
+    "",
+  ])
   cloud_init_base_by_role = {
     for role in keys(local.hosts) : role => <<-YAML
       #cloud-config
@@ -781,11 +811,21 @@ locals {
     YAML
   }
   cloud_init_by_role = {
-    for role, content in local.cloud_init_base_by_role : role => role == "operations" ? replace(
-      content,
-      "  - [\"/usr/local/sbin/finals-platform-activate\", \"operations\"]\n",
-      "  - [\"/usr/local/sbin/finals-platform-activate\", \"operations\"]\n${local.operations_commission_runcmd}",
-    ) : content
+    for role, content in local.cloud_init_base_by_role : role => (
+      role == "operations" ? replace(
+        content,
+        "  - [\"/usr/local/sbin/finals-platform-activate\", \"operations\"]\n",
+        "  - [\"/usr/local/sbin/finals-platform-activate\", \"operations\"]\n${local.operations_commission_runcmd}",
+        ) : role == "control" ? replace(
+        content,
+        "  - [\"/usr/local/sbin/finals-platform-activate\", \"control\"]\n",
+        "  - [\"/usr/local/sbin/finals-platform-activate\", \"control\"]\n${local.control_commission_runcmd}",
+        ) : startswith(role, "hill-") ? replace(
+        content,
+        "  - [\"/usr/local/sbin/finals-platform-activate\", \"${role}\"]\n",
+        "  - [\"/usr/local/sbin/finals-platform-activate\", \"${role}\"]\n${local.hill_commission_runcmd}",
+      ) : content
+    )
   }
 }
 
@@ -805,9 +845,17 @@ check "operations_commission_cloud_init" {
 
   assert {
     condition = alltrue([
-      for role in keys(local.hosts) : role == "operations" || local.cloud_init_by_role[role] == local.cloud_init_base_by_role[role]
+      for role in keys(local.hosts) : contains(["operations", "control", "hill-01", "hill-02", "hill-03"], role) || local.cloud_init_by_role[role] == local.cloud_init_base_by_role[role]
     ])
-    error_message = "The commissioning window must not alter any non-operations cloud-init payload."
+    error_message = "Commissioning cloud-init may differ only on the fixed operations, control, and Hill roles."
+  }
+
+  assert {
+    condition = alltrue([
+      for role in keys(local.hosts) :
+      length(base64encode(local.cloud_init_by_role[role])) + length(trimspace(var.organizer_ssh_authorized_keys)) < 31488
+    ])
+    error_message = "Every role cloud-init payload must fit the OCI base64 metadata limit."
   }
 }
 

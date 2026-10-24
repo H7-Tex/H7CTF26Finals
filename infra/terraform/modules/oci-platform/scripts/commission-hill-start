@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+[[ $EUID -eq 0 && $# -eq 0 ]] || exit 2
+case $(cat /etc/finals-platform/role 2>/dev/null) in
+  '{"role":"hill-01"}') address=10.60.210.11; port=7101 ;;
+  '{"role":"hill-02"}') address=10.60.210.12; port=7102 ;;
+  '{"role":"hill-03"}') address=10.60.210.13; port=7103 ;;
+  *) exit 1 ;;
+esac
+test -s /opt/finals-hill/compose.yaml
+test -s /etc/finals-hill/config.json
+test -s /etc/finals-hill/anvil.token
+systemctl enable --now finals-hill-credentials.service
+finals-hill-credentials check
+finals-hill-compose config >/dev/null
+finals-hill-compose up
+finals-hill-compose ps
+curl --fail --silent --show-error --max-time 10 "http://$address:$port/healthz" >/dev/null
+printf '%s\n' hill-start=complete

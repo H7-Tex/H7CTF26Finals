@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+[[ $EUID -eq 0 && $# -eq 0 ]] || exit 2
+temporary=$(mktemp /etc/finals-hill/.config.XXXXXX)
+trap 'rm -f -- "$temporary"' EXIT
+head -c 65537 > "$temporary"
+[[ $(stat -c %s "$temporary") -le 65536 ]]
+python3 - "$temporary" /etc/finals-platform/role <<'PY'
+import json
+import sys
+import uuid
+
+def strict(path):
+    def pairs(items):
+        value = {}
+        for key, item in items:
+            if key in value:
+                raise ValueError("duplicate field")
+            value[key] = item
+        return value
+    with open(path, "r", encoding="ascii") as source:
+        return json.load(source, object_pairs_hook=pairs)
+
+document = strict(sys.argv[1])
+role = strict(sys.argv[2])
+expected = {"hill-01": "current-affairs", "hill-02": "majority-rules", "hill-03": "tag-youre-it"}
+if set(document) != {"schema_version", "role", "slug", "hill_id", "challenge_id", "team_ids"}:
+    raise ValueError("configuration fields are not exact")
+if role != {"role": document["role"]} or document["schema_version"] != 1:
+    raise ValueError("configuration does not match this host")
+if expected.get(document["role"]) != document["slug"]:
+    raise ValueError("configuration does not match this hill")
+identifiers = [document["hill_id"], document["challenge_id"], *document["team_ids"]]
+if not isinstance(document["team_ids"], list) or len(document["team_ids"]) != 15:
+    raise ValueError("configuration must contain 15 teams")
+if len(set(identifiers[2:])) != 15 or any(str(uuid.UUID(value)) != value for value in identifiers):
+    raise ValueError("configuration contains invalid identifiers")
+PY
+chown root:root "$temporary"
+chmod 0600 "$temporary"
+mv -f "$temporary" /etc/finals-hill/config.json
+trap - EXIT
+printf '%s\n' hill-config=complete

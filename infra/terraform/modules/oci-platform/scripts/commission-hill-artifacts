@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+[[ $EUID -eq 0 && $# -eq 0 ]] || exit 2
+case $(cat /etc/finals-platform/role 2>/dev/null) in
+  '{"role":"hill-01"}') role=hill-01 ;;
+  '{"role":"hill-02"}') role=hill-02 ;;
+  '{"role":"hill-03"}') role=hill-03 ;;
+  *) exit 1 ;;
+esac
+expected_size=385986560
+expected_sha256=f3716d884f4ed3ebe5b5c4138d459aa2e35324c0839c5466167d91cd6796cc20
+work=$(mktemp -d /var/tmp/finals-hill.XXXXXX)
+trap 'rm -rf -- "$work"' EXIT
+archive=$work/release.tar
+cat > "$archive"
+[[ $(stat -c %s "$archive") == "$expected_size" ]]
+printf '%s  %s\n' "$expected_sha256" "$archive" | sha256sum --check --status
+tar -tf "$archive" > "$work/actual"
+cat > "$work/expected" <<'EOF'
+hill-release-c045db0/
+hill-release-c045db0/README.md
+hill-release-c045db0/SHA256SUMS
+hill-release-c045db0/hill-01/
+hill-release-c045db0/hill-01/compose.yaml
+hill-release-c045db0/hill-01/current-affairs-image.tar
+hill-release-c045db0/hill-02/
+hill-release-c045db0/hill-02/compose.yaml
+hill-release-c045db0/hill-02/majority-rules-evm-image.tar
+hill-release-c045db0/hill-02/majority-rules-image.tar
+hill-release-c045db0/hill-03/
+hill-release-c045db0/hill-03/compose.yaml
+hill-release-c045db0/hill-03/tag-youre-it-image.tar
+hill-release-c045db0/release-manifest.json
+hill-release-c045db0/verify-release.py
+EOF
+cmp "$work/expected" "$work/actual"
+tar --extract --file "$archive" --directory "$work" --no-same-owner --no-same-permissions
+release=$work/hill-release-c045db0
+python3 "$release/verify-release.py" --role "$role" --load
+install -D -o root -g root -m 0644 "$release/$role/compose.yaml" /opt/finals-hill/compose.yaml
+printf '%s\n' hill-artifacts=complete

@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+[[ $EUID -eq 0 && $# -eq 0 ]] || exit 2
+[[ $(cat /etc/finals-platform/role 2>/dev/null) == '{"role":"control"}' ]] || exit 1
+expected_size=495626240
+expected_sha256=46d07d20db8805c43918e6c695e18fe500066306c681946ffbe6ab6adee17174
+slugs=(book-me-if-you-can can-we-settle-this ship-it sign-me-in terms-may-apply update-pending)
+work=$(mktemp -d /var/tmp/finals-checkers.XXXXXX)
+trap 'rm -rf -- "$work"' EXIT
+archive=$work/release.tar
+cat > "$archive"
+[[ $(stat -c %s "$archive") == "$expected_size" ]]
+printf '%s  %s\n' "$expected_sha256" "$archive" | sha256sum --check --status
+tar -tf "$archive" | sort > "$work/actual"
+{
+  printf './\n./artifact-manifest.json\n'
+  for slug in "${slugs[@]}"; do
+    printf './%s/\n./%s/checker-image.tar\n' "$slug" "$slug"
+  done
+} | sort > "$work/expected"
+cmp "$work/expected" "$work/actual"
+mkdir "$work/tree"
+tar --extract --file "$archive" --directory "$work/tree" --no-same-owner --no-same-permissions
+[[ -f $work/tree/artifact-manifest.json && ! -L $work/tree/artifact-manifest.json ]]
+for slug in "${slugs[@]}"; do
+  [[ -f $work/tree/$slug/checker-image.tar && ! -L $work/tree/$slug/checker-image.tar ]]
+done
+[[ ! -e /opt/finals-checkers || -z $(find /opt/finals-checkers -mindepth 1 -maxdepth 1 -print -quit) ]]
+next=/opt/finals-checkers.next
+rm -rf -- "$next"
+install -d -o root -g root -m 0700 "$next"
+for slug in "${slugs[@]}"; do
+  install -d -o root -g root -m 0700 "$next/$slug"
+  install -o root -g root -m 0600 "$work/tree/$slug/checker-image.tar" "$next/$slug/checker-image.tar"
+done
+rm -rf -- /opt/finals-checkers
+mv "$next" /opt/finals-checkers
+install -D -o root -g root -m 0600 "$work/tree/artifact-manifest.json" /etc/finals-platform/checkers/artifact-manifest.json
+/usr/local/libexec/finals-platform/checker-preflight
+printf '%s\n' checker-artifacts=complete
