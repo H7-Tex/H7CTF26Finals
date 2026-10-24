@@ -35,6 +35,7 @@ class BuilderMetadataTests(unittest.TestCase):
         for role in ("operations", "repository", "mirror"):
             self.assertIn(f'from = oci_core_instance.host["{role}"]', module)
             self.assertIn(f'to   = oci_core_instance.host_arm["{role}"]', module)
+        self.assertIn('relay_authorized_keys_readable_roles = ["platform", "control"]', environment)
         self.assertIn("platform_image_id               = var.platform_image_id", environment)
         self.assertIn('variable "platform_image_id"', variables)
 

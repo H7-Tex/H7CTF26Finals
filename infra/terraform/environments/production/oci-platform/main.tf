@@ -11,7 +11,7 @@ module "platform" {
   organizer_ssh_authorized_keys   = var.organizer_ssh_authorized_keys
   operations_relay_ssh_public_key = var.operations_relay_ssh_public_key
   # Deferred until each affected immutable host receives a reviewed replacement plan.
-  relay_authorized_keys_readable_roles = ["platform"]
+  relay_authorized_keys_readable_roles = ["platform", "control"]
 }
 
 module "storage" {
