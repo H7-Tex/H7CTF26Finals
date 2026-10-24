@@ -668,6 +668,11 @@ locals {
           sudo -n test ! -f /var/lib/event-router/active-peers.json || sudo -n /usr/local/sbin/event-router-apply-inventory /var/lib/event-router/active-peers.json
           sudo -n nft list set inet event_router peer_production_access | grep -c ' \. ' || true"
         ;;
+      challenge-access-open|challenge-access-status)
+        if [ $action = challenge-access-open ]; then verb=open; else verb=status; fi
+        ssh_to "set -eu; sudo -n /usr/local/sbin/event-router-challenge-access $verb
+          sudo -n nft list set inet event_router released_hill_services | grep -c ' \. ' || true"
+        ;;
       reconciler-access)
         ssh_to "set -eu; h=/var/lib/peer-reconciler/.ssh
           [ \"\$(sudo -n stat -c %U:%G \$h/authorized_keys)\" = root:root ]
