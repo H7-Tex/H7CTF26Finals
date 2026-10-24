@@ -8,6 +8,9 @@ output "builder_states" {
 
 output "build_payload_sha256" {
   value = {
-    for role, content in local.build_payload : role => nonsensitive(sha256(content))
+    platform-arm = sha256(local.build_payload["platform-arm"])
+    platform-x86 = sha256(local.build_payload["platform-x86"])
+    production   = nonsensitive(sha256(local.build_payload["production"]))
+    workbench    = sha256(local.build_payload["workbench"])
   }
 }
