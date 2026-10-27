@@ -1,0 +1,17 @@
+name: Totally Legit
+author: abu
+category: rev
+difficulty: medium
+description: |
+  We seized an activation tool from a vendor that sold more licenses than it ever owned. It stays quiet until you hand it a key it approves of, and the sales rep who kept the keys is no longer taking calls.
+
+  Produce one it accepts and recover what it has been sitting on.
+sub_description: |
+  A single offline activation binary. Find a key it likes and read what it unlocks.
+points: 300
+flags:
+  - type: static
+    flag: "H7CTF{f3c5ef9deeacfbbd7c75939a2d478e04}"
+handout:
+  - path: totally-legit.zip
+tags: [rev, crackme]

@@ -1,0 +1,85 @@
+{
+  "export": {
+    "appliance": "ColdSign CS-7",
+    "firmware": "2.4.1-fips",
+    "vendor": "Aperture Custody Systems",
+    "exported": "2026-03-10T02:00:00Z",
+    "note": "Offline transaction-signing appliance audit export. Signatures are ECDSA over the ASCII authorization string, hashed with SHA-256. Device public key included for verification."
+  },
+  "curve": "secp256k1",
+  "public_key": {
+    "encoding": "hex",
+    "Qx": "4bff7f5ab197d44b63a102e935942f218aec356dadf1be2f522205e35b0ed80e",
+    "Qy": "3bc1b8b3901d8b3e4e9f47432221a6f643c60a1bfd3490c24b88d8221d894d3e",
+    "compressed_sec1": "024bff7f5ab197d44b63a102e935942f218aec356dadf1be2f522205e35b0ed80e"
+  },
+  "records": [
+    {
+      "seq": 100,
+      "ts": "2026-03-02T08:14:51Z",
+      "operator": "op-lindqvist",
+      "message": "AUTHORIZE withdrawal 0.75 BTC to bc1qdqdfh5u6dwxgnz0u66pvfy88l62fygwchq75qz ref 00187",
+      "signature": {
+        "r": "eb3511f9fe9c7ae38097f8977bdf1cec5bdb042c027af06a9c60b527915aec6d",
+        "s": "3b00f1d464460917eec31d1fba2e0c297c645569bfd415f7b527947a4b2b09a2"
+      }
+    },
+    {
+      "seq": 101,
+      "ts": "2026-03-02T09:41:03Z",
+      "operator": "op-mercer",
+      "message": "AUTHORIZE withdrawal 3.50 BTC to bc1qa95cektxkxhfr7awdumgn4rv5vczz29dul88wf ref 00188",
+      "signature": {
+        "r": "2269506efa663bad083844e3f178c17114b02a4b4e3c59a76fbdbc491a7fe91d",
+        "s": "4b94f87aab71f69e703389c4c43ac3077dcbee8233ea54430240f0f36f3b335d"
+      }
+    },
+    {
+      "seq": 102,
+      "ts": "2026-03-04T13:22:40Z",
+      "operator": "op-okafor",
+      "message": "AUTHORIZE sweep 0.0184 BTC to bc1qhhrh9xpmu94kjj6a3q8g79463kkv8dcmspn4hs ref 00195",
+      "signature": {
+        "r": "35fc20594ae2f6ccdfb734ff1fca795f004d274bd515e73eef9c7c7378034dc8",
+        "s": "71f61a554218ca79f46bb46824113e84fc70ce9aaf2957f73889c1740d6aac5b"
+      }
+    },
+    {
+      "seq": 103,
+      "ts": "2026-03-05T16:30:09Z",
+      "operator": "op-lindqvist",
+      "message": "AUTHORIZE withdrawal 12.00 BTC to bc1q8x6u589k2nleegspxfxwauh8krqysr2gnh4uwp0cc3xkzgu4mwyqtsggkc ref 00201",
+      "signature": {
+        "r": "19889edce64f9f5f0a28dce63c608a786f5f11a3c2c76d03904bc96dd07ceba2",
+        "s": "e973de047cfa4793abe26ea4a563986d6babd73fb75c99aedf6306d208b8da80"
+      }
+    },
+    {
+      "seq": 104,
+      "ts": "2026-03-06T11:05:55Z",
+      "operator": "op-lindqvist",
+      "message": "AUTHORIZE withdrawal 1.10 BTC to bc1qdpenf288ldvjrhnn460rjm6eq9v8gh66jyh72f ref 00206",
+      "signature": {
+        "r": "2269506efa663bad083844e3f178c17114b02a4b4e3c59a76fbdbc491a7fe91d",
+        "s": "fe65377ae470b38a7ca4fdfdae454f72a22c83a662d7e84e2edb36822e98cfd4"
+      }
+    },
+    {
+      "seq": 105,
+      "ts": "2026-03-09T10:47:28Z",
+      "operator": "op-okafor",
+      "message": "AUTHORIZE rekey ceremony quorum 3 of 5 appliance CS-7 ref 00213",
+      "signature": {
+        "r": "da65986202ce76877fc6d1b50fede59020f3dc187c34560634801183ebd16405",
+        "s": "2fce04325cb659db664e591efa286e90bd95e90edb552b373e92149ebd9bf4e1"
+      }
+    }
+  ],
+  "recovery_secret": {
+    "note": "Appliance recovery envelope. Vault metadata is sealed under the device key so it can be restored after a wipe. key = SHA256(private_key as 32 big-endian bytes).",
+    "cipher": "AES-256-GCM",
+    "iv": "344c8bd2a38ac540b088658a",
+    "tag": "461ee85731e4b11c6c3fea459a641d78",
+    "ciphertext": "c2f45ac9c9cd56174254f2a5c4e325a0362e526044d049763504d4305a22363c9cca63c7c3fbad"
+  }
+}

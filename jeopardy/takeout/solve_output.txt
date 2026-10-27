@@ -1,0 +1,24 @@
+magic        KVLT
+version      2
+flags        0x01
+records      7
+created      1730193296
+device_id    9f2c71a40be85d3348c6e0f71b9a2d55
+app_build    2411
+crc32 stored 0x644c23df  calc 0x644c23df  OK
+secure note  id=4096 title='Cold wallet recovery' blob=258 bytes
+  xor[:2]    78da (zlib header)
+  recovered note:
+    KEYVAULT secure note
+    title: Cold wallet recovery
+    updated: 2024-10-29
+    
+    If you are reading this, the app finally shut its doors for good.
+    Support always swore these backups were unreadable off device.
+    Support was an optimist.
+    
+    recovery pin: 4417
+    seed words: harbor cedar violet anchor
+    keepsake: H7CTF{23bd9cba0f4cde4b9b253db080ecc51e}
+
+FLAG: H7CTF{23bd9cba0f4cde4b9b253db080ecc51e}

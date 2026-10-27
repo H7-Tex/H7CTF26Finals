@@ -1,0 +1,17 @@
+name: Certified Pre-Owned
+author: abu
+category: crypto
+difficulty: medium
+description: |
+  A custody desk retired one of its offline transaction-signing appliances and pulled the device's audit log before the unit went back to the vendor for a wipe. The datasheet calls the signing module tamper-proof and field-certified, and every withdrawal in the log checks out against the device key.
+
+  The appliance is gone. Its paperwork is not, and it still answers to the keys it was built to protect.
+sub_description: |
+  An exported audit log plus the device public key. Recover what the appliance sealed away.
+points: 300
+flags:
+  - type: static
+    flag: "H7CTF{9c89c6a49f992e4931a88a3b89546228}"
+handout:
+  - path: certified-pre-owned.zip
+tags: [crypto, ecdsa]

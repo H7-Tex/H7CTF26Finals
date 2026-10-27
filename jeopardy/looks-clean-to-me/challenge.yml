@@ -1,0 +1,18 @@
+name: Looks Clean to Me
+author: abu
+category: forensics
+difficulty: medium
+description: |
+  The DLP console flagged a workstation on the third floor. By the time anyone walked over the machine had already been reimaged, and all that survived is a short capture from that morning. Nobody could say what actually left the building.
+
+  Recover whatever was carried out.
+sub_description: |
+  It looks like an ordinary morning of browsing. Most of it is.
+points: 300
+flags:
+  - type: static
+    flag: "H7CTF{5d273a135663b30858b4f58374426354}"
+handout:
+  # small offline pcap zipped for delivery (~12 KB) -> no instance
+  - path: looks-clean-to-me.zip
+tags: [forensics, dfir, network]

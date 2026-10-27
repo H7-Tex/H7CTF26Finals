@@ -1,0 +1,4 @@
+key  : TR5P-9WQ2-K7MX-4JD6
+flag : H7CTF{f3c5ef9deeacfbbd7c75939a2d478e04}
+binary: H7CTF{f3c5ef9deeacfbbd7c75939a2d478e04}
+match: True
