@@ -1,30 +1,12 @@
-# H7CTF'26 Finals - Jeopardy (offline, static)
+# H7CTF 2026 Finals: Jeopardy
 
-PRIVATE. Contains live-event flags and full solutions. Do not make this repo public or share it outside the team until after the event.
+Two offline challenges that ran alongside the attack-defense finals. All medium, 300 points, flag format `H7CTF{32 lowercase hex}`. Each one is a single zip, no instance.
 
-4 offline/static challenges. All medium, 300 points, flag format `H7CTF{32 lowercase hex}`. No VPN, no instance - each is a single downloadable zip solved on a laptop.
-
-| folder | name | category |
+| Folder | Name | Category |
 |---|---|---|
-| certified-pre-owned | Certified Pre-Owned | crypto |
-| looks-clean-to-me | Looks Clean to Me | forensics |
-| totally-legit | Totally Legit | rev |
-| takeout | Takeout | misc |
+| [preowned](preowned) | Certified Pre-Owned | crypto |
+| [legit](legit) | Totally Legit | rev |
 
-Each folder has:
-- `challenge.yml` - name, category, difficulty, description, points, static flag
-- `<slug>.zip` - the player handout (what gets attached on the platform)
-- `flag.txt` - the flag
-- `solve.py` - reference solver
-- `solve_output.txt` - a captured solver run
-- `WRITEUP.md` - staff TLDR of the intended solve
+Each folder has the handout zip, `challenge.yml`, `flag.txt`, a solver (`solve.py`) and its captured output (`solve_output.txt`). The writeup is in the folder's README.
 
-## How to verify one
-
-```sh
-cd <folder>
-python3 solve.py            # some accept: python3 solve.py <slug>.zip
-# confirm it prints the flag in flag.txt
-```
-
-Deps a few solvers need: `pycryptodome` and `ecdsa` (crypto), `scapy` (forensics). The rev/misc solvers are standard library only.
+Solver deps: `pycryptodome` and `ecdsa` for the crypto one. The rev one is stdlib only.

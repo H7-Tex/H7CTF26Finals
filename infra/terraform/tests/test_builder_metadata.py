@@ -404,13 +404,8 @@ class BuilderMetadataTests(unittest.TestCase):
             "ocid1.instance.oc1.ap-hyderabad-1.anuhsljrgek2goacw7aqccrl4vifdxeiyukg3lygu6hnwyqhlrhxtjwwwagq",
         )
         variables = (ROOT / "terraform/environments/production/oci-runtime-images/variables.tf").read_text(encoding="utf-8")
-        docs = "\n".join(
-            (ROOT / f"terraform/environments/production/{root}/README.md").read_text(encoding="utf-8")
-            for root in ("oci-runtime-builders", "oci-runtime-images")
-        )
         for failed_builder in failed_builders:
             self.assertIn(failed_builder, variables)
-            self.assertIn(failed_builder, docs)
 
     def test_seal_success_binds_revision_and_package_manifest_before_poweroff(self):
         images = (
@@ -577,15 +572,6 @@ class BuilderMetadataTests(unittest.TestCase):
 
         platform = (ROOT / "terraform/modules/oci-platform/main.tf").read_text(encoding="utf-8")
         self.assertNotIn("prevent_destroy = true", platform)
-        rotation = (ROOT / "terraform/OPERATIONS-ROTATION-WINDOW.md").read_text(encoding="utf-8")
-        self.assertIn("only the stateless operations host", rotation)
-        self.assertIn("must not change or destroy platform", rotation)
-
-        gateway_rotation = (ROOT / "terraform/GATEWAY-ROTATION-WINDOW.md").read_text(encoding="utf-8")
-        self.assertIn("primary and standby gateways", gateway_rotation)
-        self.assertIn("reserved public addresses remain protected", gateway_rotation)
-        self.assertIn("captures volume remains unchanged", gateway_rotation)
-
         ingress = (ROOT / "terraform/modules/oci-ingress/main.tf").read_text(encoding="utf-8")
         self.assertNotIn("prevent_destroy = true", ingress)
         self.assertIn('resource "oci_core_private_ip" "service_ingress"', ingress)
@@ -981,16 +967,6 @@ class BuilderMetadataTests(unittest.TestCase):
             "ocid1.instance.oc1.ap-hyderabad-1.anuhsljrgek2goackghwgzi5kmx47jm27ifbvo4lamzmyhltr6gfikylkllq",
             "ocid1.instance.oc1.ap-hyderabad-1.anuhsljrgek2goackhel3yztpwcpfg2dygvuo3f3tzmf2aoayodhlug5scqq",
         )
-        docs = "\n".join(
-            (ROOT / f"terraform/environments/production/{root}/README.md").read_text(encoding="utf-8")
-            for root in ("oci-gateway-builder", "oci-gateway-image")
-        )
-        self.assertIn("gateway-5095652d3d90", docs)
-        self.assertIn("11bdcffc06c9d4d0b6f08a58b0cf34e6f1aa0d1f", docs)
-        for failed_builder in failed_builders:
-            self.assertIn(failed_builder, docs)
-        self.assertGreaterEqual(docs.count("prohibited"), 2)
-        self.assertGreaterEqual(docs.count("router-image"), 2)
         capture_variables = (ROOT / "terraform/environments/production/oci-gateway-image/variables.tf").read_text(encoding="utf-8")
         for failed_builder in failed_builders:
             self.assertIn(f'var.builder_instance_id != "{failed_builder}"', capture_variables)

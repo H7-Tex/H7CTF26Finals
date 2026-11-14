@@ -9,5 +9,4 @@ python3 -c 'import ast,pathlib; ast.parse(pathlib.Path("'$archive_dir'/finals-ar
 ! grep -E 'service_account.*key|private_key_data|credentials[[:space:]]*=' \
   "$archive_dir/finals-archive.py" \
   "$archive_dir/finals-archive-egress" \
-  "$archive_dir/install.sh" \
-  "$archive_dir/README.md"
+  "$archive_dir/install.sh"

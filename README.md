@@ -1,39 +1,54 @@
-# H7CTF'26 Finals
+# H7CTF 2026 Finals
 
-Private source repository for the H7CTF'26 Finals: a 24-hour Attack–Defense event with simultaneous King of the Hill rounds.
+Everything we ran the H7CTF 2026 finals on, plus the two jeopardy challenges that went out with it.
 
-## Repository layout
+- 24 hours of attack-defense, King of the Hill rounds running alongside
+- 15 teams over a WireGuard VPN, `Anvil` as the scoreboard
+- flags look like `H7CTF{32 lowercase hex}`
+- quick fun fact: OCI Hyderabad carried the whole live event, GCP only ever saw state and archives
 
-- `services/` — six Attack–Defense services, their checkers, reference attacks, patch corpus, and service-specific tests.
-- `hills/` — three King of the Hill targets, controllers, reference interactions, and tests.
-- `infra/terraform/` — reproducible OCI-primary, GCP-backup, and Cloudflare infrastructure.
-- `infra/images/` — image-building and host-bootstrap inputs.
-- `infra/checkers/` — default-off private checker import, supervision and commissioning.
-- `infra/integration/` — static challenge/platform contract validation before image creation.
-- `infra/acceptance/` — fail-closed validation of the complete private staging evidence bundle.
-- `infra/reconciler/` — private desired-state distribution from Anvil to both VPN gateways.
-- `ops/` — runbooks, rehearsals, monitoring, recovery, and event configuration.
-- `docs/` — author contracts and internal architecture decisions.
+#### **Challenges**
 
-Challenge and infrastructure content is private until the organizers explicitly release it. The Anvil platform remains in its own repository; finals-specific Anvil configuration and deployment inputs belong here.
+- crypto
+  - [Certified Pre-Owned](jeopardy/preowned) by `abu`
+- rev
+  - [Totally Legit](jeopardy/legit) by `abu`
 
-## Delivery rule
+both `medium`, 300 points, handout only (no instance needed).
 
-Every change follows the same path:
+#### **Layout**
 
-1. Build and test locally.
-2. Commit and push for review.
-3. Exercise the change in staging.
-4. Promote an immutable, identified artifact to production.
+each challenge folder is roughly:
 
-Production hosts are deployment targets, never editing workspaces.
+```
+challenge.yml     name, author, description, flag, handout
+<name>.zip        what players got
+solve.py          solver, solve_output.txt is what it printed
+README.md         description and writeup
+```
 
-## Current event contract
+`legit` also ships the binary's source in `src/` (rebuild with `src/build.sh`).
 
-- 15 competing teams plus one non-playing reference team.
-- Six Attack–Defense services with exactly two scored flag stores each.
-- Three King of the Hill targets.
-- Flags match `H7CTF{<32 lowercase hexadecimal characters>}`.
-- Player service patches pass the Verified Deployment Model before promotion.
+#### **Solving**
 
-Detailed planning and handoffs live in `/home/abu/Main/Projects/CTF26/handoffs/finals-build/` until they are reconciled into this repository.
+```
+cd jeopardy/preowned
+pip install pycryptodome ecdsa
+python3 solve.py certified-pre-owned.zip
+```
+
+```
+cd jeopardy/legit
+python3 solve.py
+```
+
+#### **Infra**
+
+[infra/](infra) is the Terraform, images and host tooling we used for the event: OCI for the live boxes, GCP for state and post-event archives, Cloudflare for DNS. [infra/README.md](infra/README.md) has the layout, the network map and the order we brought things up in. CI that built the images and ran the Terraform checks lives in [.github/workflows/](.github/workflows).
+
+nothing secret is committed (no state, no real `.tfvars`, no keys), the `*.example` files show the shape.
+
+#### Post Credits
+
+- last year's infra writeup: [H7CTF 2025 Infrastructure](https://www.abu.rocks/docs/dev/h7ctf25-infrastructure/)
+- more writeups over at [abu.rocks](https://www.abu.rocks/)
